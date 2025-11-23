@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from dotenv import load_dotenv
@@ -14,9 +15,11 @@ from livekit.agents import (
     metrics,
     room_io,
 )
+from typing import Any
+from livekit.agents import llm, types
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -25,6 +28,66 @@ logger = logging.getLogger("basic-agent")
 
 load_dotenv()
 
+
+class MockLLM(llm.LLM):
+    def __init__(self):
+        super().__init__()
+
+    def chat(
+        self,
+        *,
+        chat_ctx: llm.ChatContext,
+        tools: list[llm.FunctionTool | llm.RawFunctionTool] | None = None,
+        conn_options: types.APIConnectOptions = types.DEFAULT_API_CONNECT_OPTIONS,
+        parallel_tool_calls: types.NotGivenOr[bool] = types.NOT_GIVEN,
+        tool_choice: types.NotGivenOr[llm.ToolChoice] = types.NOT_GIVEN,
+        extra_kwargs: types.NotGivenOr[dict[str, Any]] = types.NOT_GIVEN,
+    ) -> llm.LLMStream:
+        return MockLLMStream(self, chat_ctx=chat_ctx, tools=tools or [], conn_options=conn_options)
+
+class MockLLMStream(llm.LLMStream):
+    def __init__(self, llm: llm.LLM, chat_ctx: llm.ChatContext, **kwargs):
+        super().__init__(llm, chat_ctx=chat_ctx, **kwargs)
+        self._chat_ctx = chat_ctx
+
+    async def _run(self) -> None:
+        last_user_msg = ""
+        # Check if chat_ctx has messages attribute and if it is not empty
+        logger.info(f"MockLLM: chat_ctx type: {type(self._chat_ctx)}")
+        logger.info(f"MockLLM: has messages attr: {hasattr(self._chat_ctx, 'messages')}")
+        
+        if hasattr(self._chat_ctx, "messages") and self._chat_ctx.messages:
+            last_user_msg = self._chat_ctx.messages[-1].content
+            logger.info(f"MockLLM: last_user_msg (raw): {last_user_msg}")
+        else:
+            logger.info(f"MockLLM: No messages found, checking items...")
+            if hasattr(self._chat_ctx, "items") and self._chat_ctx.items:
+                last_item = self._chat_ctx.items[-1]
+                logger.info(f"MockLLM: last item: {last_item}")
+                if hasattr(last_item, "content"):
+                    last_user_msg = last_item.content
+                    logger.info(f"MockLLM: last_user_msg from items: {last_user_msg}")
+        
+        if isinstance(last_user_msg, list):
+             last_user_msg = " ".join([c for c in last_user_msg if isinstance(c, str)])
+        
+        logger.info(f"MockLLM: final last_user_msg: '{last_user_msg}'")
+        
+        text = "This is a mock response to test the interruption logic. I will keep speaking so you can try to interrupt me. Say yeah or ok to see if I ignore it. Say stop to see if I stop."
+        
+        if "story" in str(last_user_msg).lower():
+            logger.info("MockLLM: STORY MODE ACTIVATED!")
+            text = "Once upon a time, in a land far, far away, there was a brave little agent who wanted to learn how to speak. It tried very hard to understand humans. It learned to listen, to speak, and even to ignore simple words like yeah and ok. It was a very smart agent indeed. " * 3
+        elif any(cmd in str(last_user_msg).lower() for cmd in ["stop", "wait", "no"]):
+            text = "Stopping."
+
+        for word in text.split():
+            chunk = llm.ChatChunk(
+                id="mock-id",
+                delta=llm.ChoiceDelta(content=word + " ")
+            )
+            await self._event_ch.send(chunk)
+            await asyncio.sleep(0.05) # Small delay for TTS stability
 
 class MyAgent(Agent):
     def __init__(self) -> None:
@@ -85,13 +148,13 @@ async def entrypoint(ctx: JobContext):
         stt="deepgram/nova-3",
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
+        # llm="openai/gpt-4.1-mini",
+        llm=MockLLM(),
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
-        turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
@@ -100,6 +163,9 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        # CRITICAL: Set min_interruption_words to 1 to enable intelligent interruption logic
+        min_interruption_words=1,
+        ignored_words=["yeah", "ok", "okay", "hmm", "right", "uh-huh", "uhuh"],
     )
 
     # log metrics as they are emitted, and total usage after session is over
