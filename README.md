@@ -2,6 +2,8 @@
 
 A context-aware filtering system that allows LiveKit voice agents to distinguish between passive acknowledgments ("yeah", "ok", "hmm") and real interruptions ("wait", "stop").
 
+Demonstration link :- https://drive.google.com/file/d/1Joa3KxEHx3ckuo4N_bIpyGynP3ju6_bh/view?usp=drive_link
+
 ---
 
 ## Problem Solved
@@ -28,7 +30,13 @@ $env:LIVEKIT_API_SECRET="your-livekit-secret"
 ### 2. Run the Agent
 
 ```bash
-python test_interruption_agent.py dev
+Activate virtual environment in both(.venv\Scripts\activate)
+
+.\run_agent.ps1 
+
+in 2nd terminal
+
+python connect_to_agent.py
 ```
 
 ### 3. Connect & Test
@@ -169,26 +177,4 @@ python -m pytest tests/test_backchannel_filter.py -v
 
 ---
 
-## Evaluation Criteria
 
-| Criteria | Weight | Status |
-|----------|--------|--------|
-| Agent continues over "yeah/ok" | 70% | ✅ |
-| Agent stops on "wait/stop" | 20% | ✅ |
-| State-aware (responds when silent) | 10% | ✅ |
-| Modular, configurable code | Bonus | ✅ |
-
----
-
-## Troubleshooting
-
-**Agent still pauses on backchannel words?**
-- Ensure `backchannel_ignore_words` is set in AgentSession
-- Check logs for `[BACKCHANNEL DEBUG]` messages
-
-**API errors?**
-- Verify all environment variables are set
-- Check API key balances (OpenAI, Deepgram)
-
-**402 Payment Required (Cartesia)?**
-- Switch to OpenAI TTS: `tts=openai.TTS(voice="alloy")`
