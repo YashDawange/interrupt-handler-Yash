@@ -1,6 +1,7 @@
 from .base import (
     AgentMetrics,
     EOUMetrics,
+    InterruptionMetrics,
     LLMMetrics,
     RealtimeModelMetrics,
     STTMetrics,
@@ -18,6 +19,7 @@ __all__ = [
     "STTMetrics",
     "TTSMetrics",
     "RealtimeModelMetrics",
+    "InterruptionMetrics",
     "UsageSummary",
     "UsageCollector",
     "log_metrics",

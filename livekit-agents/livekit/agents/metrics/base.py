@@ -132,6 +132,27 @@ class RealtimeModelMetrics(BaseModel):
     metadata: Metadata | None = None
 
 
+class InterruptionMetrics(BaseModel):
+    type: Literal["interruption_metrics"] = "interruption_metrics"
+    timestamp: float
+    """The timestamp when the interruption occurred."""
+    interruption_duration: float
+    """The duration of the interruption in seconds (time between interruption and resumption)."""
+    was_false_interruption: bool
+    """Whether this was a false interruption that auto-resumed."""
+    partial_text_length: int
+    """Number of characters spoken before interruption."""
+    total_text_length: int
+    """Total length of the text that was being spoken."""
+    interruption_reason: str
+    """Reason for interruption: 'vad_detected', 'transcript_detected', or 'manual'."""
+    user_speech_duration: float
+    """Duration of user speech that caused the interruption, in seconds."""
+    speech_id: str | None = None
+    """ID of the speech that was interrupted."""
+    metadata: Metadata | None = None
+
+
 AgentMetrics = Union[
     STTMetrics,
     LLMMetrics,
@@ -139,4 +160,5 @@ AgentMetrics = Union[
     VADMetrics,
     EOUMetrics,
     RealtimeModelMetrics,
+    InterruptionMetrics,
 ]

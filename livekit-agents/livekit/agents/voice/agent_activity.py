@@ -29,6 +29,7 @@ from ..llm.tool_context import (
 from ..log import logger
 from ..metrics import (
     EOUMetrics,
+    InterruptionMetrics,
     LLMMetrics,
     RealtimeModelMetrics,
     STTMetrics,
@@ -53,11 +54,14 @@ from .audio_recognition import (
     _EndOfTurnInfo,
     _PreemptiveGenerationInfo,
 )
+from .backchannel_filter import BackchannelConfig, BackchannelFilter
 from .events import (
     AgentFalseInterruptionEvent,
     ErrorEvent,
     FunctionToolsExecutedEvent,
+    InterruptionResumedEvent,
     MetricsCollectedEvent,
+    UserInterruptedAgentEvent,
     SpeechCreatedEvent,
     UserInputTranscribedEvent,
 )
@@ -141,6 +145,17 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        # Initialize backchannel filter for intelligent interruption handling
+        backchannel_config = BackchannelConfig(
+            ignore_words=self._session.options.backchannel_ignore_words
+        )
+        self._backchannel_filter = BackchannelFilter(backchannel_config)
+        logger.info(f"[BACKCHANNEL DEBUG] Initialized filter with ignore_words: {self._session.options.backchannel_ignore_words}")
+        
+        # Track pending VAD interruptions to defer until we get transcripts for backchannel filtering
+        self._pending_vad_interruption: dict[str, Any] | None = None
+        self._vad_interrupt_timer: asyncio.Task | None = None
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -895,6 +910,18 @@ class AgentActivity(RecognitionHooks):
             if instructions:
                 instructions = "\n".join([self._agent.instructions, instructions])
 
+            # Inject interruption context if we were interrupted mid-speech
+            if self._paused_speech is not None and self._paused_speech.partial_text:
+                interruption_context = (
+                    f"\n\nNote: You were interrupted while speaking. "
+                    f"You had already said: \"{self._paused_speech.partial_text}\". "
+                    f"Continue your response from where you left off without repeating what you already said."
+                )
+                if instructions:
+                    instructions = instructions + interruption_context
+                else:
+                    instructions = self._agent.instructions + interruption_context
+
             task = self._create_speech_task(
                 self._pipeline_reply_task(
                     speech_handle=handle,
@@ -1166,7 +1193,7 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
-    def _interrupt_by_audio_activity(self) -> None:
+    def _interrupt_by_audio_activity(self, user_speech_duration: float = 0.0, interruption_reason: str = "vad_detected") -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1193,7 +1220,39 @@ class AgentActivity(RecognitionHooks):
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
+            # Track interruption context before pausing/interrupting
+            interruption_timestamp = time.time()
+            self._current_speech._mark_interrupted(interruption_timestamp)
+            if use_pause:
+                self._current_speech._mark_paused(interruption_timestamp)
+
             self._paused_speech = self._current_speech
+
+            # Emit user interruption event with detailed context
+            self._session.emit(
+                "user_interrupted_agent",
+                UserInterruptedAgentEvent(
+                    partial_text=self._current_speech.partial_text,
+                    interruption_position=0.0,  # Will be calculated by TTS layer if available
+                    total_duration=0.0,  # Will be set by TTS layer if available
+                    interruption_reason=interruption_reason,  # type: ignore
+                    user_speech_duration=user_speech_duration,
+                    speech_id=self._current_speech.id,
+                ),
+            )
+
+            # Emit interruption metrics for tracking
+            interruption_metrics = InterruptionMetrics(
+                timestamp=interruption_timestamp,
+                interruption_duration=0.0,  # Will be calculated when resuming
+                was_false_interruption=use_pause,  # This will be determined by resume logic
+                partial_text_length=len(self._current_speech.partial_text),
+                total_text_length=len(self._current_speech.total_text),
+                interruption_reason=interruption_reason,
+                user_speech_duration=user_speech_duration,
+                speech_id=self._current_speech.id,
+            )
+            self._session.emit("metrics_collected", MetricsCollectedEvent(metrics=interruption_metrics))
 
             # reset the false interruption timer
             if self._false_interruption_timer:
@@ -1241,7 +1300,26 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # Check if agent is currently speaking
+            agent_is_speaking = (
+                self._current_speech is not None 
+                and not self._current_speech.interrupted
+            )
+            
+            # For short utterances while agent is speaking, COMPLETELY IGNORE VAD
+            # Don't create pending interruptions - rely 100% on transcript-based interruption
+            # This prevents ANY audio gaps from VAD-triggered pauses
+            if agent_is_speaking and ev.speech_duration < 2.0:
+                logger.info(f"[BACKCHANNEL DEBUG] VAD detected short utterance ({ev.speech_duration:.2f}s) while agent speaking - IGNORING VAD, transcript will handle")
+                # Don't create pending VAD at all - just ignore and let transcript decide
+                return
+            
+            # For long utterances or when agent not speaking, interrupt immediately
+            logger.info(f"[BACKCHANNEL DEBUG] VAD detected {'long' if ev.speech_duration >= 2.0 else 'short'} utterance ({ev.speech_duration:.2f}s), agent speaking: {agent_is_speaking} - interrupting immediately")
+            self._interrupt_by_audio_activity(
+                user_speech_duration=ev.speech_duration,
+                interruption_reason="vad_detected"
+            )
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1257,11 +1335,15 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
+        # Interim transcripts are NOT used for interruptions - too unreliable
+        # We rely 100% on final transcripts with backchannel filtering
+        # Just log for debugging and return early
         if ev.alternatives[0].text and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            logger.info(f"[BACKCHANNEL DEBUG] Ignoring interim transcript: '{ev.alternatives[0].text}'")
+            return
 
             if (
                 speaking is False
@@ -1292,7 +1374,58 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check if this is backchannel-only input that should be ignored
+            agent_is_speaking = (
+                self._current_speech is not None 
+                and not self._current_speech.interrupted
+            )
+            
+            logger.info(f"[BACKCHANNEL DEBUG v3 on_final_transcript] Text: '{ev.alternatives[0].text}' | Agent speaking: {agent_is_speaking} | Current speech: {self._current_speech is not None} | Interrupted: {self._current_speech.interrupted if self._current_speech else 'N/A'}")
+            
+            # Check if we have a pending VAD interruption waiting for this transcript
+            had_pending_vad = self._pending_vad_interruption is not None
+            
+            if self._backchannel_filter.should_ignore_input(
+                ev.alternatives[0].text, 
+                agent_is_speaking
+            ):
+                # This is backchannel (yeah, hmm, ok) while agent is speaking - IGNORE
+                logger.info(
+                    f"[BACKCHANNEL DEBUG] ✓ IGNORING backchannel input: '{ev.alternatives[0].text}'"
+                )
+                
+                # Cancel pending VAD interruption since this is backchannel
+                if self._vad_interrupt_timer is not None:
+                    self._vad_interrupt_timer.cancel()
+                    self._vad_interrupt_timer = None
+                self._pending_vad_interruption = None
+                
+                logger.info(f"[BACKCHANNEL DEBUG] Cancelled pending VAD interruption for backchannel word (final transcript)")
+                # Don't interrupt, don't schedule paused speech interruption
+                return
+            
+            logger.info(f"[BACKCHANNEL DEBUG] ✗ NOT ignoring input (proceeding with interruption): '{ev.alternatives[0].text}'")
+            
+            # Not backchannel - if we had a pending VAD interruption, execute it now with transcript reason
+            if had_pending_vad:
+                logger.info(f"[BACKCHANNEL DEBUG] Executing pending VAD interruption (final transcript confirmed real interruption)")
+                if self._vad_interrupt_timer is not None:
+                    self._vad_interrupt_timer.cancel()
+                    self._vad_interrupt_timer = None
+                
+                user_speech_duration = self._pending_vad_interruption.get("speech_duration", 0.0)
+                self._pending_vad_interruption = None
+                
+                self._interrupt_by_audio_activity(
+                    user_speech_duration=user_speech_duration,
+                    interruption_reason="transcript_detected"
+                )
+            else:
+                # Normal transcript-based interruption (no pending VAD)
+                self._interrupt_by_audio_activity(
+                    user_speech_duration=0.0,
+                    interruption_reason="transcript_detected"
+                )
 
             if (
                 speaking is False
@@ -1344,6 +1477,21 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+        
+        # BACKCHANNEL FILTER: Check if this end-of-turn is just backchannel while agent speaking
+        # This prevents generating a new reply for "yeah", "ok", "hmm" etc. during agent speech
+        agent_is_speaking = (
+            self._current_speech is not None 
+            and not self._current_speech.interrupted
+        )
+        
+        if self._backchannel_filter.should_ignore_input(info.new_transcript, agent_is_speaking):
+            # This is backchannel (yeah, hmm, ok) while agent is speaking - SKIP turn processing
+            logger.info(
+                f"[BACKCHANNEL DEBUG] on_end_of_turn: SKIPPING backchannel turn: '{info.new_transcript}'"
+            )
+            self._cancel_preemptive_generation()
+            return False  # Don't commit this turn
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
@@ -1599,6 +1747,8 @@ class AgentActivity(RecognitionHooks):
             tee = utils.aio.itertools.tee(text, 2)
             text_source, audio_source = tee
         elif isinstance(text, str):
+            # Set total text when we have the complete string upfront
+            speech_handle._update_total_text(text)
 
             async def _read_text() -> AsyncIterable[str]:
                 yield text
@@ -1651,6 +1801,7 @@ class AgentActivity(RecognitionHooks):
             forward_text, text_out = perform_text_forwarding(
                 text_output=tr_output,
                 source=tr_node_result,
+                speech_handle=speech_handle,
             )
             tasks.append(forward_text)
             if audio_output is None:
@@ -2548,6 +2699,10 @@ class AgentActivity(RecognitionHooks):
                 self._paused_speech = None
                 return
 
+            pause_duration = 0.0
+            if self._paused_speech.pause_timestamp:
+                pause_duration = time.time() - self._paused_speech.pause_timestamp
+
             resumed = False
             if (
                 self._session.options.resume_false_interruption
@@ -2558,7 +2713,31 @@ class AgentActivity(RecognitionHooks):
                 self._session._update_agent_state("speaking")
                 audio_output.resume()
                 resumed = True
+                self._paused_speech._clear_pause()
                 logger.debug("resumed false interrupted speech", extra={"timeout": timeout})
+
+                # Emit interruption resumed event
+                self._session.emit(
+                    "interruption_resumed",
+                    InterruptionResumedEvent(
+                        speech_id=self._paused_speech.id,
+                        pause_duration=pause_duration,
+                        was_false_interruption=True,
+                    ),
+                )
+
+                # Emit updated interruption metrics showing this was a false interruption
+                resumption_metrics = InterruptionMetrics(
+                    timestamp=time.time(),
+                    interruption_duration=pause_duration,
+                    was_false_interruption=True,
+                    partial_text_length=len(self._paused_speech.partial_text),
+                    total_text_length=len(self._paused_speech.total_text),
+                    interruption_reason="false_interruption_resumed",
+                    user_speech_duration=0.0,  # Not applicable for resumption
+                    speech_id=self._paused_speech.id,
+                )
+                self._session.emit("metrics_collected", MetricsCollectedEvent(metrics=resumption_metrics))
 
             self._session.emit(
                 "agent_false_interruption", AgentFalseInterruptionEvent(resumed=resumed)

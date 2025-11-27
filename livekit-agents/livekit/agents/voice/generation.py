@@ -302,10 +302,13 @@ class _TextOutput:
 
 
 def perform_text_forwarding(
-    *, text_output: io.TextOutput | None, source: AsyncIterable[str]
+    *,
+    text_output: io.TextOutput | None,
+    source: AsyncIterable[str],
+    speech_handle: SpeechHandle | None = None,
 ) -> tuple[asyncio.Task[None], _TextOutput]:
     out = _TextOutput(text="", first_text_fut=asyncio.Future())
-    task = asyncio.create_task(_text_forwarding_task(text_output, source, out))
+    task = asyncio.create_task(_text_forwarding_task(text_output, source, out, speech_handle))
     return task, out
 
 
@@ -314,12 +317,17 @@ async def _text_forwarding_task(
     text_output: io.TextOutput | None,
     source: AsyncIterable[str],
     out: _TextOutput,
+    speech_handle: SpeechHandle | None = None,
 ) -> None:
     try:
         async for delta in source:
             out.text += delta
             if text_output is not None:
                 await text_output.capture_text(delta)
+
+            # Update SpeechHandle with accumulated text as it streams
+            if speech_handle is not None:
+                speech_handle._update_partial_text(out.text)
 
             if not out.first_text_fut.done():
                 out.first_text_fut.set_result(None)
