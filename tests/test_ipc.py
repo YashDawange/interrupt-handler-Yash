@@ -19,7 +19,7 @@ from livekit.protocol import agent
 
 @dataclass
 class EmptyMessage:
-    MSG_ID: ClassVar[int] = 0
+    MSG_ID: ClassVar[int] = 5 
 
 
 @dataclass
