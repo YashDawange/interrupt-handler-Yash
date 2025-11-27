@@ -1185,6 +1185,45 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        # Intelligent Interruption Handling: Check for backchannel words
+        # If agent is currently speaking and user says ONLY backchannel words,
+        # don't interrupt. This allows natural conversational flow.
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self.stt is not None
+            and self._audio_recognition is not None
+        ):
+            transcript = self._audio_recognition.current_transcript.strip()
+
+            if transcript:  # Only check if there's actual text
+                # Split transcript into words and normalize (lowercase, strip punctuation)
+                words = split_words(transcript, split_character=True)
+
+                # Normalize words: lowercase and strip common punctuation
+                normalized_words = [
+                    word.lower().strip(".,!?;:'\"")
+                    for word in words
+                ]
+
+                # Remove empty strings
+                normalized_words = [w for w in normalized_words if w]
+
+                if normalized_words:
+                    # Check if ALL words are backchannel words
+                    backchannel_set = set(word.lower() for word in opt.backchannel_words)
+                    is_all_backchannel = all(
+                        word in backchannel_set
+                        for word in normalized_words
+                    )
+
+                    if is_all_backchannel:
+                        # User is just providing feedback, don't interrupt
+                        logger.debug(
+                            f"Ignoring backchannel input while agent is speaking: '{transcript}'"
+                        )
+                        return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
