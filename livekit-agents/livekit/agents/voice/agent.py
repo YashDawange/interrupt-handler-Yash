@@ -62,9 +62,10 @@ class Agent:
             self._id = "default_agent"
         else:
             self._id = id or misc.camel_to_snake_case(type(self).__name__)
-
+        self._allow_interruptions = allow_interruptions
         self._instructions = instructions
         self._tools = tools.copy() + find_function_tools(self)
+        self._interrupt_ignore_words = ["yeah", "ok", "hmm","mhmm", "aha", "right", "uh-huh","i see", "got it", "sure", "alright", "uh", "ah", "mm", "mhm","okay","yes"]
         self._chat_ctx = chat_ctx.copy(tools=self._tools) if chat_ctx else ChatContext.empty()
         self._turn_detection = turn_detection
 
@@ -93,6 +94,10 @@ class Agent:
         self._mcp_servers = mcp_servers
         self._activity: AgentActivity | None = None
 
+    @property
+    def interrupt_ignore_words(self) -> list[str]:
+        return self._interrupt_ignore_words
+    
     @property
     def id(self) -> str:
         return self._id

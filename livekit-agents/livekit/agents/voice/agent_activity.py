@@ -5,6 +5,7 @@ import contextvars
 import heapq
 import json
 import time
+import string
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
@@ -1171,8 +1172,41 @@ class AgentActivity(RecognitionHooks):
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
-            # ignore if realtime model has turn detection enabled
             return
+
+        if self.stt is not None and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+            
+            if not text or not text.strip():
+                return
+
+            # Clean and Split:
+            cleaned_text = text.lower().translate(str.maketrans('', '', string.punctuation))
+            words = cleaned_text.split()
+            
+            if not words:
+                return
+
+            # Check if EVERY word is an ignore word
+            if all(w in self._agent.interrupt_ignore_words for w in words):
+                print(f"IGNORING (Exact): '{cleaned_text}'")
+                return
+
+            # Only runs if all *previous* words were ignored.
+            # Example: "Yeah o" -> "Yeah" is ignored, "o" might be "ok" -> WAIT.
+            last_word = words[-1]
+            previous_words = words[:-1]
+
+            if all(w in self._agent.interrupt_ignore_words for w in previous_words):
+
+                if len(last_word) <= 4:
+                    for ignore_word in self._agent.interrupt_ignore_words:
+                        if ignore_word.startswith(last_word):
+                            return
+    
+
+        if self._rt_session is not None:
+            self._rt_session.start_user_activity()
 
         if (
             self.stt is not None
@@ -1180,35 +1214,30 @@ class AgentActivity(RecognitionHooks):
             and self._audio_recognition is not None
         ):
             text = self._audio_recognition.current_transcript
-
-            # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
-
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
 
         if (
             self._current_speech is not None
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
-            self._paused_speech = self._current_speech
-
-            # reset the false interruption timer
-            if self._false_interruption_timer:
-                self._false_interruption_timer.cancel()
-                self._false_interruption_timer = None
-
-            if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
-                self._session.output.audio.pause()
-                self._session._update_agent_state("listening")
-            else:
-                if self._rt_session is not None:
-                    self._rt_session.interrupt()
-
-                self._current_speech.interrupt()
-
+            self._current_speech.interrupt()
+    
+    def _should_ignore_transcript(self, text: str) -> bool:
+        if not text or not self._agent.interrupt_ignore_words:
+            return False
+        
+        # Normalize: lowercase and strip punctuation
+        cleaned = text.lower().strip().translate(str.maketrans('', '', string.punctuation))
+        cleaned = "".join(char for char in cleaned if char.isalnum() or char.isspace())
+        
+        
+        # This allows "Yeah but stop" to pass (it won't match), but "Yeah" to be ignored.
+        if cleaned in self._agent.interrupt_ignore_words:
+            return True
+            
+        return False
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
@@ -1364,7 +1393,16 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+        
+        is_agent_speaking = self._current_speech is not None and not self._current_speech.done()
 
+        cleaned_final = info.new_transcript.lower().translate(str.maketrans('', '', string.punctuation))
+        final_words = cleaned_final.split()
+        
+        if is_agent_speaking and final_words and all(w in self._agent.interrupt_ignore_words for w in final_words):
+            print(f"IGNORING REPLY to: '{info.new_transcript}'")
+            return False
+        
         if (
             self.stt is not None
             and self._turn_detection != "manual"

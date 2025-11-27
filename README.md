@@ -38,6 +38,12 @@ agents that can see, hear, and understand.
 - **Telephony integration**: Works seamlessly with LiveKit's [telephony stack](https://docs.livekit.io/sip/), allowing your agent to make calls to or receive calls from phones.
 - **Exchange data with clients**: Use [RPCs](https://docs.livekit.io/home/client/data/rpc/) and other [Data APIs](https://docs.livekit.io/home/client/data/) to seamlessly exchange data with clients.
 - **Semantic turn detection**: Uses a transformer model to detect when a user is done with their turn, helps to reduce interruptions.
+- ** Custom Feature: Intelligent Interruption Handling**
+This repository includes a custom logic layer that solves the "backchanneling" issue. The agent uses context-aware filtering to:
+<*Ignore*> passive words like *"yeah"* and *"uh-huh"* while speaking.
+<*Interrupt*> only on active commands like *"stop"* or *"wait"*.
+<*Respond*> normally when silent. See `_interrupt_by_audio_activity` in [`livekit-agents/livekit/agents/voice/agent_activity.py`](livekit-agents/livekit/agents/voice/agent_activity.py).
+
 - **MCP support**: Native support for MCP. Integrate tools provided by MCP servers with one loc.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
@@ -60,6 +66,7 @@ Documentation on the framework and how to use it can be found [here](https://doc
 - AgentSession: A container for agents that manages interactions with end users.
 - entrypoint: The starting point for an interactive session, similar to a request handler in a web server.
 - Worker: The main process that coordinates job scheduling and launches agents for user sessions.
+- Interruption Logic: A context-aware filter running within the agent's event loop that distinguishes between passive listening (e.g., "yeah") and active interruptions.
 
 ## Usage
 
