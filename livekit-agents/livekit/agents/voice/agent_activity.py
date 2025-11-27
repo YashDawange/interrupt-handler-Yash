@@ -1185,6 +1185,14 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        if opt.ignore_words and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+            # check if the transcript matches any of the ignore words
+            # we strip punctuation and lowercase for comparison
+            cleaned_text = text.strip().lower().rstrip(".,!?")
+            if cleaned_text in [w.lower() for w in opt.ignore_words]:
+                return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1241,6 +1249,10 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
+            if self._session.options.ignore_words:
+                # if ignore_words is set, we defer the interruption to the STT event
+                return
+
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
@@ -1378,6 +1390,17 @@ class AgentActivity(RecognitionHooks):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
             return False
+
+        if (
+            self._session.options.ignore_words
+            and self._current_speech is not None
+            and not self._current_speech.done()
+        ):
+            # check if the transcript matches any of the ignore words
+            cleaned_text = info.new_transcript.strip().lower().rstrip(".,!?")
+            if cleaned_text in [w.lower() for w in self._session.options.ignore_words]:
+                self._cancel_preemptive_generation()
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
