@@ -35,6 +35,16 @@ class SpeechHandle:
         self._item_added_callbacks: set[Callable[[llm.ChatItem], None]] = set()
         self._done_callbacks: set[Callable[[SpeechHandle], None]] = set()
 
+        # Interruption tracking
+        self._partial_text: str = ""
+        """Text that was spoken before interruption."""
+        self._interruption_timestamp: float | None = None
+        """Timestamp when the interruption occurred."""
+        self._pause_timestamp: float | None = None
+        """Timestamp when speech was paused (for false interruption handling)."""
+        self._total_text: str = ""
+        """Complete text to be spoken."""
+
         def _on_done(_: asyncio.Future[None]) -> None:
             for cb in self._done_callbacks:
                 cb(self)
@@ -93,6 +103,26 @@ class SpeechHandle:
     @property
     def chat_items(self) -> list[llm.ChatItem]:
         return self._chat_items
+
+    @property
+    def partial_text(self) -> str:
+        """Returns the text that was spoken before interruption."""
+        return self._partial_text
+
+    @property
+    def total_text(self) -> str:
+        """Returns the complete text to be spoken."""
+        return self._total_text
+
+    @property
+    def interruption_timestamp(self) -> float | None:
+        """Returns the timestamp when interruption occurred, None if not interrupted."""
+        return self._interruption_timestamp
+
+    @property
+    def pause_timestamp(self) -> float | None:
+        """Returns the timestamp when speech was paused, None if not paused."""
+        return self._pause_timestamp
 
     def done(self) -> bool:
         return self._done_fut.done()
@@ -214,3 +244,23 @@ class SpeechHandle:
     def _mark_scheduled(self) -> None:
         with contextlib.suppress(asyncio.InvalidStateError):
             self._scheduled_fut.set_result(None)
+
+    def _update_partial_text(self, partial_text: str) -> None:
+        """Update the partial text that has been spoken so far."""
+        self._partial_text = partial_text
+
+    def _update_total_text(self, total_text: str) -> None:
+        """Update the total text to be spoken."""
+        self._total_text = total_text
+
+    def _mark_interrupted(self, timestamp: float) -> None:
+        """Mark this speech as interrupted at the given timestamp."""
+        self._interruption_timestamp = timestamp
+
+    def _mark_paused(self, timestamp: float) -> None:
+        """Mark this speech as paused at the given timestamp."""
+        self._pause_timestamp = timestamp
+
+    def _clear_pause(self) -> None:
+        """Clear the pause timestamp when resuming."""
+        self._pause_timestamp = None

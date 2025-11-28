@@ -1,6 +1,7 @@
 from . import io, run_result
 from .agent import Agent, AgentTask, ModelSettings
 from .agent_session import AgentSession, VoiceActivityVideoSampler
+from .backchannel_filter import BackchannelConfig, BackchannelFilter
 from .events import (
     AgentEvent,
     AgentFalseInterruptionEvent,
@@ -10,10 +11,12 @@ from .events import (
     ConversationItemAddedEvent,
     ErrorEvent,
     FunctionToolsExecutedEvent,
+    InterruptionResumedEvent,
     MetricsCollectedEvent,
     RunContext,
     SpeechCreatedEvent,
     UserInputTranscribedEvent,
+    UserInterruptedAgentEvent,
     UserStateChangedEvent,
 )
 from .room_io import (
@@ -31,6 +34,8 @@ __all__ = [
     "ModelSettings",
     "AgentTask",
     "SpeechHandle",
+    "BackchannelFilter",
+    "BackchannelConfig",
     "RunContext",
     "UserInputTranscribedEvent",
     "AgentEvent",
@@ -44,6 +49,8 @@ __all__ = [
     "AgentStateChangedEvent",
     "FunctionToolsExecutedEvent",
     "AgentFalseInterruptionEvent",
+    "UserInterruptedAgentEvent",
+    "InterruptionResumedEvent",
     "TranscriptSynchronizer",
     "io",
     "room_io",

@@ -87,6 +87,8 @@ EventTypes = Literal[
     "user_input_transcribed",
     "conversation_item_added",
     "agent_false_interruption",
+    "user_interrupted_agent",
+    "interruption_resumed",
     "function_tools_executed",
     "metrics_collected",
     "speech_created",
@@ -137,6 +139,45 @@ class AgentFalseInterruptionEvent(BaseModel):
                 f"AgentFalseInterruptionEvent.{name} is deprecated, automatic resume is now supported"
             )
         return super().__getattribute__(name)
+
+
+class UserInterruptedAgentEvent(BaseModel):
+    """Event emitted when the user interrupts the agent during speech.
+    
+    This event provides detailed information about the interruption including
+    what content was already spoken, the timing of the interruption, and the
+    reason for detection.
+    """
+    type: Literal["user_interrupted_agent"] = "user_interrupted_agent"
+    partial_text: str
+    """The text that was already spoken before interruption."""
+    interruption_position: float
+    """Position in seconds where the interruption occurred in the speech."""
+    total_duration: float
+    """Total expected duration of the speech in seconds."""
+    interruption_reason: Literal["vad_detected", "speech_started", "transcript_detected"]
+    """The reason the interruption was detected."""
+    user_speech_duration: float
+    """Duration of user speech that triggered the interruption."""
+    speech_id: str
+    """Unique identifier for the interrupted speech."""
+    created_at: float = Field(default_factory=time.time)
+
+
+class InterruptionResumedEvent(BaseModel):
+    """Event emitted when a paused/interrupted speech is resumed.
+    
+    This occurs when a false interruption is detected and the agent
+    resumes speaking after the user stops.
+    """
+    type: Literal["interruption_resumed"] = "interruption_resumed"
+    speech_id: str
+    """Unique identifier for the resumed speech."""
+    pause_duration: float
+    """Duration in seconds the speech was paused."""
+    was_false_interruption: bool
+    """True if this was a false interruption (user didn't actually speak)."""
+    created_at: float = Field(default_factory=time.time)
 
 
 class MetricsCollectedEvent(BaseModel):
@@ -231,6 +272,8 @@ AgentEvent = Annotated[
         UserStateChangedEvent,
         AgentStateChangedEvent,
         AgentFalseInterruptionEvent,
+        UserInterruptedAgentEvent,
+        InterruptionResumedEvent,
         MetricsCollectedEvent,
         ConversationItemAddedEvent,
         FunctionToolsExecutedEvent,
