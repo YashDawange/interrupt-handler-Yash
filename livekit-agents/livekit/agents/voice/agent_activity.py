@@ -1166,6 +1166,35 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
+    def _should_filter_soft_interruption(self, transcript: str) -> bool:
+        """Check if the current interruption should be filtered as a soft interruption.
+
+        Uses the SoftInterruptionFilter to determine if:
+        1. Soft interruption filtering is enabled
+        2. The agent is currently speaking
+        3. The transcript contains only soft interruption words
+
+        Returns:
+            True if this interruption should be suppressed, False otherwise
+        """
+        if not self._session._soft_interrupt_filter:
+            return False
+
+        if not transcript:
+            return False
+
+        # Determine if agent is actively generating speech
+        agent_actively_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+        )
+
+        # Use the filter to make the decision
+        return self._session._soft_interrupt_filter.should_suppress_interruption(
+            transcript=transcript,
+            agent_is_speaking=agent_actively_speaking,
+        )
+
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
@@ -1183,6 +1212,15 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                return
+
+        # Check for soft interruption filtering
+        if self.stt is not None and self._audio_recognition is not None:
+            current_transcript = self._audio_recognition.current_transcript
+            if self._should_filter_soft_interruption(current_transcript):
+                logger.info(f"Soft interruption filtered: '{current_transcript}'")
+                # Clear audio buffer and return - don't process this as an interruption
+                self._audio_recognition.clear_user_turn()
                 return
 
         if self._rt_session is not None:
@@ -1240,6 +1278,11 @@ class AgentActivity(RecognitionHooks):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
 
+        # When using STT turn detection with soft interrupt filtering, skip VAD-based interruptions
+        # and rely on transcript analysis instead
+        if self._turn_detection == "stt" and self._session.options.enable_soft_interrupt_filtering:
+            return
+
         if ev.speech_duration >= self._session.options.min_interruption_duration:
             self._interrupt_by_audio_activity()
 
@@ -1248,16 +1291,27 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript_text = ev.alternatives[0].text
+
+        # Apply soft interruption filter before processing
+        if self._should_filter_soft_interruption(transcript_text):
+            logger.info(f"Filtering soft interruption (interim): '{transcript_text}'")
+            # Discard this transcript - it's a passive acknowledgment during agent speech
+            if self._audio_recognition:
+                self._audio_recognition.clear_user_turn()
+            return
+
+        # Process normal transcripts
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript_text,
                 is_final=False,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        if transcript_text and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
@@ -1276,10 +1330,22 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript_text = ev.alternatives[0].text
+
+        # Apply soft interruption filter before processing
+        if self._should_filter_soft_interruption(transcript_text):
+            logger.info(f"Filtering soft interruption (final): '{transcript_text}'")
+            # Discard this transcript - it's a passive acknowledgment during agent speech
+            if self._audio_recognition:
+                self._audio_recognition.clear_user_turn()
+            # Skip interrupt paused speech task when filtering
+            return
+
+        # Process normal transcripts
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript_text,
                 is_final=True,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
