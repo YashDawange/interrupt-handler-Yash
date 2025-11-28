@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interruption_filter import InterruptionFilter
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -141,6 +142,9 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        # Initialize intelligent interruption filter
+        self._interruption_filter = InterruptionFilter()
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1241,7 +1245,40 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # Get current transcript to check with interruption filter
+            transcript = ""
+            if self._audio_recognition is not None:
+                transcript = self._audio_recognition.current_transcript
+
+            # Determine agent state for filter
+            agent_state = (
+                "speaking"
+                if self._session.agent_state == "speaking"
+                else self._session.agent_state
+            )
+
+            # Use intelligent filter to decide if we should interrupt
+            decision = self._interruption_filter.should_interrupt(transcript, agent_state)
+
+            if decision.should_interrupt:
+                logger.debug(
+                    "Interruption allowed by filter",
+                    extra={
+                        "reason": decision.reason,
+                        "transcript": transcript,
+                        "matched_words": decision.matched_words,
+                    },
+                )
+                self._interrupt_by_audio_activity()
+            else:
+                logger.debug(
+                    "Interruption blocked by filter",
+                    extra={
+                        "reason": decision.reason,
+                        "transcript": transcript,
+                        "matched_words": decision.matched_words,
+                    },
+                )
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1261,15 +1298,45 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Determine agent state for filter
+            agent_state = (
+                "speaking"
+                if self._session.agent_state == "speaking"
+                else self._session.agent_state
+            )
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+            # Use intelligent filter to decide if we should interrupt
+            decision = self._interruption_filter.should_interrupt(
+                ev.alternatives[0].text, agent_state
+            )
+
+            if decision.should_interrupt:
+                logger.debug(
+                    "Interim transcript triggers interruption",
+                    extra={
+                        "reason": decision.reason,
+                        "transcript": ev.alternatives[0].text,
+                        "matched_words": decision.matched_words,
+                    },
+                )
+                self._interrupt_by_audio_activity()
+
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
+            else:
+                logger.debug(
+                    "Interim transcript blocked by filter",
+                    extra={
+                        "reason": decision.reason,
+                        "transcript": ev.alternatives[0].text,
+                        "matched_words": decision.matched_words,
+                    },
+                )
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1292,15 +1359,45 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Determine agent state for filter
+            agent_state = (
+                "speaking"
+                if self._session.agent_state == "speaking"
+                else self._session.agent_state
+            )
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+            # Use intelligent filter to decide if we should interrupt
+            decision = self._interruption_filter.should_interrupt(
+                ev.alternatives[0].text, agent_state
+            )
+
+            if decision.should_interrupt:
+                logger.debug(
+                    "Final transcript triggers interruption",
+                    extra={
+                        "reason": decision.reason,
+                        "transcript": ev.alternatives[0].text,
+                        "matched_words": decision.matched_words,
+                    },
+                )
+                self._interrupt_by_audio_activity()
+
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
+            else:
+                logger.debug(
+                    "Final transcript blocked by filter (backchannel)",
+                    extra={
+                        "reason": decision.reason,
+                        "transcript": ev.alternatives[0].text,
+                        "matched_words": decision.matched_words,
+                    },
+                )
 
         self._interrupt_paused_speech_task = asyncio.create_task(
             self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)

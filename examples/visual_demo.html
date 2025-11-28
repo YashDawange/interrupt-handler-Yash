@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Interruption Handler - Visual Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .demo-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .control-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .control-group h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.2em;
+        }
+
+        .state-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .state-btn {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .state-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .state-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .input-area {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-family: inherit;
+        }
+
+        .input-area:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .result-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            border: 3px solid #e0e0e0;
+            min-height: 200px;
+        }
+
+        .result-panel.interrupt {
+            border-color: #ff4444;
+            background: #fff5f5;
+        }
+
+        .result-panel.continue {
+            border-color: #00C851;
+            background: #f5fff5;
+        }
+
+        .decision-badge {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .decision-badge.interrupt {
+            background: #ff4444;
+            color: white;
+        }
+
+        .decision-badge.continue {
+            background: #00C851;
+            color: white;
+        }
+
+        .word-analysis {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+        }
+
+        .word-chip {
+            display: inline-block;
+            padding: 5px 12px;
+            margin: 5px;
+            border-radius: 15px;
+            font-weight: 600;
+        }
+
+        .word-command {
+            background: #ff4444;
+            color: white;
+        }
+
+        .word-filler {
+            background: #00C851;
+            color: white;
+        }
+
+        .word-content {
+            background: #2196F3;
+            color: white;
+        }
+
+        .examples {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .example-btn {
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .example-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .test-results {
+            margin-top: 20px;
+        }
+
+        .scenario-result {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .scenario-result.passed {
+            border-left-color: #00C851;
+        }
+
+        .scenario-result.failed {
+            border-left-color: #ff4444;
+        }
+
+        .config-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .config-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .config-tag {
+            padding: 5px 10px;
+            background: #667eea;
+            color: white;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Intelligent Interruption Handler</h1>
+            <p>Visual Demo of Context-Aware Interruption Filtering for LiveKit Agents</p>
+        </div>
+
+        <div class="content">
+            <div class="demo-section">
+                <div class="control-panel">
+                    <div class="control-group">
+                        <h3>🤖 Agent State</h3>
+                        <div class="state-selector">
+                            <button class="state-btn active" id="state-speaking" onclick="setAgentState('speaking')">
+                                🔊 SPEAKING
+                            </button>
+                            <button class="state-btn" id="state-listening" onclick="setAgentState('listening')">
+                                🔇 SILENT
+                            </button>
+                        </div>
+                        <p id="state-description" style="margin-top: 10px; color: #666;">
+                            Agent is currently explaining something...
+                        </p>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>💬 User Input</h3>
+                        <input 
+                            type="text" 
+                            class="input-area" 
+                            id="user-input" 
+                            placeholder="Type what the user says..."
+                            oninput="analyzeInput()"
+                        >
+                    </div>
+                </div>
+
+                <div class="result-panel" id="result-panel">
+                    <h3>🧠 Filter Decision</h3>
+                    <p style="color: #666; margin-top: 10px;">Type something above to see the filter decision...</p>
+                </div>
+            </div>
+
+            <div class="demo-section">
+                <h3>📚 Try These Examples</h3>
+                <div class="examples">
+                    <button class="example-btn" onclick="tryExample('speaking', 'yeah okay hmm')">
+                        Scenario 1: Fillers<br><small>"yeah okay hmm"</small>
+                    </button>
+                    <button class="example-btn" onclick="tryExample('speaking', 'wait stop')">
+                        Scenario 2: Commands<br><small>"wait stop"</small>
+                    </button>
+                    <button class="example-btn" onclick="tryExample('speaking', 'yeah but wait')">
+                        Scenario 3: Mixed<br><small>"yeah but wait"</small>
+                    </button>
+                    <button class="example-btn" onclick="tryExample('listening', 'yeah')">
+                        Scenario 4: Silent<br><small>"yeah" (agent silent)</small>
+                    </button>
+                </div>
+            </div>
+
+            <div class="demo-section">
+                <h3>🧪 Run All Test Scenarios</h3>
+                <button class="example-btn" onclick="runAllTests()" style="width: 100%; margin-top: 10px;">
+                    🚀 Run Complete Test Suite
+                </button>
+                <div id="test-results" class="test-results"></div>
+            </div>
+
+            <div class="config-panel">
+                <h3>⚙️ Configuration</h3>
+                <p style="margin: 10px 0;"><strong>📋 Ignore List (Fillers):</strong></p>
+                <div class="config-list" id="ignore-list"></div>
+                <p style="margin: 15px 0 10px 0;"><strong>🛑 Command List:</strong></p>
+                <div class="config-list" id="command-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const IGNORE_LIST = ["yeah", "ok", "okay", "hmm", "uh-huh", "mm-hmm", "right", "aha", "mhm", "uh", "um", "huh", "mm"];
+        const COMMAND_LIST = ["wait", "stop", "no", "hold", "pause", "but", "actually", "however"];
+
+        let currentAgentState = 'speaking';
+
+        // Initialize config display
+        document.getElementById('ignore-list').innerHTML = IGNORE_LIST.map(w => `<span class="config-tag">${w}</span>`).join('');
+        document.getElementById('command-list').innerHTML = COMMAND_LIST.map(w => `<span class="config-tag">${w}</span>`).join('');
+
+        function tokenize(text) {
+            text = text.toLowerCase().replace(/[^\w\s-]/g, ' ');
+            const words = text.split(/\s+/).filter(w => w);
+            const result = [];
+            words.forEach(word => {
+                if (word.includes('-')) {
+                    result.push(word);
+                    result.push(...word.split('-'));
+                } else {
+                    result.push(word);
+                }
+            });
+            return result.filter(w => w);
+        }
+
+        function shouldInterrupt(transcript, agentState) {
+            const normalized = transcript.trim();
+            
+            if (!normalized) {
+                return { should_interrupt: false, reason: "Empty transcript", matched_words: [] };
+            }
+
+            if (agentState !== 'speaking') {
+                return {
+                    should_interrupt: true,
+                    reason: `Agent is ${agentState}, processing user input normally`,
+                    matched_words: []
+                };
+            }
+
+            const words = tokenize(normalized);
+            const commandMatches = words.filter(w => COMMAND_LIST.includes(w));
+            
+            if (commandMatches.length > 0) {
+                return {
+                    should_interrupt: true,
+                    reason: "Command word detected while agent speaking",
+                    matched_words: commandMatches
+                };
+            }
+
+            const nonIgnoreWords = words.filter(w => !IGNORE_LIST.includes(w));
+            
+            if (nonIgnoreWords.length > 0) {
+                return {
+                    should_interrupt: true,
+                    reason: "Non-filler content detected while agent speaking",
+                    matched_words: nonIgnoreWords
+                };
+            }
+
+            const ignoreMatches = words.filter(w => IGNORE_LIST.includes(w));
+            return {
+                should_interrupt: false,
+                reason: "Only filler words detected while agent speaking",
+                matched_words: ignoreMatches
+            };
+        }
+
+        function setAgentState(state) {
+            currentAgentState = state;
+            document.getElementById('state-speaking').classList.toggle('active', state === 'speaking');
+            document.getElementById('state-listening').classList.toggle('active', state === 'listening');
+            
+            if (state === 'speaking') {
+                document.getElementById('state-description').textContent = 'Agent is currently explaining something...';
+            } else {
+                document.getElementById('state-description').textContent = 'Agent is waiting for user input...';
+            }
+            
+            analyzeInput();
+        }
+
+        function analyzeInput() {
+            const input = document.getElementById('user-input').value;
+            const panel = document.getElementById('result-panel');
+            
+            if (!input) {
+                panel.className = 'result-panel';
+                panel.innerHTML = '<h3>🧠 Filter Decision</h3><p style="color: #666; margin-top: 10px;">Type something above to see the filter decision...</p>';
+                return;
+            }
+
+            const decision = shouldInterrupt(input, currentAgentState);
+            
+            panel.className = decision.should_interrupt ? 'result-panel interrupt' : 'result-panel continue';
+            
+            let html = '<h3>🧠 Filter Decision</h3>';
+            html += `<div class="decision-badge ${decision.should_interrupt ? 'interrupt' : 'continue'}">`;
+            html += decision.should_interrupt ? '🛑 INTERRUPT' : '✋ CONTINUE';
+            html += '</div>';
+            html += `<p><strong>Agent will:</strong> ${decision.should_interrupt ? 'STOP speaking and listen' : 'KEEP speaking (ignore input)'}</p>`;
+            html += `<p style="margin-top: 10px;"><strong>Reason:</strong> ${decision.reason}</p>`;
+            
+            if (decision.matched_words.length > 0) {
+                html += `<p style="margin-top: 10px;"><strong>Matched Words:</strong> ${decision.matched_words.join(', ')}</p>`;
+            }
+
+            // Word analysis
+            const words = tokenize(input);
+            if (words.length > 0) {
+                html += '<div class="word-analysis"><strong>Word Analysis:</strong><br>';
+                words.forEach(word => {
+                    if (COMMAND_LIST.includes(word)) {
+                        html += `<span class="word-chip word-command">${word} (command)</span>`;
+                    } else if (IGNORE_LIST.includes(word)) {
+                        html += `<span class="word-chip word-filler">${word} (filler)</span>`;
+                    } else {
+                        html += `<span class="word-chip word-content">${word} (content)</span>`;
+                    }
+                });
+                html += '</div>';
+            }
+
+            panel.innerHTML = html;
+        }
+
+        function tryExample(state, input) {
+            setAgentState(state);
+            document.getElementById('user-input').value = input;
+            analyzeInput();
+        }
+
+        function runAllTests() {
+            const scenarios = [
+                {
+                    name: "Scenario 1: Long Explanation (Fillers while speaking)",
+                    agent_state: "speaking",
+                    inputs: ["yeah", "okay", "hmm", "uh-huh"],
+                    expected: false
+                },
+                {
+                    name: "Scenario 2: Correction (Commands while speaking)",
+                    agent_state: "speaking",
+                    inputs: ["no", "stop", "wait"],
+                    expected: true
+                },
+                {
+                    name: "Scenario 3: Mixed Input (Commands + Fillers)",
+                    agent_state: "speaking",
+                    inputs: ["yeah wait", "okay but stop", "hmm actually"],
+                    expected: true
+                },
+                {
+                    name: "Scenario 4: Passive Affirmation (Agent silent)",
+                    agent_state: "listening",
+                    inputs: ["yeah", "okay", "hello"],
+                    expected: true
+                }
+            ];
+
+            let html = '';
+            let totalPassed = 0;
+            let totalTests = 0;
+
+            scenarios.forEach(scenario => {
+                let passed = 0;
+                let total = scenario.inputs.length;
+                totalTests += total;
+
+                let tests = scenario.inputs.map(input => {
+                    const decision = shouldInterrupt(input, scenario.agent_state);
+                    const isCorrect = decision.should_interrupt === scenario.expected;
+                    if (isCorrect) passed++;
+                    return `${isCorrect ? '✅' : '❌'} "${input}"`;
+                }).join(' | ');
+
+                const allPassed = passed === total;
+                if (allPassed) totalPassed += total;
+
+                html += `<div class="scenario-result ${allPassed ? 'passed' : 'failed'}">`;
+                html += `<strong>${scenario.name}</strong><br>`;
+                html += `Tests: ${tests}<br>`;
+                html += `<strong>${allPassed ? '✅' : '❌'} ${passed}/${total} passed</strong>`;
+                html += '</div>';
+            });
+
+            html = `<h3 style="margin-top: 20px;">Test Results: ${totalPassed}/${totalTests} passed</h3>` + html;
+            document.getElementById('test-results').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
