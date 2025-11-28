@@ -1184,6 +1184,27 @@ class AgentActivity(RecognitionHooks):
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
+        
+        # Check for ignored words if the agent is speaking
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ):
+            ignored_words = self._agent.ignored_words or opt.ignored_words
+            if ignored_words and self._audio_recognition is not None:
+                text = self._audio_recognition.current_transcript.strip()
+                if not text:
+                    # Wait for STT to confirm content if we have an ignore list
+                    return
+                
+                # Check if the transcript consists only of ignored words
+                import string
+                cleaned_text = text.lower().translate(str.maketrans("", "", string.punctuation))
+                words = cleaned_text.split()
+                if all(word in ignored_words for word in words):
+                    logger.debug(f"Ignoring interruption: {text}")
+                    return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
@@ -1396,6 +1417,22 @@ class AgentActivity(RecognitionHooks):
             # In practice this is OK because most speeches will be interrupted if a new turn
             # is detected. So the previous execution should complete quickly.
             await old_task
+
+        # Check for ignored words if the agent is speaking
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ):
+            ignored_words = self._agent.ignored_words or self._session.options.ignored_words
+            if ignored_words:
+                text = info.new_transcript.strip()
+                import string
+                cleaned_text = text.lower().translate(str.maketrans("", "", string.punctuation))
+                words = cleaned_text.split()
+                if words and all(word in ignored_words for word in words):
+                    logger.debug(f"Ignoring interruption (user turn completed): {text}")
+                    return
 
         # When the audio recognition detects the end of a user turn:
         #  - check if realtime model server-side turn detection is enabled
