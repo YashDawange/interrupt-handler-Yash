@@ -1,3 +1,10 @@
+import sys
+from unittest.mock import MagicMock
+
+# Mock livekit.blingfire
+mock_blingfire = MagicMock()
+sys.modules["livekit.blingfire"] = mock_blingfire
+
 import asyncio
 import dataclasses
 import gc
