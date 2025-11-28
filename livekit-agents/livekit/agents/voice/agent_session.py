@@ -89,6 +89,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    backchanneling_words: list[str]
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -129,6 +130,16 @@ class VoiceActivityVideoSampler:
 
 
 DEFAULT_TTS_TEXT_TRANSFORMS: list[TextTransforms] = ["filter_markdown", "filter_emoji"]
+DEFAULT_BACKCHANNELING_WORDS: list[str] = [
+    "yeah",
+    "ok",
+    "okay",
+    "hmm",
+    "uh-huh",
+    "right",
+    "aha",
+    "mhmm",
+]
 
 
 class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
@@ -159,6 +170,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        backchanneling_words: list[str] | None = None,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +257,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            backchanneling_words (list[str], optional): List of words to treat as backchanneling
+                (passive acknowledgments like "yeah", "ok", "hmm"). When the agent is speaking,
+                these words will NOT interrupt the agent. When the agent is silent, these words
+                are treated as normal user input. Set to ``None`` to use default list:
+                ``['yeah', 'ok', 'okay', 'hmm', 'uh-huh', 'right', 'aha', 'mhmm']``.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -288,6 +305,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            backchanneling_words=(
+                backchanneling_words if backchanneling_words is not None else DEFAULT_BACKCHANNELING_WORDS
+            ),
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
@@ -1057,13 +1077,10 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                     new_agent=self._activity.agent,
                 )
             self._chat_ctx.insert(handoff_item)
-
             if new_activity == "start":
                 await self._activity.start()
             elif new_activity == "resume":
                 await self._activity.resume()
-
-        # move it outside the lock to allow calling _update_activity in on_enter of a new agent
         if wait_on_enter:
             assert self._activity._on_enter_task is not None
             await asyncio.shield(self._activity._on_enter_task)
@@ -1122,7 +1139,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         async for frame in video_input:
             if self._activity is not None:
                 if self._video_sampler is not None and not self._video_sampler(frame, self):
-                    continue  # ignore this frame
+                    continue  
 
                 self._activity.push_video(frame)
 
@@ -1136,7 +1153,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             and room_io.subscribed_fut
             and not room_io.subscribed_fut.done()
         ):
-            # skip the timer before user join the room
             return
 
         self._user_away_timer = self._loop.call_later(
@@ -1163,9 +1179,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                     _set_participant_attributes(
                         self._agent_speaking_span, self._room_io.room.local_participant
                     )
-                # self._agent_speaking_span.set_attribute(trace_types.ATTR_START_TIME, time.time())
+                
         elif self._agent_speaking_span is not None:
-            # self._agent_speaking_span.set_attribute(trace_types.ATTR_END_TIME, time.time())
+            
             self._agent_speaking_span.end()
             self._agent_speaking_span = None
 
@@ -1195,10 +1211,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                     self._user_speaking_span, self._room_io.linked_participant
                 )
 
-            # self._user_speaking_span.set_attribute(trace_types.ATTR_START_TIME, time.time())
         elif self._user_speaking_span is not None:
-            # end_time = last_speaking_time or time.time()
-            # self._user_speaking_span.set_attribute(trace_types.ATTR_END_TIME, end_time)
             self._user_speaking_span.end()
             self._user_speaking_span = None
 
@@ -1213,7 +1226,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
     def _user_input_transcribed(self, ev: UserInputTranscribedEvent) -> None:
         if self.user_state == "away" and ev.is_final:
-            # reset user state from away to listening in case VAD has a miss detection
             self._update_user_state("listening")
 
         self.emit("user_input_transcribed", ev)
@@ -1225,7 +1237,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
     def _tool_items_added(self, items: Sequence[llm.FunctionCall | llm.FunctionCallOutput]) -> None:
         self._chat_ctx.insert(items)
 
-    # move them to the end to avoid shadowing the same named modules for mypy
     @property
     def stt(self) -> stt.STT | None:
         return self._stt
@@ -1241,8 +1252,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
     @property
     def vad(self) -> vad.VAD | None:
         return self._vad
-
-    # -- User changed input/output streams/sinks --
 
     def _on_video_input_changed(self) -> None:
         if not self._started:
@@ -1284,7 +1293,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
     def _on_text_output_changed(self) -> None:
         pass
 
-    # ---
 
     async def __aenter__(self) -> AgentSession:
         return self
