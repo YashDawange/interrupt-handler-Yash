@@ -356,6 +356,36 @@ python myagent.py start
 
 Runs the agent with production-ready optimizations.
 
+## Interruption-handling logic
+
+This project implements context-aware interruption handling in the agent. 
+
+### Behavior
+- While the agent is speaking (TTS output in progress):
+  - If user says only short acknowledgment (from IGNORE_WORDS: "yeah", "ok", etc), the agent ignores it and keeps speaking.
+  - If user uses any explicit interrupt (from INTERRUPT_WORDS: "stop", "wait", etc.), the agent will immediately stop the TTS and listen.
+  - Other utterances are also ignored as interruptions while the agent is speaking.
+- If the agent is silent, user input is always processed as normal.
+- VAD (voice activity detection) only sets a pending interrupt flag; actual interruption is determined when transcript arrives.
+
+### Implementation
+- `interruption_handler.py` contains the ignore/interrupt word lists and helper logic.
+- The agent session/activity has `agent_is_speaking` and `pending_vad_interrupt` flags.
+- All behavior is modular and does not touch VAD/STT/TTS internals.
+
+### How to run
+
+1. Install dependencies (see above)
+2. Run the agent as described (`python myagent.py console`, `python myagent.py dev`) depending on your environment.
+
+## Advanced Features
+
+- **Mixed-phrase handling:** If any interrupt word appears in a user phrase (even with ignore words), interruption is triggered.
+- **Configurable Word Lists:** Set `IGNORE_WORDS_ENV` and `INTERRUPT_WORDS_ENV` environment variables to customize behavior.
+- **Duplicate Transcript Suppression:** Prevents duplicate evaluation when STT repeatedly supplies the same text.
+- **Debug Logging:** See `[INTERRUPTION]` info logs tracking every transcript and decision.
+- **Test Script:** See `tests/test_interruption.py` for quick local verification of classification logic.
+
 ## Contributing
 
 The Agents framework is under active development in a rapidly evolving field. We welcome and appreciate contributions of any kind, be it feedback, bugfixes, features, new plugins and tools, or better documentation. You can file issues under this repo, open a PR, or chat with us in LiveKit's [Slack community](https://livekit.io/join-slack).
