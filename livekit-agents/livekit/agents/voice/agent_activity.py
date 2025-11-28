@@ -4,6 +4,8 @@ import asyncio
 import contextvars
 import heapq
 import json
+import os
+import re
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -104,7 +106,42 @@ class _PreemptiveGeneration:
     created_at: float
 
 
-# NOTE: AgentActivity isn't exposed to the public API
+def _parse_word_list(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {w.strip().lower() for w in value.split(",") if w.strip()}
+
+
+# Backchannel acknowledgements that should not interrupt while the agent is speaking.
+DEFAULT_SOFT_ACKS: set[str] = {
+    "yeah",
+    "ok",
+    "okay",
+    "hmm",
+    "uh-huh",
+    "uh huh",
+    "right",
+    "mm-hmm",
+    "mhm",
+}
+
+# Phrases that always indicate real interruption intent.
+DEFAULT_INTERRUPT_KEYWORDS: tuple[str, ...] = (
+    "stop",
+    "wait",
+    "hold on",
+    "hold up",
+    "pause",
+    "no",
+    "cancel",
+)
+
+_MULTI_LANG_WORD_RE = re.compile(
+    r"[\w]+|[\u4e00-\u9fff\u3040-\u30ff\u3400-\u4dbf\u0E00-\u0E7F]"
+)
+
+
+# AgentActivity isn't exposed to the public API
 class AgentActivity(RecognitionHooks):
     def __init__(self, agent: Agent, sess: AgentSession) -> None:
         self._agent, self._session = agent, sess
@@ -163,6 +200,12 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+        self._soft_ack_words = DEFAULT_SOFT_ACKS.copy()
+        self._soft_ack_words.update(_parse_word_list(os.getenv("LIVEKIT_SOFT_ACK_WORDS")))
+        custom_interrupt_words = _parse_word_list(os.getenv("LIVEKIT_INTERRUPT_KEYWORDS"))
+        self._interrupt_keywords: tuple[str, ...] = (
+            tuple(custom_interrupt_words) if custom_interrupt_words else DEFAULT_INTERRUPT_KEYWORDS
+        )
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1166,6 +1209,34 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
+    def _classify_interruption_intent(self, transcript: str, *, min_words: int) -> str:
+        """
+        Decide whether a transcript should interrupt current speech.
+
+        Returns:
+            "interrupt": strong signal to stop speaking
+            "ignore": backchannel/noise, keep speaking
+            "pending": wait for more text before deciding
+        """
+        if not transcript:
+            return "pending"
+
+        lowered = transcript.lower()
+        if any(keyword in lowered for keyword in self._interrupt_keywords):
+            return "interrupt"
+
+        words = [w for w in split_words(lowered, split_character=True) if w]
+        if not words:
+            return "pending"
+
+        if all(word in self._soft_ack_words for word in words):
+            return "ignore"
+
+        if min_words > 0 and len(words) < min_words:
+            return "pending"
+
+        return "interrupt"
+
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
@@ -1174,15 +1245,37 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
-        if (
+        transcript = ""
+        if self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+
+        is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
+        if is_speaking and self.stt is not None:
+            intent = self._classify_interruption_intent(
+                transcript, min_words=opt.min_interruption_words
+            )
+            logger.debug(
+                "interrupt_by_audio_activity.intent",
+                extra={
+                    "transcript": transcript,
+                    "intent": intent,
+                    "is_speaking": is_speaking,
+                },
+            )
+            if intent != "interrupt":
+                # While speaking, only hard commands should interrupt.
+                return
+        elif (
             self.stt is not None
             and opt.min_interruption_words > 0
             and self._audio_recognition is not None
         ):
-            text = self._audio_recognition.current_transcript
-
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+            if sum(1 for _ in _MULTI_LANG_WORD_RE.finditer(transcript)) < opt.min_interruption_words:
                 return
 
         if self._rt_session is not None:
@@ -1194,6 +1287,12 @@ class AgentActivity(RecognitionHooks):
             and self._current_speech.allow_interruptions
         ):
             self._paused_speech = self._current_speech
+            logger.debug(
+                "interrupting current speech",
+                extra={
+                    "transcript": transcript,
+                },
+            )
 
             # reset the false interruption timer
             if self._false_interruption_timer:
@@ -1364,6 +1463,19 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+        if is_speaking and self.stt is not None:
+            intent = self._classify_interruption_intent(
+                info.new_transcript, min_words=self._session.options.min_interruption_words
+            )
+            if intent != "interrupt":
+                # Drop soft acknowledgements while agent is talking.
+                return False
 
         if (
             self.stt is not None
