@@ -127,7 +127,7 @@ class AgentActivity(RecognitionHooks):
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
 
-        # Initialize intelligent interruption handler
+        # Smart interruption handling - tells us when to ignore "yeah", "ok" etc.
         self._interruption_handler = InterruptionHandler(
             config=sess.options.interruption_config
         )
@@ -1251,7 +1251,6 @@ class AgentActivity(RecognitionHooks):
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
-            # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
         self._session._user_input_transcribed(
@@ -1267,11 +1266,10 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            # Check with intelligent interruption handler
+            # Check if we should actually interrupt or if this is just "yeah"/"ok"
             transcript = ev.alternatives[0].text
             agent_state = self._session.agent_state
             
-            # Only interrupt if the handler allows it
             if self._interruption_handler.should_interrupt(transcript, agent_state):
                 self._interrupt_by_audio_activity()
 
@@ -1280,12 +1278,10 @@ class AgentActivity(RecognitionHooks):
                     and self._paused_speech
                     and (timeout := self._session.options.false_interruption_timeout) is not None
                 ):
-                    # schedule a resume timer if interrupted after end_of_speech
                     self._start_false_interruption_timer(timeout)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
-            # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
         self._session._user_input_transcribed(
@@ -1296,19 +1292,15 @@ class AgentActivity(RecognitionHooks):
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
-        # agent speech might not be interrupted if VAD failed and a final transcript is received
-        # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
-        # which will also be immediately interrupted
 
         if self._audio_recognition and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
-            # Check with intelligent interruption handler
+            # Same check as interim - don't interrupt on backchanneling
             transcript = ev.alternatives[0].text
             agent_state = self._session.agent_state
             
-            # Only interrupt if the handler allows it
             if self._interruption_handler.should_interrupt(transcript, agent_state):
                 self._interrupt_by_audio_activity()
 
@@ -1317,7 +1309,6 @@ class AgentActivity(RecognitionHooks):
                     and self._paused_speech
                     and (timeout := self._session.options.false_interruption_timeout) is not None
                 ):
-                    # schedule a resume timer if interrupted after end_of_speech
                     self._start_false_interruption_timer(timeout)
 
         self._interrupt_paused_speech_task = asyncio.create_task(
