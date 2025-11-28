@@ -61,6 +61,7 @@ from .events import (
     SpeechCreatedEvent,
     UserInputTranscribedEvent,
 )
+from .interruptions import InterruptionArbiter, InterruptionDecision, InterruptionFilterConfig
 from .generation import (
     ToolExecutionOutput,
     _AudioOutput,
@@ -141,6 +142,14 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        self._interruption_arbiter = InterruptionArbiter(
+            config=self._session.interruption_config,
+            logger=logger,
+        )
+        self._interruption_arbiter.update_agent_state(
+            speaking=self._session.agent_state == "speaking"
+        )
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -376,6 +385,12 @@ class AgentActivity(RecognitionHooks):
                 max_endpointing_delay=max_endpointing_delay,
                 turn_detection=turn_detection,
             )
+
+    def update_interruption_config(self, config: InterruptionFilterConfig) -> None:
+        self._interruption_arbiter.update_config(config)
+
+    def on_agent_state_changed(self, speaking: bool) -> None:
+        self._interruption_arbiter.update_agent_state(speaking=speaking)
 
     def _create_speech_task(
         self,
@@ -1209,6 +1224,10 @@ class AgentActivity(RecognitionHooks):
 
                 self._current_speech.interrupt()
 
+    def _apply_interruption_decision(self, decision: InterruptionDecision) -> None:
+        if decision == InterruptionDecision.INTERRUPT:
+            self._interrupt_by_audio_activity()
+
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
@@ -1218,6 +1237,8 @@ class AgentActivity(RecognitionHooks):
             # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
             self._false_interruption_timer = None
+
+        self._interruption_arbiter.on_user_speech_detected()
 
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
         speech_end_time = time.time()
@@ -1240,8 +1261,12 @@ class AgentActivity(RecognitionHooks):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
 
-        if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+        if self.stt is None:
+            if ev.speech_duration >= self._session.options.min_interruption_duration:
+                self._interrupt_by_audio_activity()
+            return
+
+        self._interruption_arbiter.on_user_speech_detected()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1257,11 +1282,14 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        if ev.alternatives[0].text and self._turn_detection not in ("manual", "realtime_llm"):
+            decision = self._interruption_arbiter.handle_transcript(
+                ev.alternatives[0].text,
+                is_final=False,
+                user_still_speaking=speaking,
+            )
+            if decision == InterruptionDecision.INTERRUPT:
+                self._apply_interruption_decision(decision)
 
             if (
                 speaking is False
@@ -1288,11 +1316,14 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
-        if self._audio_recognition and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        if self._audio_recognition and self._turn_detection not in ("manual", "realtime_llm"):
+            decision = self._interruption_arbiter.handle_transcript(
+                ev.alternatives[0].text,
+                is_final=True,
+                user_still_speaking=speaking,
+            )
+            if decision == InterruptionDecision.INTERRUPT:
+                self._apply_interruption_decision(decision)
 
             if (
                 speaking is False
@@ -1344,6 +1375,10 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+
+        if not self._interruption_arbiter.should_commit_turn(info.new_transcript):
+            self._cancel_preemptive_generation()
+            return False
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
