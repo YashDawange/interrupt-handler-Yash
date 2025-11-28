@@ -16,6 +16,7 @@ from .events import (
     UserInputTranscribedEvent,
     UserStateChangedEvent,
 )
+from .interruption_handler import InterruptionConfig, InterruptionHandler
 from .room_io import (
     _ParticipantAudioOutput,
     _ParticipantStreamTranscriptionOutput,
@@ -44,6 +45,8 @@ __all__ = [
     "AgentStateChangedEvent",
     "FunctionToolsExecutedEvent",
     "AgentFalseInterruptionEvent",
+    "InterruptionConfig",
+    "InterruptionHandler",
     "TranscriptSynchronizer",
     "io",
     "room_io",

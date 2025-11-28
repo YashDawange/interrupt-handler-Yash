@@ -74,6 +74,7 @@ from .generation import (
     remove_instructions,
     update_instructions,
 )
+from .interruption_handler import InterruptionHandler
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -125,6 +126,11 @@ class AgentActivity(RecognitionHooks):
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
+
+        # Initialize intelligent interruption handler
+        self._interruption_handler = InterruptionHandler(
+            config=sess.options.interruption_config
+        )
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
@@ -1261,15 +1267,21 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check with intelligent interruption handler
+            transcript = ev.alternatives[0].text
+            agent_state = self._session.agent_state
+            
+            # Only interrupt if the handler allows it
+            if self._interruption_handler.should_interrupt(transcript, agent_state):
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1292,15 +1304,21 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check with intelligent interruption handler
+            transcript = ev.alternatives[0].text
+            agent_state = self._session.agent_state
+            
+            # Only interrupt if the handler allows it
+            if self._interruption_handler.should_interrupt(transcript, agent_state):
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
 
         self._interrupt_paused_speech_task = asyncio.create_task(
             self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
