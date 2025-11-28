@@ -1174,6 +1174,27 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # --- START CUSTOM LOGIC ---
+        if self._current_speech is not None and not self._current_speech.done():
+            transcript = ""
+            if self._audio_recognition:
+                transcript = self._audio_recognition.current_transcript
+
+            # 1. PREVENT VAD STUTTER
+            # If transcript is empty, return immediately. 
+            # This allows audio to continue playing while VAD is active but STT is processing.
+            if not transcript or not transcript.strip():
+                return
+
+            # 2. IGNORE BACKCHANNELS
+            IGNORE_WORDS = {'yeah', 'ok', 'okay', 'mhmm', 'hmm', 'hm', 'aha', 'uh-huh', 'right', 'sure', 'yep', 'yes'}
+            import string
+            cleaned_text = transcript.lower().translate(str.maketrans('', '', string.punctuation))
+            words = cleaned_text.split()
+            if words and all(w in IGNORE_WORDS for w in words):
+                return
+        # --- END CUSTOM LOGIC ---
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
@@ -1364,6 +1385,17 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+        
+        # --- START CUSTOM LOGIC ---
+        # Prevent EOU from triggering an interruption if it's just a backchannel
+        if self._current_speech is not None and not self._current_speech.done():
+            IGNORE_WORDS = {'yeah', 'ok', 'okay', 'mhmm', 'hmm', 'hm', 'aha', 'uh-huh', 'right', 'sure', 'yep', 'yes'}
+            import string
+            cleaned_text = info.new_transcript.lower().translate(str.maketrans('', '', string.punctuation))
+            words = cleaned_text.split()
+            if words and all(w in IGNORE_WORDS for w in words):
+                 return False
+        # --- END CUSTOM LOGIC ---
 
         if (
             self.stt is not None
