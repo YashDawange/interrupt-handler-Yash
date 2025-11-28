@@ -182,6 +182,7 @@ class InterruptionArbiter:
         self._clock = clock
         self._classifier = BackchannelClassifier(config=self._config, logger=self._logger)
         self._agent_speaking = False
+        self._audio_playing = False  # tracks whether audio is still being played out
         self._candidate: _InterruptionCandidate | None = None
         self._last_final: _InterruptionCandidate | None = None
 
@@ -189,17 +190,28 @@ class InterruptionArbiter:
     def supports_semantics(self) -> bool:
         return True
 
+    @property
+    def is_agent_active(self) -> bool:
+        """Returns True if the agent is speaking OR audio is still playing out."""
+        return self._agent_speaking or self._audio_playing
+
     def update_agent_state(self, *, speaking: bool) -> None:
-        if not speaking:
+        if not speaking and not self._audio_playing:
             self._candidate = None
         self._agent_speaking = speaking
+
+    def update_audio_playing(self, *, playing: bool) -> None:
+        """Update whether audio is currently being played out to the user."""
+        if not playing and not self._agent_speaking:
+            self._candidate = None
+        self._audio_playing = playing
 
     def update_config(self, config: InterruptionFilterConfig) -> None:
         self._config = config
         self._classifier = BackchannelClassifier(config=config, logger=self._logger)
 
     def on_user_speech_detected(self) -> None:
-        if not self._agent_speaking:
+        if not self.is_agent_active:
             return
         if self._candidate is None:
             now = self._clock()
@@ -237,6 +249,8 @@ class InterruptionArbiter:
                 "decision": decision.value,
                 "transcript": transcript,
                 "agent_speaking": self._agent_speaking,
+                "audio_playing": self._audio_playing,
+                "is_agent_active": self.is_agent_active,
                 "user_still_speaking": user_still_speaking,
             },
         )
@@ -250,7 +264,8 @@ class InterruptionArbiter:
         if not transcript.strip():
             return InterruptionDecision.PENDING
 
-        if not self._agent_speaking:
+        # Check if agent is active (speaking state OR audio still playing)
+        if not self.is_agent_active:
             return InterruptionDecision.RESPOND_LISTENING
 
         self.on_user_speech_detected()

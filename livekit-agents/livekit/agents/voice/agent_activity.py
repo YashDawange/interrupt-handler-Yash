@@ -392,6 +392,14 @@ class AgentActivity(RecognitionHooks):
     def on_agent_state_changed(self, speaking: bool) -> None:
         self._interruption_arbiter.update_agent_state(speaking=speaking)
 
+    def on_audio_playout_started(self) -> None:
+        """Called when audio starts playing out to the user."""
+        self._interruption_arbiter.update_audio_playing(playing=True)
+
+    def on_audio_playout_finished(self) -> None:
+        """Called when audio finishes playing out to the user."""
+        self._interruption_arbiter.update_audio_playing(playing=False)
+
     def _create_speech_task(
         self,
         coro: Coroutine[Any, Any, Any],
@@ -1262,6 +1270,7 @@ class AgentActivity(RecognitionHooks):
             return
 
         if self.stt is None:
+            # No STT available, use VAD-only interruption based on speech duration
             if ev.speech_duration >= self._session.options.min_interruption_duration:
                 self._interrupt_by_audio_activity()
             return
@@ -1645,6 +1654,7 @@ class AgentActivity(RecognitionHooks):
 
         def _on_first_frame(_: asyncio.Future[None]) -> None:
             self._session._update_agent_state("speaking")
+            self.on_audio_playout_started()
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:
@@ -1728,6 +1738,10 @@ class AgentActivity(RecognitionHooks):
                 )
                 speech_handle._item_added([msg])
                 self._session._conversation_item_added(msg)
+
+        # Mark audio playout as finished
+        if audio_output is not None:
+            self.on_audio_playout_finished()
 
         if self._session.agent_state == "speaking":
             self._session._update_agent_state("listening")
@@ -1868,6 +1882,7 @@ class AgentActivity(RecognitionHooks):
             nonlocal started_speaking_at
             started_speaking_at = time.time()
             self._session._update_agent_state("speaking")
+            self.on_audio_playout_started()
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:
@@ -1971,6 +1986,10 @@ class AgentActivity(RecognitionHooks):
                 speech_handle._item_added([msg])
                 current_span.set_attribute(trace_types.ATTR_RESPONSE_TEXT, forwarded_text)
 
+            # Mark audio playout as finished on interruption
+            if audio_output is not None:
+                self.on_audio_playout_finished()
+
             if self._session.agent_state == "speaking":
                 self._session._update_agent_state("listening")
 
@@ -1997,6 +2016,10 @@ class AgentActivity(RecognitionHooks):
             self._session._conversation_item_added(msg)
             speech_handle._item_added([msg])
             current_span.set_attribute(trace_types.ATTR_RESPONSE_TEXT, text_out.text)
+
+        # Mark audio playout as finished on normal completion
+        if audio_output is not None:
+            self.on_audio_playout_finished()
 
         if len(tool_output.output) > 0:
             self._session._update_agent_state("thinking")
@@ -2192,6 +2215,7 @@ class AgentActivity(RecognitionHooks):
             nonlocal started_speaking_at
             started_speaking_at = time.time()
             self._session._update_agent_state("speaking")
+            self.on_audio_playout_started()
 
         tasks: list[asyncio.Task[Any]] = []
         tees: list[utils.aio.itertools.Tee[Any]] = []
@@ -2360,6 +2384,7 @@ class AgentActivity(RecognitionHooks):
             await speech_handle.wait_if_not_interrupted(
                 [asyncio.ensure_future(audio_output.wait_for_playout())]
             )
+            self.on_audio_playout_finished()
             self._session._update_agent_state("listening")
             current_span.set_attribute(
                 trace_types.ATTR_SPEECH_INTERRUPTED, speech_handle.interrupted
@@ -2428,6 +2453,10 @@ class AgentActivity(RecognitionHooks):
                     speech_handle._item_added([msg])
                     self._session._conversation_item_added(msg)
                     current_span.set_attribute(trace_types.ATTR_RESPONSE_TEXT, forwarded_text)
+
+            # Mark audio playout as finished on interruption
+            if audio_output is not None:
+                self.on_audio_playout_finished()
 
             speech_handle._mark_generation_done()
             await utils.aio.cancel_and_wait(exe_task)

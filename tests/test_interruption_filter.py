@@ -102,3 +102,60 @@ def test_classifier_basic_decisions(utterance: str, expected: InterruptionDecisi
         arbiter.handle_transcript(utterance, is_final=True, user_still_speaking=True) == expected
     )
 
+
+def test_audio_playing_keeps_agent_active_after_speaking_state_ends() -> None:
+    """Test that 'stop' is treated as interrupt when audio is still playing even if speaking state ended."""
+    clock = _FakeClock()
+    arbiter = _make_arbiter(clock)
+
+    # Start speaking and playing audio
+    arbiter.update_agent_state(speaking=True)
+    arbiter.update_audio_playing(playing=True)
+    arbiter.on_user_speech_detected()
+    clock.advance(0.1)
+
+    # Agent state transitions to listening, but audio is still playing
+    arbiter.update_agent_state(speaking=False)
+
+    # User says "stop" - should still be treated as interrupt because audio is playing
+    decision = arbiter.handle_transcript("stop", is_final=True, user_still_speaking=False)
+    assert decision == InterruptionDecision.INTERRUPT
+
+
+def test_audio_playing_ignores_acknowledgement_after_speaking_state_ends() -> None:
+    """Test that 'yeah' is ignored when audio is still playing even if speaking state ended."""
+    clock = _FakeClock()
+    arbiter = _make_arbiter(clock)
+
+    # Start speaking and playing audio
+    arbiter.update_agent_state(speaking=True)
+    arbiter.update_audio_playing(playing=True)
+    arbiter.on_user_speech_detected()
+    clock.advance(0.1)
+
+    # Agent state transitions to listening, but audio is still playing
+    arbiter.update_agent_state(speaking=False)
+
+    # User says "yeah" - should be ignored because audio is still playing
+    decision = arbiter.handle_transcript("yeah", is_final=True, user_still_speaking=False)
+    assert decision == InterruptionDecision.IGNORE
+
+
+def test_respond_listening_when_audio_playout_finished() -> None:
+    """Test that 'yeah' triggers response after audio playout finishes."""
+    clock = _FakeClock()
+    arbiter = _make_arbiter(clock)
+
+    # Start speaking and playing audio
+    arbiter.update_agent_state(speaking=True)
+    arbiter.update_audio_playing(playing=True)
+    clock.advance(0.1)
+
+    # Agent finishes speaking AND audio finishes playing
+    arbiter.update_agent_state(speaking=False)
+    arbiter.update_audio_playing(playing=False)
+
+    # User says "yeah" - should be treated as response now
+    decision = arbiter.handle_transcript("yeah", is_final=True, user_still_speaking=False)
+    assert decision == InterruptionDecision.RESPOND_LISTENING
+
