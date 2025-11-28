@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interruption_handler import classify_user_transcript
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -163,6 +164,10 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+        self.agent_is_speaking = False
+        self.pending_vad_interrupt = False
+        self._last_transcript = ""
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1012,6 +1017,8 @@ class AgentActivity(RecognitionHooks):
         speech._mark_scheduled()
         self._wake_up_scheduling_task()
 
+        self.agent_is_speaking = True
+
     @utils.log_exceptions(logger=logger)
     async def _scheduling_task(self) -> None:
         last_playout_ts = 0.0
@@ -1213,9 +1220,8 @@ class AgentActivity(RecognitionHooks):
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
-
+        self.pending_vad_interrupt = True
         if self._false_interruption_timer:
-            # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
             self._false_interruption_timer = None
 
@@ -1244,67 +1250,60 @@ class AgentActivity(RecognitionHooks):
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
-        if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
-            # skip stt transcription if user_transcription is enabled on the realtime model
+        transcript = ev.alternatives[0].text
+        if transcript == self._last_transcript:
             return
-
-        self._session._user_input_transcribed(
-            UserInputTranscribedEvent(
-                language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
-                is_final=False,
-                speaker_id=ev.alternatives[0].speaker_id,
-            ),
-        )
-
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
-
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+        decision = classify_user_transcript(transcript)
+        logger.info(f"[INTERRUPTION] speaking={self.agent_is_speaking}, text='{transcript}', decision={decision}")
+        if self.agent_is_speaking:
+            if decision == "IGNORE":
+                self.pending_vad_interrupt = False
+                self._last_transcript = transcript
+                return
+            elif decision == "INTERRUPT":
+                self.pending_vad_interrupt = False
+                if self._current_speech is not None:
+                    self._current_speech.interrupt()
+                self._last_transcript = transcript
+                return
+            else:
+                self.pending_vad_interrupt = False
+                self._last_transcript = transcript
+                return
+        else:
+            if decision == "RESPOND":
+                self.pending_vad_interrupt = False
+        self.pending_vad_interrupt = False
+        self._last_transcript = transcript
+        super().on_interim_transcript(ev, speaking=speaking)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
-        if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
-            # skip stt transcription if user_transcription is enabled on the realtime model
+        transcript = ev.alternatives[0].text
+        if transcript == self._last_transcript:
             return
-
-        self._session._user_input_transcribed(
-            UserInputTranscribedEvent(
-                language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
-                is_final=True,
-                speaker_id=ev.alternatives[0].speaker_id,
-            ),
-        )
-        # agent speech might not be interrupted if VAD failed and a final transcript is received
-        # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
-        # which will also be immediately interrupted
-
-        if self._audio_recognition and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
-
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
-
-        self._interrupt_paused_speech_task = asyncio.create_task(
-            self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
-        )
+        decision = classify_user_transcript(transcript)
+        logger.info(f"[INTERRUPTION] speaking={self.agent_is_speaking}, text='{transcript}', decision={decision}")
+        if self.agent_is_speaking:
+            if decision == "IGNORE":
+                self.pending_vad_interrupt = False
+                self._last_transcript = transcript
+                return
+            elif decision == "INTERRUPT":
+                self.pending_vad_interrupt = False
+                if self._current_speech is not None:
+                    self._current_speech.interrupt()
+                self._last_transcript = transcript
+                return
+            else:
+                self.pending_vad_interrupt = False
+                self._last_transcript = transcript
+                return
+        else:
+            if decision == "RESPOND":
+                self.pending_vad_interrupt = False
+        self.pending_vad_interrupt = False
+        self._last_transcript = transcript
+        super().on_final_transcript(ev, speaking=speaking)
 
     def on_preemptive_generation(self, info: _PreemptiveGenerationInfo) -> None:
         if (
@@ -2608,3 +2607,7 @@ class AgentActivity(RecognitionHooks):
     @property
     def tts(self) -> tts.TTS | None:
         return self._agent.tts if is_given(self._agent.tts) else self._session.tts
+
+    def _on_speech_finished(self, speech_handle: SpeechHandle) -> None:
+        self.agent_is_speaking = False
+        super()._on_speech_finished(speech_handle)
