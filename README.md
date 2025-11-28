@@ -61,6 +61,33 @@ Documentation on the framework and how to use it can be found [here](https://doc
 - entrypoint: The starting point for an interactive session, similar to a request handler in a web server.
 - Worker: The main process that coordinates job scheduling and launches agents for user sessions.
 
+## Backchannel-aware interruption handling
+
+This fork layers in backchannel awareness so short acknowledgements don't derail ongoing speech while still letting real interrupts break through. It keeps the base agent/LLM/runtime behavior intact and adds:
+- Speaking state: soft acks like `yeah`, `ok`, `hmm`, `uh-huh`, `right` are filtered so TTS playback continues uninterrupted.
+- Silent state: those same utterances flow through the normal turn pipeline when the agent is not speaking.
+- Mixed phrases: interrupt keywords inside otherwise soft phrases (e.g., `yeah wait a second`) still stop the agent immediately.
+- Safety rails: `min_interruption_words` still applies; single-word hard commands such as `stop` always interrupt.
+
+Configuration:
+- `LIVEKIT_SOFT_ACK_WORDS`: optional comma-separated list to override/extend the ignore list.
+- `LIVEKIT_INTERRUPT_KEYWORDS`: optional comma-separated list of phrases that always trigger an interruption.
+
+To validate locally:
+
+First run:
+```bash
+export PYTHONPATH="$PWD/livekit-agents:$PWD/livekit-plugins"
+```
+
+Then:
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -p pytest_asyncio.plugin -s --log-cli-level=INFO \
+  tests/test_agent_session.py::test_backchannel_ignored_while_speaking \
+  tests/test_agent_session.py::test_backchannel_when_agent_silent \
+  tests/test_agent_session.py::test_mixed_backchannel_interrupts
+```
+
 ## Usage
 
 ### Simple voice agent

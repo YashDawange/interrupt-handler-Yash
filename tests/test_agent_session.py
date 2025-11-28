@@ -77,7 +77,15 @@ async def test_events_and_metrics() -> None:
         2.0, ttfb=0.2, duration=0.3
     )  # audio playout starts at 3.0+0.3+0.2=3.5s, ends at 5.5s
 
-    session = create_session(actions, speed_factor=speed)
+    session = create_session(
+        actions,
+        speed_factor=speed,
+        extra_kwargs={
+            # disable pause/resume path so we only test the logic guard
+            "resume_false_interruption": False,
+            "false_interruption_timeout": None,
+        },
+    )
     agent = MyAgent()
 
     user_state_events: list[UserStateChangedEvent] = []
@@ -160,7 +168,14 @@ async def test_tool_call() -> None:
     )
     actions.add_tts(3.0)  # audio for the tool response
 
-    session = create_session(actions, speed_factor=speed)
+    session = create_session(
+        actions,
+        speed_factor=speed,
+        extra_kwargs={
+            "resume_false_interruption": False,
+            "allow_interruptions": False,
+        },
+    )
     agent = MyAgent()
 
     agent_state_events: list[AgentStateChangedEvent] = []
@@ -308,6 +323,92 @@ async def test_interruption_options() -> None:
     assert len(playback_finished_events) == 1
     assert playback_finished_events[0].interrupted is False
     check_timestamp(playback_finished_events[0].playback_position, 5.0, speed_factor=speed)
+
+
+async def test_backchannel_ignored_while_speaking() -> None:
+    speed = 5.0
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 1.5, "Tell me a story.")
+    actions.add_llm("Here is a very long story that should keep speaking for a while.")
+    actions.add_tts(8.0)
+    # User provides soft acknowledgements mid-speech; should not interrupt.
+    actions.add_user_speech(5.0, 5.6, "yeah ok", stt_delay=0.1)
+
+    session = create_session(
+        actions,
+        speed_factor=speed,
+        extra_kwargs={
+            "resume_false_interruption": False,
+            "allow_interruptions": False,
+        },
+    )
+    agent = MyAgent()
+    playback_finished_events: list[PlaybackFinishedEvent] = []
+    session.output.audio.on("playback_finished", playback_finished_events.append)
+
+    await asyncio.wait_for(run_session(session, agent), timeout=SESSION_TIMEOUT)
+
+    assert len(playback_finished_events) == 1
+    assert playback_finished_events[0].interrupted is False
+    # Backchannel should not be added as a new user turn.
+    texts = [
+        item.text_content
+        for item in agent.chat_ctx.items
+        if item.type == "message" and item.role != "system"  # type: ignore[list-item]
+    ]
+    assert texts == [
+        "Tell me a story.",
+        "Here is a very long story that should keep speaking for a while.",
+    ]
+
+
+async def test_backchannel_when_agent_silent() -> None:
+    speed = 5.0
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 1.0, "Are you ready?")
+    actions.add_llm("Sure, let me know when to begin.")
+    actions.add_tts(2.0)
+    # Agent is silent when this arrives; it should be treated as a real user turn.
+    actions.add_user_speech(3.5, 4.0, "yeah", stt_delay=0.1)
+    actions.add_llm("Great, starting now.", input="yeah")
+    actions.add_tts(0.5)
+
+    session = create_session(actions, speed_factor=speed)
+    agent = MyAgent()
+    playback_finished_events: list[PlaybackFinishedEvent] = []
+    session.output.audio.on("playback_finished", playback_finished_events.append)
+
+    await asyncio.wait_for(run_session(session, agent), timeout=SESSION_TIMEOUT)
+
+    assert len(playback_finished_events) == 2
+    assert playback_finished_events[-1].interrupted is False
+    user_messages = [
+        item.text_content for item in agent.chat_ctx.items if item.type == "message" and item.role == "user"  # type: ignore[list-item]
+    ]
+    assert user_messages[-1] == "yeah"
+
+
+async def test_mixed_backchannel_interrupts() -> None:
+    speed = 5.0
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 1.5, "Tell me a story.")
+    actions.add_llm("Here is a very long story that keeps going on and on.")
+    actions.add_tts(8.0)
+    actions.add_user_speech(5.0, 5.8, "yeah wait a second", stt_delay=0.1)
+
+    session = create_session(actions, speed_factor=speed)
+    agent = MyAgent()
+    playback_finished_events: list[PlaybackFinishedEvent] = []
+    session.output.audio.on("playback_finished", playback_finished_events.append)
+
+    await asyncio.wait_for(run_session(session, agent), timeout=SESSION_TIMEOUT)
+
+    assert len(playback_finished_events) == 1
+    assert playback_finished_events[0].interrupted is True
+    assistant_messages = [
+        item for item in agent.chat_ctx.items if item.type == "message" and item.role == "assistant"  # type: ignore[list-item]
+    ]
+    assert assistant_messages and assistant_messages[-1].interrupted is True
 
 
 async def test_interruption_by_text_input() -> None:
