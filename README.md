@@ -34,7 +34,7 @@ $env:LIVEKIT_API_SECRET="your-livekit-secret"
 python -m venv .venv
 .venv\Scripts\activate
 
-# Install the local livekit-agents package (editable mode)
+# Install the local livekit-agents package
 pip install -e ./livekit-agents
 
 # Install plugins
