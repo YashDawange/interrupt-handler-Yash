@@ -30,6 +30,18 @@ $env:LIVEKIT_API_SECRET="your-livekit-secret"
 ### 2. Run the Agent
 
 ```bash
+# Create and activate venv
+python -m venv .venv
+.venv\Scripts\activate
+
+# Install the local livekit-agents package (editable mode)
+pip install -e ./livekit-agents
+
+# Install plugins
+pip install livekit-plugins-deepgram livekit-plugins-openai livekit-plugins-silero
+```
+
+```bash
 Activate virtual environment in both(.venv\Scripts\activate)
 
 .\run_agent.ps1 
