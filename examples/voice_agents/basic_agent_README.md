@@ -167,8 +167,7 @@ The result is a functional, realistic, and responsive voice agent powered by Liv
 * `basic_agent.py` is the final implemented agent.
 * Documentation, instructions, and usage notes are included.
 * Code is tested and runnable using both development and runtime commands.
-* Video link: https://drive.google.com/file/d/1EIxul40FgyL617YV-IUv39JiDqWQn2BD/view?usp=sharing
-
+* Video link: https://drive.google.com/drive/folders/1IfBhPiWiSZlqcvAi2csCvyhoAdQfQsti?usp=sharing
 ---
 
 ## 📄 License
@@ -186,4 +185,5 @@ Contributions, issues, and feature requests are welcome!
 ## 👤 Author
 
 Your Name - [GitHub Profile](https://github.com/Harshitha-02)
+
 
