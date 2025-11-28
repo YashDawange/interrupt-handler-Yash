@@ -65,8 +65,6 @@ class IntelligentInterruptHandler:
         self._session = None
         self._activity = None
         self._audio_recognition = None
-        
-        # Cache for word processing to reduce allocations
         self._word_cache: dict[str, List[str]] = {}
 
     def setup(self, session: AgentSession) -> None:
@@ -76,16 +74,12 @@ class IntelligentInterruptHandler:
         Args:
             session: The AgentSession instance to patch
         """
-        # Store session reference for clearing turns
         self._session = session
         
-        # Set up event listeners first (they work immediately)
         session.on("agent_state_changed", self._on_agent_state_changed)
         session.on("user_input_transcribed", self._on_user_input_transcribed)
         
-        # Wait for activity to be initialized using event-based approach
         async def _setup_after_start():
-            # Use a more efficient approach: wait for activity with timeout
             max_wait_time = 2.0
             check_interval = 0.05
             elapsed = 0.0
@@ -102,17 +96,14 @@ class IntelligentInterruptHandler:
             
             activity = session._activity
             self._activity = activity
-            # Cache audio recognition reference to avoid deep traversal
             self._audio_recognition = activity._audio_recognition
             
-            # Store original methods
             self._original_interrupt_method = activity._interrupt_by_audio_activity
             self._original_on_final_transcript = activity.on_final_transcript
             self._original_on_interim_transcript = activity.on_interim_transcript
             self._original_on_end_of_turn = activity.on_end_of_turn
             self._original_user_turn_completed_task = activity._user_turn_completed_task
             
-            # Create wrapper methods that capture activity
             def _interrupt_by_audio_activity_wrapper():
                 return self._interrupt_by_audio_activity_wrapper(activity)
             
@@ -128,7 +119,6 @@ class IntelligentInterruptHandler:
             def _user_turn_completed_task_wrapper(old_task, info):
                 return self._user_turn_completed_task_wrapper(activity, old_task, info)
             
-            # Replace the methods
             activity._interrupt_by_audio_activity = _interrupt_by_audio_activity_wrapper
             activity.on_final_transcript = _on_final_transcript_wrapper
             activity.on_interim_transcript = _on_interim_transcript_wrapper
@@ -137,13 +127,11 @@ class IntelligentInterruptHandler:
             
             logger.info("Intelligent interrupt handler installed successfully")
         
-        # Schedule setup task
         asyncio.create_task(_setup_after_start())
 
     def _on_agent_state_changed(self, ev) -> None:
         """Track agent state changes."""
         self._agent_state = ev.new_state
-        # Reduced logging frequency - only log state transitions, not every change
         if ev.new_state in ("speaking", "listening", "thinking"):
             logger.debug(f"Agent state: {self._agent_state}")
 
@@ -151,7 +139,6 @@ class IntelligentInterruptHandler:
         """Track user transcript updates."""
         if ev.transcript:
             self._current_transcript = ev.transcript
-            # Reduced logging - only log final transcripts
             if ev.is_final:
                 logger.debug(f"Final transcript: {self._current_transcript[:50]}")
 
@@ -176,59 +163,43 @@ class IntelligentInterruptHandler:
         transcript_lower = transcript.lower().strip()
         
         if not transcript_lower:
-            # Empty transcript - when agent is speaking, don't interrupt on empty transcript
-            # This handles the VAD/STT timing issue - VAD triggers before STT has transcript
             if is_agent_speaking:
                 logger.debug("Empty transcript while agent speaking - preventing interruption (waiting for STT)")
                 return False
-            # Agent not speaking - allow interruption (normal flow)
             return True
         
         if not is_agent_speaking:
-            # Agent is not speaking - always allow interruption (normal conversation flow)
             return True
         
-        # Agent is speaking - analyze transcript content with context awareness
-        # Use cached word processing to reduce allocations
         words_lower = self._process_words(transcript_lower)
         
         if not words_lower:
-            # No words detected yet - prevent interruption (waiting for STT to provide transcript)
             return False
         
-        # Fast path: check for interrupt commands first (highest priority)
         if any(word in self.interrupt_commands for word in words_lower):
             return True
         
-        # Fast path: check if ALL words are backchanneling (most common case)
         if all(word in self.ignore_words for word in words_lower):
-            # Only backchanneling words - prevent interruption
             return False
         
-        # Context-aware check: filter out backchanneling and check for meaningful content
         meaningful_words = [w for w in words_lower if w not in self.ignore_words]
         
-        # If meaningful words exist, allow interruption
         if meaningful_words:
             return True
         
-        # Fallback: allow interruption (safer to interrupt than miss important input)
         return True
 
     def _process_words(self, transcript: str) -> List[str]:
         """
         Process transcript into words list with caching to reduce allocations.
         """
-        # Use cache for repeated transcripts
         if transcript in self._word_cache:
             return self._word_cache[transcript]
         
-        # Normalize: remove punctuation
         words_only = _PUNCTUATION_REGEX.sub(' ', transcript)
         word_tuples = split_words(words_only, split_character=True)
         words_lower = [w[0].lower().strip() for w in word_tuples if w[0].strip()]
         
-        # Cache result (limit cache size to prevent memory issues)
         if len(self._word_cache) < 100:
             self._word_cache[transcript] = words_lower
         
@@ -239,20 +210,30 @@ class IntelligentInterruptHandler:
         Wrapper for the original _interrupt_by_audio_activity method.
         Adds intelligent filtering before calling the original method.
         """
-        # Use cached audio recognition reference
         audio_recognition = self._audio_recognition or activity._audio_recognition
         transcript = ""
         if audio_recognition is not None:
             transcript = audio_recognition.current_transcript or ""
         
-        # Check if we should interrupt
+        words = self._process_words(transcript) if transcript.strip() else []
+        is_interrupt_command = any(word in self.interrupt_commands for word in words) if words else False
+        
         should_interrupt = self._should_interrupt(activity, transcript)
         
         if not should_interrupt:
-            # Prevent interruption - agent should continue speaking
             return
         
-        # Allow interruption - call original method
+        if is_interrupt_command:
+            if activity._current_speech:
+                activity._current_speech.interrupt(force=True)
+            if hasattr(activity, '_preemptive_generation') and activity._preemptive_generation:
+                activity._preemptive_generation.speech_handle._cancel()
+                activity._preemptive_generation = None
+            self._session.clear_user_turn()
+            if audio_recognition is not None:
+                audio_recognition._audio_transcript = ""
+                audio_recognition._audio_interim_transcript = ""
+        
         if self._original_interrupt_method:
             self._original_interrupt_method()
     
@@ -262,7 +243,6 @@ class IntelligentInterruptHandler:
         when the agent is speaking. This intercepts BEFORE the event is emitted.
         """
         if not ev.alternatives or not ev.alternatives[0].text:
-            # No transcript - allow normal processing
             if self._original_on_final_transcript:
                 self._original_on_final_transcript(ev, speaking=speaking)
             return
@@ -271,65 +251,47 @@ class IntelligentInterruptHandler:
         words_lower = self._process_words(transcript)
         
         if not words_lower:
-            # No words - allow normal processing
             if self._original_on_final_transcript:
                 self._original_on_final_transcript(ev, speaking=speaking)
             return
         
-        # Check if agent is currently speaking
         is_agent_speaking = (
             self._agent_state == "speaking"
             or (activity._current_speech is not None and not activity._current_speech.interrupted)
         )
         
-        # Fast path: check for interrupt commands first
         has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
         
         if has_interrupt_command:
-            # Check if transcript contains ONLY interrupt commands
             all_interrupt_commands = all(word in self.interrupt_commands for word in words_lower)
             
             if all_interrupt_commands:
-                # Only interrupt commands - clear turn, don't generate response
-                # Use cached audio recognition reference
                 audio_recognition = self._audio_recognition or activity._audio_recognition
                 if audio_recognition is not None:
                     audio_recognition._audio_transcript = ""
                     audio_recognition._audio_interim_transcript = ""
                     audio_recognition._audio_preflight_transcript = ""
                     audio_recognition._user_turn_committed = False
-                
-                # Remove matching message from chat context if present
-                self._remove_message_from_chat_context(activity, ev.alternatives[0].text)
-                
-                # Don't call original method - prevents event emission and turn completion
                 return
         
         if is_agent_speaking and not has_interrupt_command:
-            # Agent is speaking - check for backchanneling
-            # Fast path: check if all words are backchanneling
             if all(word in self.ignore_words for word in words_lower):
-                # Only backchanneling words - prevent ALL processing
-                # Use cached audio recognition reference
                 audio_recognition = self._audio_recognition or activity._audio_recognition
                 if audio_recognition is not None:
                     audio_recognition._audio_transcript = ""
                     audio_recognition._audio_interim_transcript = ""
                     audio_recognition._audio_preflight_transcript = ""
                     audio_recognition._user_turn_committed = False
-                # Don't call original method - prevents event emission and all processing
                 return
         
-        # Allow normal processing - call original method
         if self._original_on_final_transcript:
             self._original_on_final_transcript(ev, speaking=speaking)
     
     def _on_interim_transcript_wrapper(self, activity, ev, *, speaking=None):
         """
         Wrapper for on_interim_transcript that prevents accumulation of backchanneling words
-        when the agent is speaking.
+        when the agent is speaking. This is critical for preventing pauses.
         """
-        # Check if agent is currently speaking
         is_agent_speaking = (
             self._agent_state == "speaking"
             or (activity._current_speech is not None and not activity._current_speech.interrupted)
@@ -342,20 +304,14 @@ class IntelligentInterruptHandler:
             if not words_lower:
                 return
             
-            # Fast path: check for interrupt commands first
             has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
             if not has_interrupt_command:
-                # Fast path: check if all words are backchanneling
                 if all(word in self.ignore_words for word in words_lower):
-                    # Only backchanneling words - prevent accumulation
-                    # Use cached audio recognition reference
                     audio_recognition = self._audio_recognition or activity._audio_recognition
                     if audio_recognition is not None:
                         audio_recognition._audio_interim_transcript = ""
-                    # Don't call original method - prevents event emission
                     return
         
-        # Allow normal processing - call original method
         if self._original_on_interim_transcript:
             self._original_on_interim_transcript(ev, speaking=speaking)
     
@@ -365,7 +321,6 @@ class IntelligentInterruptHandler:
         backchanneling words or interrupt commands are detected.
         """
         if not info.new_transcript:
-            # No transcript - allow normal processing
             if self._original_on_end_of_turn:
                 return self._original_on_end_of_turn(info)
             return True
@@ -374,59 +329,28 @@ class IntelligentInterruptHandler:
         words_lower = self._process_words(transcript)
         
         if not words_lower:
-            # No words - allow normal processing
             if self._original_on_end_of_turn:
                 return self._original_on_end_of_turn(info)
             return True
         
-        # Check if agent is currently speaking
         is_agent_speaking = (
             self._agent_state == "speaking"
             or (activity._current_speech is not None and not activity._current_speech.interrupted)
         )
         
-        # Fast path: check for interrupt commands first
         has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
         
         if has_interrupt_command:
-            # Fast path: check if ALL words are interrupt commands
             if all(word in self.interrupt_commands for word in words_lower):
-                # Only interrupt commands - prevent turn completion
                 return False
         
         if is_agent_speaking and not has_interrupt_command:
-            # Fast path: check if all words are backchanneling
             if all(word in self.ignore_words for word in words_lower):
-                # Only backchanneling words - prevent turn completion
                 return False
         
-        # Allow normal processing - call original method
         if self._original_on_end_of_turn:
             return self._original_on_end_of_turn(info)
         return True
-    
-    def _remove_message_from_chat_context(self, activity, transcript_text: str) -> None:
-        """
-        Remove matching message from chat context if present.
-        Optimized to avoid repeated attribute lookups.
-        """
-        if not activity._agent or not activity._agent._chat_ctx:
-            return
-        
-        chat_items = activity._agent._chat_ctx.items
-        if not chat_items:
-            return
-        
-        transcript_lower = transcript_text.lower().strip()
-        # Check last few items (most recent are at the end)
-        for i in range(len(chat_items) - 1, max(-1, len(chat_items) - 4), -1):
-            item = chat_items[i]
-            if (hasattr(item, 'role') and item.role == "user" and
-                hasattr(item, 'content') and item.content):
-                item_content = item.content[0] if isinstance(item.content, list) else str(item.content)
-                if item_content.lower().strip() == transcript_lower:
-                    chat_items.pop(i)
-                    break
     
     async def _user_turn_completed_task_wrapper(self, activity, old_task, info):
         """
@@ -438,13 +362,9 @@ class IntelligentInterruptHandler:
             words_lower = self._process_words(transcript)
             
             if words_lower:
-                # Fast path: check if ALL words are interrupt commands
                 if all(word in self.interrupt_commands for word in words_lower):
-                    # Only interrupt commands - clear transcript and remove from chat context
                     info.new_transcript = ""
-                    self._remove_message_from_chat_context(activity, transcript)
         
-        # Call original method
         if self._original_user_turn_completed_task:
             return await self._original_user_turn_completed_task(old_task, info)
 
@@ -465,10 +385,9 @@ async def entrypoint(ctx: JobContext):
         tts=cartesia.TTS(),
         false_interruption_timeout=1.0,
         resume_false_interruption=True,
-        min_interruption_words=0,  # We handle word filtering ourselves
+        min_interruption_words=0,
     )
 
-    # Create and set up interrupt handler
     interrupt_handler = IntelligentInterruptHandler(
         ignore_words=["yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm"],
         interrupt_commands=["stop", "wait", "no", "halt", "pause", "cancel"],

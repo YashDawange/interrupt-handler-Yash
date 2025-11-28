@@ -40,11 +40,11 @@ The main handler class that:
 #### 2. Intercepted Methods
 
 Our implementation intercepts the following methods in `interrupt_handler_agent.py`:
-- `_interrupt_by_audio_activity()` - Main interrupt trigger point
+- `_interrupt_by_audio_activity()` - Main interrupt trigger point with explicit command handling
 - `on_interim_transcript()` - **Critical**: Filters transcripts before they accumulate
-- `on_final_transcript()` - Filters final transcripts
-- `on_end_of_turn()` - Prevents turn completion for fillers
-- `_user_turn_completed_task()` - Prevents adding interrupt commands to chat context
+- `on_final_transcript()` - Filters final transcripts and prevents processing fillers
+- `on_end_of_turn()` - Prevents turn completion for fillers/interrupt-only commands
+- `_user_turn_completed_task()` - Prevents adding interrupt-only commands to chat context
 
 ### Decision Logic Flow
 
@@ -68,7 +68,7 @@ Our implementation (`interrupt_handler_agent.py`) provides:
 - Seamless experience with no pauses
 - Filters at interim transcript stage (prevents pauses)
 - Performance optimizations (caching)
-- Chat context cleanup (removes interrupt commands from history)
+- Explicit interrupt command handling (immediate stop on "stop", "wait", etc.)
 
 ---
 
@@ -243,6 +243,25 @@ This ensures we always know if the agent is:
 - `"thinking"` - Processing response
 - `"idle"` - Not active
 
+### Interrupt Command Handling
+
+When an interrupt command (like "stop" or "wait") is detected, the handler explicitly:
+
+```python
+if is_interrupt_command:
+    # Force immediate stop
+    activity._current_speech.interrupt(force=True)
+    # Cancel preemptive generation
+    activity._preemptive_generation.speech_handle._cancel()
+    # Clear user turn to prevent response
+    self._session.clear_user_turn()
+    # Clear audio recognition state
+    audio_recognition._audio_transcript = ""
+    audio_recognition._audio_interim_transcript = ""
+```
+
+This ensures immediate stopping without waiting for normal interrupt flow.
+
 ### Word Processing
 
 Words are normalized and processed for comparison:
@@ -268,19 +287,9 @@ examples/voice_agents/
 └── interrupt_handler_agent.py    # Our implementation
 
 Key Files:
-├── ASSIGNMENT_DOCUMENTATION.md    # This documentation
-└── requirements.txt              # Python dependencies
+├── README.md                      # This documentation
+└── requirements.txt               # Python dependencies
 ```
-
-### Main Classes
-
-**IntelligentInterruptHandler:**
-- `__init__()` - Initialize with ignore words and interrupt commands
-- `setup()` - Monkey-patch AgentActivity methods
-- `_should_interrupt()` - Core decision logic
-- `_interrupt_wrapper()` - Intercept interrupt triggers
-- `_on_final_transcript_wrapper()` - Filter final transcripts
-- `_on_interim_transcript_wrapper()` - Filter interim transcripts
 
 ---
 
