@@ -55,6 +55,7 @@ from .events import (
 from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
+from .soft_interruption_filter import SoftInterruptionFilter
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -89,6 +90,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    enable_soft_interrupt_filtering: bool
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +161,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        enable_soft_interrupt_filtering: bool = True,
+        soft_interrupt_patterns: list[str] | None = None,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +249,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            enable_soft_interrupt_filtering (bool): Enable intelligent filtering of soft interruptions
+                (passive acknowledgments like "yeah", "ok", "hmm"). When enabled and the agent is speaking,
+                these words will NOT interrupt the agent. When the agent is silent, they are treated as
+                normal user input. Default ``True``.
+            soft_interrupt_patterns (list[str], optional): Custom regex patterns for detecting soft
+                interruptions. If None, uses default patterns. Each pattern should be a valid regex string.
+                Example: ``[r"^yeah\.?$", r"^ok\.?$", r"^hmm+\.?$"]``
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -266,6 +277,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # This is the "global" chat_context, it holds the entire conversation history
         self._chat_ctx = ChatContext.empty()
+        # Initialize soft interruption filter if enabled
+        self._soft_interrupt_filter: SoftInterruptionFilter | None = None
+        if enable_soft_interrupt_filtering:
+            self._soft_interrupt_filter = SoftInterruptionFilter(
+                soft_patterns=soft_interrupt_patterns
+            )
+
         self._opts = AgentSessionOptions(
             allow_interruptions=allow_interruptions,
             discard_audio_if_uninterruptible=discard_audio_if_uninterruptible,
@@ -288,6 +306,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            enable_soft_interrupt_filtering=enable_soft_interrupt_filtering,
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
