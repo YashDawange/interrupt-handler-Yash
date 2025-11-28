@@ -42,11 +42,13 @@ pip install livekit-plugins-deepgram livekit-plugins-openai livekit-plugins-sile
 ```
 
 ```bash
-Activate virtual environment in both(.venv\Scripts\activate)
+Activate virtual environment in both terminal(.venv\Scripts\activate)
+
+1st terminal
 
 .\run_agent.ps1 
 
-in 2nd terminal
+2nd terminal
 
 python connect_to_agent.py
 ```
