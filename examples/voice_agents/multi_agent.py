@@ -29,6 +29,15 @@ from livekit.plugins import deepgram, openai, silero
 ## Each agent could have its own instructions, as well as different STT, LLM, TTS,
 ## or realtime models.
 
+
+# ---------------------------------------------------------
+# Words that should be ignored if the agent is currently speaking
+IGNORE_WORDS = {
+    "yeah", "ok", "okay", "hmm", "uh-huh", "right", "aha", "mhm"
+}
+# ---------------------------------------------------------
+
+
 logger = logging.getLogger("multi-agent")
 
 load_dotenv()
@@ -139,7 +148,25 @@ def prewarm(proc: JobProcess):
 
 server.setup_fnc = prewarm
 
+# ... inside multi_agent.py, before 'async def entrypoint(ctx: JobContext):'
 
+def should_interrupt(agent, transcription):
+    """
+    Callback to determine if the agent should be interrupted.
+    Returns True to allow interruption, False to ignore the user.
+    """
+    # 1. Get the text and clean it (lowercase, remove punctuation)
+    # Note: transcription might be an object or string depending on version
+    text = transcription.message if hasattr(transcription, "message") else str(transcription)
+    cleaned_text = text.lower().strip().replace(".", "").replace("!", "").replace("?", "")
+
+    # 2. Check logic: If text is in our ignore list, DO NOT interrupt.
+    if cleaned_text in IGNORE_WORDS:
+        logger.info(f"Ignoring filler word: '{cleaned_text}'")
+        return False  # Cancels the interruption
+    
+    # 3. Otherwise, allow the interruption (e.g. "Stop", "Wait", "Yeah wait")
+    return True
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
     session = AgentSession[StoryData](
@@ -149,6 +176,7 @@ async def entrypoint(ctx: JobContext):
         stt=deepgram.STT(model="nova-3"),
         tts=openai.TTS(voice="echo"),
         userdata=StoryData(),
+        before_interrupt_cb=should_interrupt
     )
 
     # log metrics as they are emitted, and total usage after session is over
