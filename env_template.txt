@@ -1,0 +1,27 @@
+# Copy this content to a file named .env in the project root
+
+# ====================================================================
+# INTELLIGENT INTERRUPTION HANDLING - API KEYS (FREE SETUP WITH GROQ)
+# ====================================================================
+
+# 1. LiveKit Cloud (FREE - 50GB/month)
+#    Get it: https://cloud.livekit.io
+LIVEKIT_URL=wss://your-project-name.livekit.cloud
+LIVEKIT_API_KEY=APIxxxxxxxxxxxxxxxxxxxxx
+LIVEKIT_API_SECRET=secretxxxxxxxxxxxxxxxxxxxxx
+
+# 2. Groq (FREE - 14,400 requests/day) ⭐ FASTEST FREE LLM
+#    Get it: https://console.groq.com
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# 3. Deepgram (FREE - $200 credit ~ 45 hours audio)
+#    Get it: https://deepgram.com
+DEEPGRAM_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# 4. Cartesia (FREE tier)
+#    Get it: https://cartesia.ai
+CARTESIA_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Optional: Custom backchannel words (default works great)
+# BACKCHANNEL_WORDS=yeah,ok,hmm,right,sure,uh-huh,aha
+
