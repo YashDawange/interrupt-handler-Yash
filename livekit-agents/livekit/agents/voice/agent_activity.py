@@ -35,6 +35,7 @@ from ..metrics import (
     TTSMetrics,
     VADMetrics,
 )
+from .interrupt_filter import InterruptionFilter, InterruptionDecision
 from ..telemetry import trace_types, tracer, utils as trace_utils
 from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
@@ -126,6 +127,10 @@ class AgentActivity(RecognitionHooks):
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
 
+        # recent short VAD timestamp (used as heuristic when STT returns
+        # very short or empty transcripts for non-lexical fillers)
+        self._recent_short_vad_at: float | None = None
+
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
         self._q_updated = asyncio.Event()
@@ -160,6 +165,9 @@ class AgentActivity(RecognitionHooks):
             else self._session.turn_detection
         )
         self._turn_detection = self._validate_turn_detection(turn_detection)
+
+        # Initialize interruption filter for backchannel detection
+        self._interrupt_filter = InterruptionFilter()
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
@@ -1240,8 +1248,22 @@ class AgentActivity(RecognitionHooks):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
 
-        if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+        # Don't interrupt immediately on VAD - wait for transcript to check filter.
+        # However, record short VAD events as a heuristic: some fillers (hums,
+        # backchannels) are rendered poorly by STT and may result in empty or
+        # very short transcripts. We record the timestamp of such short
+        # utterances so the transcript handler can treat them as backchannels.
+        try:
+            threshold = getattr(self._session.options, "short_vad_threshold", 0.6)
+        except Exception:
+            threshold = 0.6
+
+        now = time.time()
+        if ev.speech_duration <= threshold:
+            self._recent_short_vad_at = now
+        else:
+            # clear the recent short vad marker for longer utterances
+            self._recent_short_vad_at = None
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1257,15 +1279,50 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        # Short-VAD heuristic: if STT returns empty/very short and we recently saw
+        # a short VAD event, treat it as a backchannel (non-lexical filler).
+        transcript = ev.alternatives[0].text
+        if not transcript or len(transcript.strip()) < 3:
+            if self._recent_short_vad_at and (time.time() - self._recent_short_vad_at) < 1.0:
+                logger.info(
+                    "interrupt filtered (short VAD heuristic)",
+                    extra={
+                        "transcript": transcript,
+                        "reason": "Empty/short transcript detected after short VAD event (likely non-lexical filler)",
+                    }
+                )
+                return  # Skip interruption for likely non-lexical filler
+
+        if transcript and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
+            # Check interruption filter before allowing interruption
+            decision = self._interrupt_filter.should_allow_interruption(
+                transcript=transcript,
+                agent_is_speaking=self._current_speech is not None and not self._current_speech.interrupted,
+                is_final=False
+            )
+            
+            if not decision.should_interrupt:
+                logger.info(
+                    "interrupt filtered (backchannel)",
+                    extra={
+                        "transcript": transcript,
+                        "reason": decision.reason,
+                        "is_backchanneling": decision.is_backchanneling,
+                    }
+                )
+                return  # Skip interruption for backchanneling
+            
             self._interrupt_by_audio_activity()
 
+            # Don't resume for real interruptions (not backchanneling)
+            # Only schedule resume timer if it was backchanneling that somehow got through
             if (
                 speaking is False
                 and self._paused_speech
+                and decision.is_backchanneling  # Only resume if it was backchanneling
                 and (timeout := self._session.options.false_interruption_timeout) is not None
             ):
                 # schedule a resume timer if interrupted after end_of_speech
@@ -1288,15 +1345,49 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
+        transcript = ev.alternatives[0].text
+        # Short-VAD heuristic for final transcript: treat empty/short transcripts after
+        # short VAD events as backchannels (non-lexical fillers).
+        if not transcript or len(transcript.strip()) < 3:
+            if self._recent_short_vad_at and (time.time() - self._recent_short_vad_at) < 1.0:
+                logger.info(
+                    "interrupt filtered (short VAD heuristic) - final",
+                    extra={
+                        "transcript": transcript,
+                        "reason": "Empty/short final transcript after short VAD event (likely non-lexical filler)",
+                    }
+                )
+                return  # Skip interruption for likely non-lexical filler
+
         if self._audio_recognition and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
+            # Check interruption filter before allowing interruption (final transcript)
+            decision = self._interrupt_filter.should_allow_interruption(
+                transcript=transcript,
+                agent_is_speaking=self._current_speech is not None and not self._current_speech.interrupted,
+                is_final=True
+            )
+            
+            if not decision.should_interrupt:
+                logger.info(
+                    "interrupt filtered (backchannel) - final",
+                    extra={
+                        "transcript": transcript,
+                        "reason": decision.reason,
+                        "is_backchanneling": decision.is_backchanneling,
+                    }
+                )
+                return  # Skip interruption for backchanneling
+            
             self._interrupt_by_audio_activity()
 
+            # Don't resume for real interruptions (not backchanneling)
             if (
                 speaking is False
                 and self._paused_speech
+                and decision.is_backchanneling  # Only resume if it was backchanneling
                 and (timeout := self._session.options.false_interruption_timeout) is not None
             ):
                 # schedule a resume timer if interrupted after end_of_speech
