@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import re
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -98,6 +99,54 @@ class _PreemptiveGeneration:
     speech_handle: SpeechHandle
     user_message: llm.ChatMessage
     info: _PreemptiveGenerationInfo
+
+
+def _is_only_backchanneling(
+    text: str, ignore_list: Sequence[str], agent_is_speaking: bool
+) -> bool:
+    """
+    Check if the text contains only backchanneling words.
+    
+    This function only returns True when:
+    1. The agent is speaking (otherwise backchanneling should be processed normally)
+    2. All words in the text are in the ignore list
+    
+    Args:
+        text: The transcribed text to check
+        ignore_list: List of backchanneling words to ignore
+        agent_is_speaking: Whether the agent is currently speaking
+        
+    Returns:
+        True if text should be ignored (only backchanneling words and agent is speaking),
+        False otherwise (either agent is not speaking, or text contains non-backchanneling words)
+    """
+    if not agent_is_speaking:
+        # When agent is silent, never ignore - backchanneling should be processed
+        return False
+    
+    if not text or not ignore_list:
+        return False
+    
+    # Normalize text: lowercase and remove punctuation for comparison
+    normalized_text = re.sub(r'[^\w\s]', '', text.lower()).strip()
+    if not normalized_text:
+        return False
+    
+    # Split into words
+    words = normalized_text.split()
+    if not words:
+        return False
+    
+    # Create a set of normalized ignore words for fast lookup
+    ignore_set = {word.lower().strip() for word in ignore_list}
+    
+    # Check if ALL words are in the ignore list
+    # If any word is not in the ignore list, it's not just backchanneling
+    for word in words:
+        if word not in ignore_set:
+            return False
+    
+    return True
     chat_ctx: llm.ChatContext
     tools: list[llm.FunctionTool | llm.RawFunctionTool]
     tool_choice: llm.ToolChoice | None
@@ -1174,6 +1223,45 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Check if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
+        # Check for backchanneling words when agent is speaking
+        if (
+            agent_is_speaking
+            and self.stt is not None
+            and self._audio_recognition is not None
+            and opt.backchanneling_ignore_list
+        ):
+            text = self._audio_recognition.current_transcript
+            
+            # If we have transcript and it's only backchanneling, ignore the interruption
+            if text and _is_only_backchanneling(text, opt.backchanneling_ignore_list, True):
+                logger.debug(
+                    "ignoring backchanneling input while agent is speaking",
+                    extra={"text": text, "ignore_list": opt.backchanneling_ignore_list},
+                )
+                # If audio was already paused (e.g., by VAD before STT), resume it immediately
+                if (
+                    self._paused_speech
+                    and self._paused_speech is self._current_speech
+                    and use_pause
+                    and self._session.output.audio
+                    and self._session.output.audio.can_pause
+                ):
+                    self._session.output.audio.resume()
+                    self._session._update_agent_state("speaking")
+                    self._paused_speech = None
+                    # Cancel any false interruption timer
+                    if self._false_interruption_timer:
+                        self._false_interruption_timer.cancel()
+                        self._false_interruption_timer = None
+                return
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
@@ -1188,11 +1276,7 @@ class AgentActivity(RecognitionHooks):
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
-        if (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
-        ):
+        if agent_is_speaking:
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1365,12 +1449,40 @@ class AgentActivity(RecognitionHooks):
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
 
+        # Check if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and self._current_speech.allow_interruptions
+            and not self._current_speech.interrupted
+        )
+
+        # Check for backchanneling words when agent is speaking
+        if (
+            agent_is_speaking
+            and self.stt is not None
+            and self._session.options.backchanneling_ignore_list
+            and info.new_transcript
+        ):
+            if _is_only_backchanneling(
+                info.new_transcript,
+                self._session.options.backchanneling_ignore_list,
+                True,
+            ):
+                logger.debug(
+                    "ignoring backchanneling input at end of turn while agent is speaking",
+                    extra={
+                        "text": info.new_transcript,
+                        "ignore_list": self._session.options.backchanneling_ignore_list,
+                    },
+                )
+                self._cancel_preemptive_generation()
+                # Don't process this turn - it's just backchanneling
+                return False
+
         if (
             self.stt is not None
             and self._turn_detection != "manual"
-            and self._current_speech is not None
-            and self._current_speech.allow_interruptions
-            and not self._current_speech.interrupted
+            and agent_is_speaking
             and self._session.options.min_interruption_words > 0
             and len(split_words(info.new_transcript, split_character=True))
             < self._session.options.min_interruption_words
