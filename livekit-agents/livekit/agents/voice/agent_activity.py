@@ -79,6 +79,7 @@ from .speech_handle import SpeechHandle
 if TYPE_CHECKING:
     from ..llm import mcp
     from .agent_session import AgentSession
+    from .interruption import InterruptionController
 
 _AgentActivityContextVar = contextvars.ContextVar["AgentActivity"]("agents_activity")
 _SpeechHandleContextVar = contextvars.ContextVar["SpeechHandle"]("agents_speech_handle")
@@ -163,6 +164,17 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+        # Semantic interruption controller (initialized if config provided)
+        self._interruption_controller: InterruptionController | None = None
+        if self._session._interruption_config is not None:
+            from .interruption import InterruptionController
+
+            self._interruption_controller = InterruptionController(
+                config=self._session._interruption_config,
+                session=self._session,
+                agent_activity=self,
+            )
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1167,6 +1179,21 @@ class AgentActivity(RecognitionHooks):
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
     def _interrupt_by_audio_activity(self) -> None:
+        """Interrupt the current speech based on audio activity (VAD-driven).
+
+        CRITICAL: When semantic interruption mode is enabled, this method becomes
+        a NO-OP. All interruption decisions are made via STT semantics in the
+        on_interim_transcript/on_final_transcript hooks.
+
+        This eliminates the VAD-STT timing gap and ensures zero acoustic-driven
+        hiccups on backchannel speech.
+        """
+        # NEW: If semantic controller is active, disable VAD-driven interruption completely
+        if self._interruption_controller is not None:
+            # Semantic mode: interruptions are handled by STT callbacks only
+            return
+
+        # ORIGINAL LOGIC: Only executes when semantic mode is disabled
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1212,6 +1239,12 @@ class AgentActivity(RecognitionHooks):
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
+        """Called when user starts speaking (VAD-detected)."""
+        # NEW: Reset utterance buffer for new speech segment
+        if self._interruption_controller:
+            self._interruption_controller.reset_utterance()
+
+        # ORIGINAL: Update user state
         self._session._update_user_state("speaking")
 
         if self._false_interruption_timer:
@@ -1244,10 +1277,21 @@ class AgentActivity(RecognitionHooks):
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
+        """Called on STT interim results."""
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        # NEW: Semantic filtering (if controller active)
+        if self._interruption_controller:
+            should_process = self._interruption_controller.should_process_transcript(
+                ev.alternatives[0].text, is_final=False
+            )
+            if not should_process:
+                # Swallow backchannel transcripts (no user turn, no interruption)
+                return
+
+        # ORIGINAL: Forward to session
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
@@ -1272,10 +1316,25 @@ class AgentActivity(RecognitionHooks):
                 self._start_false_interruption_timer(timeout)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
+        """Called on STT final results."""
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        # NEW: Semantic filtering (if controller active)
+        if self._interruption_controller:
+            should_process = self._interruption_controller.should_process_transcript(
+                ev.alternatives[0].text, is_final=True
+            )
+
+            # Reset utterance after processing final transcript
+            self._interruption_controller.reset_utterance()
+
+            if not should_process:
+                # Swallow backchannel transcripts (no user turn)
+                return
+
+        # ORIGINAL: Forward to session
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
