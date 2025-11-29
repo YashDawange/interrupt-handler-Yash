@@ -120,9 +120,11 @@ You can verify the logic by running the agent and observing the console logs.
 ```text
 DEBUG:root:Current transcript: 'yeah'
 INFO:root:IGNORING interruption - all words are ignored: 'yeah'
-
-### Video proof 
-https://drive.google.com/file/d/1RmbXUrKEPysVDQGnY7-moLBVPiu7UGz2/view?usp=sharing
+```
+video_proof:
+  title: "**Intelligent Interruption Handling – Video Proof**"
+  link: "**[Click here to watch](https://drive.google.com/file/d/1RmbXUrKEPysVDQGnY7-moLBVPiu7UGz2/view?usp=sharing)**"
+  purpose: "**Demonstrates real-time verification of the intelligent interruption handling and sensitive VAD logic.**"
 
 ## Core concepts
 
