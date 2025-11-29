@@ -44,7 +44,9 @@ class IntelligentInterruptHandler:
             self.ignore_words: Set[str] = {w.lower() for w in ignore_words}
         else:
             self.ignore_words: Set[str] = {
-                "yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm"
+                "yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm", "yes",
+                "sure", "alright", "mhm", "yup", "correct", "gotcha", "roger", "indeed", "exactly", "absolutely",
+                "understood", "see", "true", "agreed", "fine", "good", "nice", "great", "wow", "oh"
             }
         
         if interrupt_commands:
@@ -263,16 +265,20 @@ class IntelligentInterruptHandler:
         has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
         
         if has_interrupt_command:
-            all_interrupt_commands = all(word in self.interrupt_commands for word in words_lower)
-            
-            if all_interrupt_commands:
-                audio_recognition = self._audio_recognition or activity._audio_recognition
-                if audio_recognition is not None:
-                    audio_recognition._audio_transcript = ""
-                    audio_recognition._audio_interim_transcript = ""
-                    audio_recognition._audio_preflight_transcript = ""
-                    audio_recognition._user_turn_committed = False
-                return
+            # At least one interrupt command detected - stop immediately
+            # Force interrupt current speech
+            if activity._current_speech:
+                activity._current_speech.interrupt(force=True)
+            # Cancel preemptive generation
+            if hasattr(activity, '_preemptive_generation') and activity._preemptive_generation:
+                activity._preemptive_generation.speech_handle._cancel()
+                activity._preemptive_generation = None
+            # Clear turn to prevent response generation, but allow transcript to be displayed
+            self._session.clear_user_turn()
+            # Allow transcript to be displayed in chat (call original handler)
+            if self._original_on_final_transcript:
+                self._original_on_final_transcript(ev, speaking=speaking)
+            return
         
         if is_agent_speaking and not has_interrupt_command:
             if all(word in self.ignore_words for word in words_lower):
@@ -291,22 +297,35 @@ class IntelligentInterruptHandler:
         """
         Wrapper for on_interim_transcript that prevents accumulation of backchanneling words
         when the agent is speaking. This is critical for preventing pauses.
+        Also triggers immediate interrupt when interrupt commands are detected.
         """
         is_agent_speaking = (
             self._agent_state == "speaking"
             or (activity._current_speech is not None and not activity._current_speech.interrupted)
         )
         
-        if is_agent_speaking and ev.alternatives and ev.alternatives[0].text:
+        if ev.alternatives and ev.alternatives[0].text:
             transcript = ev.alternatives[0].text.lower().strip()
             words_lower = self._process_words(transcript)
             
-            if not words_lower:
-                return
-            
-            has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
-            if not has_interrupt_command:
-                if all(word in self.ignore_words for word in words_lower):
+            if words_lower:
+                has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
+                
+                # If interrupt command detected, trigger immediate interrupt
+                if has_interrupt_command:
+                    if activity._current_speech:
+                        activity._current_speech.interrupt(force=True)
+                    if hasattr(activity, '_preemptive_generation') and activity._preemptive_generation:
+                        activity._preemptive_generation.speech_handle._cancel()
+                        activity._preemptive_generation = None
+                    self._session.clear_user_turn()
+                    # Allow interim transcript to be displayed (call original handler)
+                    if self._original_on_interim_transcript:
+                        self._original_on_interim_transcript(ev, speaking=speaking)
+                    return
+                
+                # If agent is speaking and only ignore words, filter them out
+                if is_agent_speaking and all(word in self.ignore_words for word in words_lower):
                     audio_recognition = self._audio_recognition or activity._audio_recognition
                     if audio_recognition is not None:
                         audio_recognition._audio_interim_transcript = ""
@@ -341,8 +360,11 @@ class IntelligentInterruptHandler:
         has_interrupt_command = any(word in self.interrupt_commands for word in words_lower)
         
         if has_interrupt_command:
-            if all(word in self.interrupt_commands for word in words_lower):
-                return False
+            # At least one interrupt command detected - prevent turn completion
+            self._session.clear_user_turn()
+            if activity._current_speech:
+                activity._current_speech.interrupt(force=True)
+            return False
         
         if is_agent_speaking and not has_interrupt_command:
             if all(word in self.ignore_words for word in words_lower):
@@ -354,17 +376,12 @@ class IntelligentInterruptHandler:
     
     async def _user_turn_completed_task_wrapper(self, activity, old_task, info):
         """
-        Wrapper for _user_turn_completed_task that prevents adding interrupt-only
-        commands to chat context.
+        Wrapper for _user_turn_completed_task that prevents adding interrupt commands
+        to chat context for response generation, but allows them to be displayed.
         """
-        if info.new_transcript:
-            transcript = info.new_transcript.lower().strip()
-            words_lower = self._process_words(transcript)
-            
-            if words_lower:
-                if all(word in self.interrupt_commands for word in words_lower):
-                    info.new_transcript = ""
-        
+        # Note: We don't clear info.new_transcript here anymore because we want
+        # the message to be displayed in chat. The turn clearing in other handlers
+        # prevents response generation while still allowing the transcript to show.
         if self._original_user_turn_completed_task:
             return await self._original_user_turn_completed_task(old_task, info)
 
@@ -389,7 +406,9 @@ async def entrypoint(ctx: JobContext):
     )
 
     interrupt_handler = IntelligentInterruptHandler(
-        ignore_words=["yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm"],
+        ignore_words=["yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm", "yes",
+                      "sure", "alright", "mhm", "yup", "correct", "gotcha", "roger", "indeed", "exactly", "absolutely",
+                      "understood", "see", "true", "agreed", "fine", "good", "nice", "great", "wow", "oh"],
         interrupt_commands=["stop", "wait", "no", "halt", "pause", "cancel"],
         validation_timeout=0.3,
     )

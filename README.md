@@ -37,30 +37,23 @@ The main handler class that:
 - Tracks the agent's speaking state
 - Intercepts critical methods to add filtering logic
 
-#### 2. Intercepted Methods
-
-Our implementation intercepts the following methods in `interrupt_handler_agent.py`:
-- `_interrupt_by_audio_activity()` - Main interrupt trigger point with explicit command handling
-- `on_interim_transcript()` - **Critical**: Filters transcripts before they accumulate
-- `on_final_transcript()` - Filters final transcripts and prevents processing fillers
-- `on_end_of_turn()` - Prevents turn completion for fillers/interrupt-only commands
-- `_user_turn_completed_task()` - Prevents adding interrupt-only commands to chat context
+> **Note:** For detailed information about intercepted methods, component architecture, and data flows, see the [Architecture](#architecture) section below.
 
 ### Decision Logic Flow
 
-```
-User speaks → VAD detects audio → Interrupt check triggered
-    ↓
-Check agent state (speaking or silent?)
-    ↓
-If speaking:
-    ├─ Check transcript
-    │   ├─ Empty? → Wait for STT (prevents false interruption)
-    │   ├─ Contains interrupt command? → ALLOW interrupt
-    │   ├─ Only fillers? → PREVENT interrupt
-    │   └─ Has meaningful content? → ALLOW interrupt
-    └─ If silent: Always allow (normal conversation)
-```
+When user audio is detected:
+
+1. **Check Agent State**
+   - If **silent**: Allow all inputs (normal conversation)
+   - If **speaking**: Proceed to transcript analysis
+
+2. **Transcript Analysis** (when agent is speaking)
+   - **Empty/No STT**: Wait for transcription (prevents false interruption)
+   - **Interrupt command** ("stop", "wait"): Force immediate stop
+   - **Only fillers** ("yeah", "ok"): Filter out, continue speaking
+   - **Meaningful content**: Allow normal interruption
+
+> **See also:** Detailed data flow diagrams in the [Architecture](#architecture) section.
 
 ### Implementation Approach
 
@@ -69,6 +62,199 @@ Our implementation (`interrupt_handler_agent.py`) provides:
 - Filters at interim transcript stage (prevents pauses)
 - Performance optimizations (caching)
 - Explicit interrupt command handling (immediate stop on "stop", "wait", etc.)
+
+---
+
+## Architecture
+
+### System Overview
+
+The intelligent interruption handling system is built as a **non-invasive middleware layer** that sits between LiveKit's voice activity detection (VAD) and the agent's response generation pipeline. It uses monkey-patching to intercept critical methods without modifying the LiveKit framework.
+
+### Component Architecture
+
+```
+                    ┌─────────────────────┐
+                    │   User Audio Input   │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   VAD (Silero)       │
+                    │   Audio Detection    │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   STT (Deepgram)     │
+                    │   Interim + Final    │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+         ┌──────────────────────────────────────┐
+         │  IntelligentInterruptHandler          │
+         │  • State Tracking                     │
+         │  • Transcript Analysis                │
+         │  • Decision Logic                     │
+         └──────────┬────────────────────────────┘
+                    │
+         ┌──────────┴──────────┐
+         │                      │
+         ▼                      ▼
+    [Filtered]            [Allowed]
+         │                      │
+         │                      ▼
+         │            ┌─────────────────────┐
+         │            │   LLM (Gemini)      │
+         │            │   Response Gen      │
+         │            └──────────┬──────────┘
+         │                       │
+         │                       ▼
+         │            ┌─────────────────────┐
+         │            │   TTS (Cartesia)    │
+         │            │   Audio Output      │
+         │            └─────────────────────┘
+         │
+         └──────→ [Continue Speaking]
+```
+
+### Core Components
+
+#### 1. IntelligentInterruptHandler
+**Location:** `examples/voice_agents/interrupt_handler_agent.py`
+
+The main handler class that orchestrates the interruption filtering logic:
+
+- **State Management**: Tracks agent state (`speaking`, `listening`, `thinking`, `idle`) via event listeners
+- **Word Classification**: Maintains sets of ignore words and interrupt commands
+- **Transcript Processing**: Normalizes and processes transcripts for analysis
+- **Decision Engine**: Implements the core logic for allowing/preventing interruptions
+
+#### 2. Intercepted Methods (Monkey-Patched)
+
+The handler intercepts five critical methods in `AgentActivity`:
+
+| Method | Purpose | Interception Point |
+|--------|---------|-------------------|
+| `_interrupt_by_audio_activity()` | Main interrupt trigger | Before interruption logic executes |
+| `on_interim_transcript()` | Partial STT results | **Critical**: Filters before accumulation |
+| `on_final_transcript()` | Complete STT results | Filters before processing |
+| `on_end_of_turn()` | Turn completion | Prevents turn completion for fillers |
+| `_user_turn_completed_task()` | Chat context update | Prevents adding interrupt-only commands |
+
+#### 3. State Tracking System
+
+The handler monitors agent state transitions via `agent_state_changed` events:
+
+```
+    idle ──→ thinking ──→ speaking ──→ idle
+      │         │            │
+      └─────────┴────────────┘
+                 │
+            listening
+```
+
+**State Transitions:**
+- `idle` → `thinking`: Agent starts processing
+- `thinking` → `speaking`: Agent begins response
+- `speaking` → `idle`: Agent finishes speaking
+- Any state → `listening`: User input detected
+
+### Data Flow
+
+#### Decision Flow
+
+```
+User Audio
+    │
+    ▼
+VAD Detection ──→ STT Processing ──→ Transcript Analysis
+                                            │
+                                            ▼
+                                    Agent Speaking?
+                                    │              │
+                                   YES             NO
+                                    │              │
+                                    ▼              ▼
+                            Check Transcript   Allow (Normal)
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                    ▼               ▼               ▼
+            Empty/No STT    Interrupt Cmd    Only Fillers
+                    │               │               │
+                    ▼               ▼               ▼
+            Wait for STT    Force Stop      Filter & Continue
+                    │               │               │
+                    └───────────────┴───────────────┘
+                                    │
+                                    ▼
+                            Meaningful Content?
+                                    │
+                                    ▼
+                            Allow Interrupt
+```
+
+**Key Decision Points:**
+1. **Empty Transcript**: Wait for STT completion (prevents false interruptions)
+2. **Interrupt Commands** ("stop", "wait"): Immediate force stop
+3. **Only Fillers** ("yeah", "ok"): Filter out, continue speaking
+4. **Meaningful Content**: Allow normal interruption
+
+### Integration Points
+
+#### 1. LiveKit AgentActivity
+- **Access Method**: Monkey-patching after session initialization
+- **Key Properties Accessed**:
+  - `_current_speech`: Current speech handle for interruption
+  - `_audio_recognition`: Audio recognition state for transcript access
+  - `_preemptive_generation`: Preemptive response generation
+
+#### 2. AgentSession Events
+- **`agent_state_changed`**: Tracks agent state transitions
+- **`user_input_transcribed`**: Monitors transcript updates
+
+#### 3. External Services
+- **Deepgram STT**: Provides speech-to-text transcription
+- **Cartesia TTS**: Generates speech output
+- **Google Gemini**: LLM for response generation
+- **Silero VAD**: Voice activity detection
+
+### Design Patterns
+
+#### 1. Monkey-Patching Pattern
+- **Purpose**: Non-invasive interception without framework modification
+- **Implementation**: Store original methods, replace with wrappers
+- **Benefits**: Maintainable, flexible, easy to enable/disable
+
+#### 2. Wrapper Pattern
+- **Purpose**: Add filtering logic around existing methods
+- **Implementation**: Wrapper methods call original methods conditionally
+- **Benefits**: Preserves original functionality while adding intelligence
+
+#### 3. State Observer Pattern
+- **Purpose**: Track agent state changes reactively
+- **Implementation**: Event listeners on session events
+- **Benefits**: Real-time state awareness without polling
+
+#### 4. Early Filtering Pattern
+- **Purpose**: Prevent race conditions between VAD and STT
+- **Implementation**: Filter at interim transcript stage
+- **Benefits**: Eliminates pauses, seamless user experience
+
+### Performance Optimizations
+
+1. **Word Caching**: Caches processed word lists to reduce repeated processing
+2. **Regex Pre-compilation**: Pre-compiles punctuation regex for faster processing
+3. **Early Returns**: Short-circuits decision logic when possible
+4. **Set-based Lookups**: Uses sets for O(1) word classification lookups
+
+### Error Handling
+
+- **Graceful Degradation**: If AgentActivity not found, logs error but doesn't crash
+- **Timeout Protection**: Waits up to 2 seconds for AgentActivity initialization
+- **Null Checks**: Validates all accessed properties before use
+- **Fallback Behavior**: Calls original methods if handler fails
 
 ---
 
@@ -121,8 +307,17 @@ python interrupt_handler_agent.py console
 
 ### Customizing Ignore Words
 
-You can customize which words are ignored when the agent is speaking:
+You can customize which words are ignored when the agent is speaking. The default list includes:
 
+```python
+default_ignore_words = [
+    "yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm", "yes",
+    "sure", "alright", "mhm", "yup", "correct", "gotcha", "roger", "indeed", "exactly", "absolutely",
+    "understood", "see", "true", "agreed", "fine", "good", "nice", "great", "wow", "oh"
+]
+```
+
+**Custom example:**
 ```python
 handler = IntelligentInterruptHandler(
     ignore_words=["yeah", "ok", "hmm", "right", "uh-huh", "aha", "yep", "okay", "uh", "um", "mm-hmm"],
@@ -132,11 +327,20 @@ handler = IntelligentInterruptHandler(
 
 ### Customizing Interrupt Commands
 
-Words that always trigger interruption:
+Words that always trigger interruption. Default list:
 
 ```python
-interrupt_commands=["stop", "wait", "no", "halt", "pause", "cancel"]
+default_interrupt_commands = ["stop", "wait", "no", "halt", "pause", "cancel"]
 ```
+
+**Custom example:**
+```python
+handler = IntelligentInterruptHandler(
+    interrupt_commands=["stop", "wait", "no", "halt", "pause", "cancel", "abort"]
+)
+```
+
+**Note:** All words are case-insensitive and automatically normalized (punctuation removed, lowercased).
 
 ---
 
@@ -198,22 +402,7 @@ interrupt_commands=["stop", "wait", "no", "halt", "pause", "cancel"]
 
 ## Technical Implementation Details
 
-### Monkey Patching Approach
-
-We use monkey-patching to intercept methods without modifying the LiveKit framework:
-
-```python
-# Store original method
-self._original_interrupt = self._activity._interrupt_by_audio_activity
-
-# Replace with our wrapper
-self._activity._interrupt_by_audio_activity = self._interrupt_wrapper
-```
-
-**Why this approach?**
-- Non-invasive: Doesn't require modifying framework code
-- Maintainable: Easy to update if framework changes
-- Flexible: Can be enabled/disabled easily
+> **Note:** For information about monkey-patching approach, state management, and design patterns, see the [Architecture](#architecture) section above.
 
 ### VAD/STT Timing Issue
 
@@ -228,20 +417,6 @@ self._activity._interrupt_by_audio_activity = self._interrupt_wrapper
 - Filters fillers immediately as they arrive
 - When VAD triggers, transcript is already filtered → no pause
 - This prevents the race condition by filtering before interruption logic triggers
-
-### State Management
-
-The handler tracks agent state through event listeners:
-
-```python
-session.on("agent_state_changed", lambda ev: setattr(self, '_agent_state', ev.new_state))
-```
-
-This ensures we always know if the agent is:
-- `"speaking"` - Currently generating/playing audio
-- `"listening"` - Waiting for user input
-- `"thinking"` - Processing response
-- `"idle"` - Not active
 
 ### Interrupt Command Handling
 
@@ -293,6 +468,22 @@ Key Files:
 
 ---
 
+
+## Proof of Functionality
+
+### Video Demonstration
+
+A video recording demonstrating all 4 test scenarios:
+
+- **Video Link:** [Watch Demonstration](https://drive.google.com/file/d/1pIWBnfkIsOOSoi8J12vT-mykFDxo9tw0/view?usp=sharing)
+
+The video demonstrates:
+1. Agent ignoring "yeah/ok" while speaking (no pause, no interruption)
+2. Agent responding to "yeah" when silent (normal conversation)
+3. Agent stopping immediately on "stop" command
+4. Agent handling mixed input "yeah wait" (interrupts on "wait")
+
+---
 
 ## Submission Information
 
