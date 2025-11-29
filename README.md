@@ -42,6 +42,28 @@ agents that can see, hear, and understand.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
 
+## Enhanced Interruption Logic
+
+We have implemented a robust, logic-based interruption handling system that improves the natural flow of conversation without modifying the core VAD (Voice Activity Detection).
+
+### Key Features
+
+-   **Smart Backchanneling Filtering**: The agent intelligently ignores common backchanneling phrases (e.g., "yeah", "okay", "uh-huh", "mhmm") while it is speaking. This allows the user to acknowledge the agent without causing unwanted interruptions.
+-   **Urgent Interruptions**: Specific urgent keywords (e.g., "wait", "stop", "hold on", "no") trigger an immediate interruption, bypassing other filters.
+-   **Reply Suppression**: When an urgent interruption is detected (e.g., user says "Wait"), the agent stops speaking and **remains silent**, waiting for the user's next input instead of replying with a generic "Sure".
+
+### Implementation Details
+
+-   **Logic Layer**: Implemented purely in the agent's logic layer (`agent_activity.py`), ensuring compatibility with existing VAD models.
+-   **Robust Whitespace Handling**: Transcripts are rigorously normalized (stripping whitespace and punctuation) to ensure accurate matching of keywords like " yeah " or "stop!".
+-   **Transcript Buffer Management**: Ignored transcripts are explicitly discarded from the buffer to prevent them from accumulating and affecting subsequent interruption checks (solving the "yeah... okay" accumulation issue).
+-   **Configurable Lists**: The ignored words list and urgent keywords are easily configurable.
+
+## Demo
+
+<video src="public/demo_video.mp4" controls="controls" style="max-width: 100%;">
+</video>
+
 ## Installation
 
 To install the core Agents library, along with plugins for popular model providers:
