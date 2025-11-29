@@ -1174,16 +1174,40 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
+        text = ""
+        if self._audio_recognition:
             text = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+        import string
+        normalized_text = text.lower().strip().strip(string.punctuation)
+        
+        # Urgent keywords that should trigger immediate interruption
+        # bypassing min_interruption_words and other checks
+        urgent_keywords = ["wait", "stop", "hold on", "no"]
+        is_urgent = any(w in normalized_text.split() for w in urgent_keywords) or "wait a sec" in normalized_text
+
+        if not is_urgent:
+            if opt.interruption_speech_filter:
+                if not text:
+                    # wait for the transcript to be available to check against the filter
+                    return
+
+                # Check if the entire sentence is composed of ignored words
+                # e.g. "yeah ok" should be ignored if both "yeah" and "ok" are in the list
+                input_words = [w.strip(string.punctuation) for w in normalized_text.split()]
+                filter_words = set(w.lower().strip().strip(string.punctuation) for w in opt.interruption_speech_filter)
+                
+                if input_words and all(w in filter_words for w in input_words):
+                    return
+
+            if (
+                self.stt is not None
+                and opt.min_interruption_words > 0
+                and self._audio_recognition is not None
+            ):
+                # TODO(long): better word splitting for multi-language
+                if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                    return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
@@ -1379,6 +1403,26 @@ class AgentActivity(RecognitionHooks):
             # avoid interruption if the new_transcript is too short
             return False
 
+        if (
+            self.stt is not None
+            and self._turn_detection != "manual"
+            and self._current_speech is not None
+            and self._current_speech.allow_interruptions
+            and not self._current_speech.interrupted
+            and self._session.options.interruption_speech_filter
+        ):
+            import string
+
+            text = info.new_transcript.lower().strip().strip(string.punctuation)
+            input_words = [w.strip(string.punctuation) for w in text.split()]
+            filter_words = set(w.lower().strip().strip(string.punctuation) for w in self._session.options.interruption_speech_filter)
+
+            if input_words and all(w in filter_words for w in input_words):
+                self._cancel_preemptive_generation()
+                if self._audio_recognition:
+                    self._audio_recognition.discard_user_turn()
+                return False
+
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
             self._user_turn_completed_task(old_task, info),
@@ -1525,6 +1569,22 @@ class AgentActivity(RecognitionHooks):
             self._preemptive_generation = None
 
         if speech_handle is None:
+            # Check for urgent keywords to suppress reply
+            import string
+            normalized_text = user_message.text_content.lower().strip().strip(string.punctuation)
+            urgent_keywords = ["wait", "stop", "hold on"]
+            is_urgent = any(w in normalized_text.split() for w in urgent_keywords) or "wait a sec" in normalized_text
+
+            if is_urgent:
+                logger.info(
+                    "suppressing reply due to urgent keyword",
+                    extra={"user_input": user_message.text_content},
+                )
+                # Manually add to chat context since we are skipping _generate_reply
+                self._agent._chat_ctx.items.append(user_message)
+                self._session._conversation_item_added(user_message)
+                return
+
             # Ensure the new message is passed to generate_reply
             # This preserves the original message_id, making it easier for users to track responses
             speech_handle = self._generate_reply(
