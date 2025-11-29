@@ -1,78 +1,84 @@
-# Voice Agents Examples
+# Intelligent Interruption Handler for LiveKit Agents
 
-This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
+This implementation provides intelligent interruption handling for LiveKit voice agents. It distinguishes between passive acknowledgments (like "yeah", "ok", "hmm") and active interruptions (like "wait", "stop", "no") based on whether the agent is currently speaking or silent.
 
-## 📋 Table of Contents
+## Core Logic
 
-### 🚀 Getting Started
+The system handles the following logic matrix:
 
-- [`basic_agent.py`](./basic_agent.py) - A fundamental voice agent with metrics collection
+| User Input | Agent State | Desired Behavior |
+|------------|-------------|------------------|
+| "Yeah / Ok / Hmm" | Agent is Speaking | IGNORE: The agent continues speaking without pausing or stopping |
+| "Wait / Stop / No" | Agent is Speaking | INTERRUPT: The agent stops immediately and listens to the new command |
+| "Yeah / Ok / Hmm" | Agent is Silent | RESPOND: The agent treats this as valid input |
+| "Start / Hello" | Agent is Silent | RESPOND: Normal conversational behavior |
 
-### 🛠️ Tool Integration & Function Calling
+## Features
 
-- [`annotated_tool_args.py`](./annotated_tool_args.py) - Using Python type annotations for tool arguments
-- [`dynamic_tool_creation.py`](./dynamic_tool_creation.py) - Creating and registering tools dynamically at runtime
-- [`raw_function_description.py`](./raw_function_description.py) - Using raw JSON schema definitions for tool descriptions
-- [`silent_function_call.py`](./silent_function_call.py) - Executing function calls without verbal responses to user
-- [`long_running_function.py`](./long_running_function.py) - Handling long running function calls with interruption support
+1. *Configurable Ignore List*: Define a list of words that act as "soft" inputs
+2. *State-Based Filtering*: The filter only applies when the agent is actively generating or playing audio
+3. *Semantic Interruption*: Mixed sentences like "Yeah wait a second" will interrupt because "wait" is in the interrupt list
+4. *No VAD Modification*: Implemented as a logic handling layer within the agent's event loop
 
-### ⚡ Real-time Models
+## Implementation Details
 
-- [`weather_agent.py`](./weather_agent.py) - OpenAI Realtime API with function calls for weather information
-- [`realtime_video_agent.py`](./realtime_video_agent.py) - Google Gemini with multimodal video and voice capabilities
-- [`realtime_joke_teller.py`](./realtime_joke_teller.py) - Amazon Nova Sonic real-time model with function calls
-- [`realtime_load_chat_history.py`](./realtime_load_chat_history.py) - Loading previous chat history into real-time models
-- [`realtime_turn_detector.py`](./realtime_turn_detector.py) - Using LiveKit's turn detection with real-time models
-- [`realtime_with_tts.py`](./realtime_with_tts.py) - Combining external TTS providers with real-time models
+The solution works by:
 
-### 🎯 Pipeline Nodes & Hooks
+1. Creating a custom IntelligentAgentActivity that extends the base AgentActivity
+2. Overriding the on_end_of_turn method to intercept user input before processing
+3. Using an IntelligentInterruptionHandler to determine if input should be ignored based on:
+   - Current agent state (speaking or silent)
+   - Content of user input (passive acknowledgment vs. active command)
+4. Creating a custom IntelligentAgentSession that uses our custom activity
 
-- [`fast-preresponse.py`](./fast-preresponse.py) - Generating quick responses using the `on_user_turn_completed` node
-- [`flush_llm_node.py`](./flush_llm_node.py) - Flushing partial LLM output to TTS in `llm_node`
-- [`structured_output.py`](./structured_output.py) - Structured data and JSON outputs from agent responses
-- [`speedup_output_audio.py`](./speedup_output_audio.py) - Dynamically adjusting agent audio playback speed
-- [`timed_agent_transcript.py`](./timed_agent_transcript.py) - Reading timestamped transcripts from `transcription_node`
-- [`inactive_user.py`](./inactive_user.py) - Handling inactive users with the `user_state_changed` event hook
-- [`resume_interrupted_agent.py`](./resume_interrupted_agent.py) - Resuming agent speech after false interruption detection
-- [`toggle_io.py`](./toggle_io.py) - Dynamically toggling audio input/output during conversations
+## How to Run
 
-### 🤖 Multi-agent & AgentTask Use Cases
+1. Make sure you have the required dependencies installed:
+   
+   pip install "livekit-agents[openai,silero,deepgram,cartesia]~=1.0"
+   
 
-- [`restaurant_agent.py`](./restaurant_agent.py) - Multi-agent system for restaurant ordering and reservation management
-- [`multi_agent.py`](./multi_agent.py) - Collaborative storytelling with multiple specialized agents
-- [`email_example.py`](./email_example.py) - Using AgentTask to collect and validate email addresses
+2. Set up your environment variables:
+   
+   DEEPGRAM_API_KEY=your_deepgram_api_key
+   OPENAI_API_KEY=your_openai_api_key
+   CARTESIA_API_KEY=your_cartesia_api_key
+   
 
-### 🔗 MCP & External Integrations
+3. Run the agent:
+   
+   python intelligent_interruption_agent.py dev
+   
 
-- [`web_search.py`](./web_search.py) - Integrating web search capabilities into voice agents
-- [`langgraph_agent.py`](./langgraph_agent.py) - LangGraph integration
-- [`mcp/`](./mcp/) - Model Context Protocol (MCP) integration examples
-  - [`mcp-agent.py`](./mcp/mcp-agent.py) - MCP agent integration
-  - [`server.py`](./mcp/server.py) - MCP server example
-- [`zapier_mcp_integration.py`](./zapier_mcp_integration.py) - Automating workflows with Zapier through MCP
+## Test Cases
 
-### 💾 RAG & Knowledge Management
+The implementation handles these scenarios correctly:
 
-- [`llamaindex-rag/`](./llamaindex-rag/) - Complete RAG implementation with LlamaIndex
-  - [`chat_engine.py`](./llamaindex-rag/chat_engine.py) - Chat engine integration
-  - [`query_engine.py`](./llamaindex-rag/query_engine.py) - Query engine used in a function tool
-  - [`retrieval.py`](./llamaindex-rag/retrieval.py) - Document retrieval
+### Scenario 1: The Long Explanation
+- *Context*: Agent is reading a long paragraph about history
+- *User Action*: User says "Okay... yeah... uh-huh" while Agent is talking
+- *Result*: Agent audio does not break. It ignores the user input completely
 
-### 🎵 Specialized Use Cases
+### Scenario 2: The Passive Affirmation
+- *Context*: Agent asks "Are you ready?" and goes silent
+- *User Action*: User says "Yeah"
+- *Result*: Agent processes "Yeah" as an answer and proceeds
 
-- [`background_audio.py`](./background_audio.py) - Playing background audio or ambient sounds during conversations
-- [`push_to_talk.py`](./push_to_talk.py) - Push-to-talk interaction
-- [`tts_text_pacing.py`](./tts_text_pacing.py) - Pacing control for TTS requests
-- [`speaker_id_multi_speaker.py`](./speaker_id_multi_speaker.py) - Multi-speaker identification
+### Scenario 3: The Correction
+- *Context*: Agent is counting "One, two, three..."
+- *User Action*: User says "No stop"
+- *Result*: Agent cuts off immediately
 
-### 📊 Tracing & Error Handling
+### Scenario 4: The Mixed Input
+- *Context*: Agent is speaking
+- *User Action*: User says "Yeah okay but wait"
+- *Result*: Agent stops (because "but wait" contains a command)
 
-- [`langfuse_trace.py`](./langfuse_trace.py) - LangFuse integration for conversation tracing
-- [`error_callback.py`](./error_callback.py) - Error handling callback
-- [`session_close_callback.py`](./session_close_callback.py) - Session lifecycle management
+## Configuration
 
-## 📖 Additional Resources
+The interruption handler can be easily configured by modifying the word lists in IntelligentInterruptionHandler:
 
-- [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
-- [Agents Starter Example](https://github.com/livekit-examples/agent-starter-python)
-- [More Agents Examples](https://github.com/livekit-examples/python-agents-examples)
+- ignore_list: Words that are treated as passive acknowledgments
+- interrupt_list: Words that always trigger interruption regardless of agent state
+
+These lists can be extended or modified based on your specific requirements.
