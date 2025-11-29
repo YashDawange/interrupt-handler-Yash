@@ -33,9 +33,9 @@ class IntelligentInterruptHandler:
 
         Args:
             ignore_words: List of backchanneling words to ignore when agent is speaking.
-                         Default: ['yeah', 'ok', 'hmm', 'right', 'uh-huh', 'aha', 'yep', 'okay']
+                         Default: 32 words including 'yeah', 'ok', 'sure', 'alright', etc.
             interrupt_commands: List of words that should always interrupt.
-                               Default: ['stop', 'wait', 'no', 'halt']
+                               Default: ['stop', 'wait', 'no', 'halt', 'pause', 'cancel']
             validation_timeout: Maximum time to wait for STT transcript before making decision.
                                Default: 0.3s
         """
