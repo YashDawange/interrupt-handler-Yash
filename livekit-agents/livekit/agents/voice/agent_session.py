@@ -53,6 +53,7 @@ from .events import (
     UserStateChangedEvent,
 )
 from .ivr import IVRActivity
+from .interruption_config import InterruptionConfig
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
@@ -89,6 +90,8 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    enable_smart_interruption: bool
+    interruption_config: InterruptionConfig | None
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +162,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        enable_smart_interruption: bool = False,
+        interruption_config: NotGivenOr[InterruptionConfig] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +250,14 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            enable_smart_interruption (bool): Whether to enable smart interruption filtering.
+                When True, the agent will ignore backchannel words (e.g., "yeah", "ok", "hmm")
+                when speaking, while still responding to genuine interruptions. This prevents
+                the agent from stopping mid-sentence when users provide passive acknowledgments.
+                Default ``False``.
+            interruption_config (InterruptionConfig, optional): Configuration for smart interruption
+                filtering, including custom backchannel words and interrupt keywords. If NOT_GIVEN,
+                uses default configuration.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -285,6 +298,10 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             ),
             preemptive_generation=preemptive_generation,
             ivr_detection=ivr_detection,
+            enable_smart_interruption=enable_smart_interruption,
+            interruption_config=(
+                interruption_config if is_given(interruption_config) else None
+            ),
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,

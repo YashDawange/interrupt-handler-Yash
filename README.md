@@ -63,6 +63,48 @@ Documentation on the framework and how to use it can be found [here](https://doc
 
 ## Usage
 
+### Intelligent Interruption Handling (New Feature)
+
+This agent includes a context-aware interruption handling system that distinguishes between passive acknowledgments (backchanneling) and active interruptions.
+
+**Key Features:**
+- **Smart Filtering:** Ignores filler words like "yeah", "ok", "uh-huh" when the agent is speaking.
+- **Context Aware:** Responds to the same words if the agent is silent (treating them as valid input).
+- **Semantic Analysis:** Interrupts correctly for mixed input like "yeah but wait".
+- **Configurable:** Customize backchannel words and interrupt keywords.
+
+**How to Enable:**
+
+Simply set `enable_smart_interruption=True` when creating the `AgentSession`:
+
+```python
+session = AgentSession(
+    vad=silero.VAD.load(),
+    stt=deepgram.STT(model="nova-3"),
+    llm=openai.LLM(model="gpt-4o-mini"),
+    tts=openai.TTS(voice="alloy"),
+    enable_smart_interruption=True,  # <--- Enable here
+)
+```
+
+**Custom Configuration:**
+
+```python
+from livekit.agents.voice import InterruptionConfig
+
+config = InterruptionConfig(
+    backchannel_words={"yeah", "ok", "hmm", "right"},
+    interrupt_keywords={"stop", "wait", "hold on"},
+    stt_timeout=0.5,
+)
+
+session = AgentSession(
+    ...,
+    enable_smart_interruption=True,
+    interruption_config=config,
+)
+```
+
 ### Simple voice agent
 
 ---
