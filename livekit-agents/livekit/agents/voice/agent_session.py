@@ -89,6 +89,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    backchanneling_ignore_list: Sequence[str]
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +160,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        backchanneling_ignore_list: NotGivenOr[Sequence[str]] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +247,12 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            backchanneling_ignore_list (Sequence[str], optional): List of words/phrases to ignore
+                as interruptions when the agent is speaking (e.g., ['yeah', 'ok', 'hmm', 'right', 'uh-huh']).
+                These words will be ignored only when the agent is actively speaking. When the agent is
+                silent, these words will be processed normally. If a user says a mixed sentence like
+                "yeah wait", the agent will interrupt because "wait" is not in the ignore list.
+                Default ``['yeah', 'ok', 'okay', 'hmm', 'hmmm', 'right', 'uh-huh', 'aha', 'mhm', 'yep']``.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -266,6 +274,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # This is the "global" chat_context, it holds the entire conversation history
         self._chat_ctx = ChatContext.empty()
+        # Default backchanneling ignore list
+        DEFAULT_BACKCHANNELING_IGNORE_LIST = [
+            "yeah", "ok", "okay", "hmm", "hmmm", "right", "uh-huh", "aha", "mhm", "yep"
+        ]
+        
         self._opts = AgentSessionOptions(
             allow_interruptions=allow_interruptions,
             discard_audio_if_uninterruptible=discard_audio_if_uninterruptible,
@@ -288,6 +301,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            backchanneling_ignore_list=(
+                backchanneling_ignore_list
+                if is_given(backchanneling_ignore_list)
+                else DEFAULT_BACKCHANNELING_IGNORE_LIST
+            ),
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
