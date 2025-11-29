@@ -1174,31 +1174,37 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
+        text = ""
+        if self._audio_recognition:
             text = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+        import string
+        normalized_text = text.lower().strip().strip(string.punctuation)
+        
+        # Urgent keywords that should trigger immediate interruption
+        # bypassing min_interruption_words and other checks
+        urgent_keywords = ["wait", "stop", "hold on"]
+        is_urgent = any(w in normalized_text.split() for w in urgent_keywords) or "wait a sec" in normalized_text
 
-        if opt.interruption_speech_filter:
-            text = self._audio_recognition.current_transcript
-            if not text:
-                # wait for the transcript to be available to check against the filter
-                return
+        if not is_urgent:
+            if opt.interruption_speech_filter:
+                if not text:
+                    # wait for the transcript to be available to check against the filter
+                    return
 
-            import string
+                if normalized_text in [
+                    w.lower().strip().strip(string.punctuation) for w in opt.interruption_speech_filter
+                ]:
+                    return
 
-            # normalize the text
-            text = text.lower().strip().strip(string.punctuation)
-            if text in [
-                w.lower().strip().strip(string.punctuation) for w in opt.interruption_speech_filter
-            ]:
-                return
+            if (
+                self.stt is not None
+                and opt.min_interruption_words > 0
+                and self._audio_recognition is not None
+            ):
+                # TODO(long): better word splitting for multi-language
+                if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                    return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
