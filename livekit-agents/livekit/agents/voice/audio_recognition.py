@@ -444,16 +444,64 @@ class AudioRecognition:
             self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
             self._audio_interim_transcript = ev.alternatives[0].text
 
-        elif ev.type == stt.SpeechEventType.END_OF_SPEECH and self._turn_detection_mode == "stt":
+        elif ev.type == vad.VADEventType.END_OF_SPEECH:
+    # fire the end-of-speech hook (keeps existing observability)
             with trace.use_span(self._ensure_user_turn_span()):
-                self._hooks.on_end_of_speech(None)
+                self._hooks.on_end_of_speech(ev)
 
+    # mark VAD speaking state false
             self._speaking = False
-            self._user_turn_committed = True
-            self._last_speaking_time = time.time()
 
-            chat_ctx = self._hooks.retrieve_chat_ctx().copy()
-            self._run_eou_detection(chat_ctx)
+    # If the agent is currently speaking, treat this as a *potential* interruption.
+    # Delegate the final decision to the session-level interrupt handler which will:
+    #  - consult STT (via the get_transcript coroutine),
+    #  - wait briefly (configurable) for STT if needed,
+    #  - call session.interrupt_and_listen() if it's a true interrupt,
+    #  - or simply continue if it's a filler/backchannel.
+    #
+    # If the session-level handler or the handler call fails for any reason, fall back
+    # to the previous endpointing behavior.
+            try:
+                session = self._session
+        # create coroutine that returns the latest transcript (fast path)
+                async def _get_transcript() -> str:
+            # prefer the composed / current transcript (includes interim if any)
+                    return self.current_transcript
+
+        # If the session signals that the agent is speaking, ask it to handle
+        # the potential interrupt. This will internally call into the interrupt handler
+        # which may wait briefly for STT to arrive.
+                if getattr(session, "_agent_is_speaking", False):
+            # choose an appropriate timeout (ms) — prefer session option if set,
+            # otherwise use a small default (150 ms).
+                    false_interruption_timeout = (
+                        session.options.false_interruption_timeout
+                        if getattr(session, "options", None) and session.options.false_interruption_timeout is not None
+                        else 0.15
+                    )
+            # call the session wrapper that delegates to the interrupt handler
+                    await session.handle_potential_interrupt(
+                        _get_transcript, timeout_ms=int(false_interruption_timeout * 1000)
+                    )
+            # NOTE: The session.handle_potential_interrupt does the on_interrupt/on_ignore callbacks.
+            # - on_interrupt will stop the agent and transition to listening (session.interrupt_and_listen)
+            # - on_ignore will be a no-op (agent continues speaking)
+            # After this call we should not run the normal EOU endpointing here because:
+            # - if we were interrupted, the session has already transitioned
+            # - if we ignored, the agent continues speaking and endpointing will happen later
+                    return
+            except Exception:
+        # If anything goes wrong with the interrupt-handling path, log and fall back to
+        # the previous endpointing behavior so user input isn't dropped.
+                logger.exception("error while handling potential interrupt, falling back to default endpointing")
+
+    # Default behavior for END_OF_SPEECH when agent is not speaking (or on fallback):
+            if self._vad_base_turn_detection or (
+                self._turn_detection_mode == "stt" and self._user_turn_committed
+            ):
+                chat_ctx = self._hooks.retrieve_chat_ctx().copy()
+                self._run_eou_detection(chat_ctx)
+
 
         elif ev.type == stt.SpeechEventType.START_OF_SPEECH and self._turn_detection_mode == "stt":
             with trace.use_span(self._ensure_user_turn_span()):
