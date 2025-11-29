@@ -56,6 +56,7 @@ from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
+from contextvars import Token
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
@@ -89,6 +90,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    filtered_words: Sequence[str] = ()
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -146,7 +148,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         allow_interruptions: bool = True,
         discard_audio_if_uninterruptible: bool = True,
         min_interruption_duration: float = 0.5,
-        min_interruption_words: int = 0,
+        min_interruption_words: int = 1,
         min_endpointing_delay: float = 0.5,
         max_endpointing_delay: float = 3.0,
         max_tool_steps: int = 3,
@@ -159,6 +161,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        filtered_words: Sequence[str] = (),
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -288,6 +291,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            filtered_words=filtered_words,
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
@@ -350,7 +354,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         self._agent_speaking_span: trace.Span | None = None
         self._session_span: trace.Span | None = None
         self._root_span_context: otel_context.Context | None = None
-
+        self._session_ctx_token: Token[otel_context.Context] | None = None
         self._recorded_events: list[AgentEvent] = []
         self._enable_recording: bool = False
         self._started_at: float | None = None
@@ -508,6 +512,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 pass
 
             self._session_span = current_span = tracer.start_span("agent_session")
+            
+            #tokens needs to be handled properly during restarts
+            if self._session_ctx_token is not None:
+                otel_context.detach(self._session_ctx_token)
+                self._session_ctx_token = None
+            ctx = trace.set_span_in_context(current_span)
+            self._session_ctx_token = otel_context.attach(ctx)
 
             self._recorded_events = []
             self._room_io = None
@@ -794,8 +805,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             if self._forward_audio_atask is not None:
                 await utils.aio.cancel_and_wait(self._forward_audio_atask)
 
-            if self._room_io:
-                await self._room_io.aclose()
+            # if self._room_io:
+            #     await self._room_io.aclose()
 
             if self._recorder_io:
                 await self._recorder_io.aclose()
@@ -810,6 +821,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             self._started = False
 
             self.emit("close", CloseEvent(error=error, reason=reason))
+            
+            if self._room_io:
+                await self._room_io.aclose()
 
             self._cancel_user_away_timer()
             self._user_state = "listening"
@@ -900,6 +914,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         instructions: NotGivenOr[str] = NOT_GIVEN,
         tool_choice: NotGivenOr[llm.ToolChoice] = NOT_GIVEN,
         allow_interruptions: NotGivenOr[bool] = NOT_GIVEN,
+        chat_ctx: NotGivenOr[ChatContext] = NOT_GIVEN,
     ) -> SpeechHandle:
         """Generate a reply for the agent to speak to the user.
 
@@ -940,6 +955,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 instructions=instructions,
                 tool_choice=tool_choice,
                 allow_interruptions=allow_interruptions,
+                chat_ctx=chat_ctx,
             )
             if run_state:
                 run_state._watch_handle(handle)
