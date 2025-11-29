@@ -113,7 +113,7 @@ This ensures smooth, predictable behavior.
 This file contains **all decision-making logic**.
 It normalizes text, detects keywords, checks agent state, and returns the appropriate action.
 
-### ✔️ `interactive_console.py`
+### ✔️ `interactive_demo.py`
 
 This is only **a UI layer**:
 
@@ -181,7 +181,7 @@ pip install colorama pytest pytest-asyncio
 ### Step 4 — Run the console demo
 
 ```bash
-python demos/interactive_console.py
+python demos/interactive_demo.py
 ```
 
 ---
