@@ -25,8 +25,6 @@ class InterruptionDecision(str, Enum):
 
 @dataclass(slots=True)
 class InterruptionFilterConfig:
-    """Configuration for the interruption arbiter."""
-
     ignore_phrases: tuple[str, ...] = (
         "yeah",
         "yep",
@@ -72,8 +70,6 @@ class _InterruptionCandidate:
 
 
 class BackchannelClassifier:
-    """Lexical + (optional) semantic classifier used by the arbiter."""
-
     def __init__(
         self,
         *,
