@@ -1185,6 +1185,21 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        if opt.interruption_speech_filter:
+            text = self._audio_recognition.current_transcript
+            if not text:
+                # wait for the transcript to be available to check against the filter
+                return
+
+            import string
+
+            # normalize the text
+            text = text.lower().strip().strip(string.punctuation)
+            if text in [
+                w.lower().strip().strip(string.punctuation) for w in opt.interruption_speech_filter
+            ]:
+                return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1378,6 +1393,26 @@ class AgentActivity(RecognitionHooks):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
             return False
+
+        if (
+            self.stt is not None
+            and self._turn_detection != "manual"
+            and self._current_speech is not None
+            and self._current_speech.allow_interruptions
+            and not self._current_speech.interrupted
+            and self._session.options.interruption_speech_filter
+        ):
+            import string
+
+            text = info.new_transcript.lower().strip().strip(string.punctuation)
+            if text in [
+                w.lower().strip().strip(string.punctuation)
+                for w in self._session.options.interruption_speech_filter
+            ]:
+                self._cancel_preemptive_generation()
+                if self._audio_recognition:
+                    self._audio_recognition.discard_user_turn()
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
