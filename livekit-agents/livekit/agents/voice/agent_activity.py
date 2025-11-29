@@ -61,6 +61,12 @@ from .events import (
     SpeechCreatedEvent,
     UserInputTranscribedEvent,
 )
+from .interruptions import (
+    InterruptionArbiter,
+    InterruptionDecision,
+    InterruptionFilterConfig,
+    _normalize_text,
+)
 from .generation import (
     ToolExecutionOutput,
     _AudioOutput,
@@ -141,6 +147,18 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        self._interruption_arbiter = InterruptionArbiter(
+            config=self._session.interruption_config,
+            logger=logger,
+        )
+        self._interruption_arbiter.update_agent_state(
+            speaking=self._session.agent_state == "speaking"
+        )
+
+        # Track pending VAD-triggered interruptions awaiting STT confirmation
+        self._pending_vad_interrupt: asyncio.Event | None = None
+        self._pending_interrupt_timer: asyncio.TimerHandle | None = None
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -376,6 +394,20 @@ class AgentActivity(RecognitionHooks):
                 max_endpointing_delay=max_endpointing_delay,
                 turn_detection=turn_detection,
             )
+
+    def update_interruption_config(self, config: InterruptionFilterConfig) -> None:
+        self._interruption_arbiter.update_config(config)
+
+    def on_agent_state_changed(self, speaking: bool) -> None:
+        self._interruption_arbiter.update_agent_state(speaking=speaking)
+
+    def on_audio_playout_started(self) -> None:
+        """Called when audio starts playing out to the user."""
+        self._interruption_arbiter.update_audio_playing(playing=True)
+
+    def on_audio_playout_finished(self) -> None:
+        """Called when audio finishes playing out to the user."""
+        self._interruption_arbiter.update_audio_playing(playing=False)
 
     def _create_speech_task(
         self,
@@ -1209,6 +1241,10 @@ class AgentActivity(RecognitionHooks):
 
                 self._current_speech.interrupt()
 
+    def _apply_interruption_decision(self, decision: InterruptionDecision) -> None:
+        if decision == InterruptionDecision.INTERRUPT:
+            self._interrupt_by_audio_activity()
+
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
@@ -1218,6 +1254,8 @@ class AgentActivity(RecognitionHooks):
             # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
             self._false_interruption_timer = None
+
+        self._interruption_arbiter.on_user_speech_detected()
 
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
         speech_end_time = time.time()
@@ -1240,8 +1278,19 @@ class AgentActivity(RecognitionHooks):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
 
-        if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+        if self.stt is None:
+            # No STT available, use VAD-only interruption based on speech duration
+            if ev.speech_duration >= self._session.options.min_interruption_duration:
+                self._interrupt_by_audio_activity()
+            return
+
+        # arbiter will wait for the classification if STT is available
+        should_wait_for_stt = self._interruption_arbiter.on_user_speech_detected()
+        
+        if not should_wait_for_stt:
+            # if not, do VAD based interruption test
+            if ev.speech_duration >= self._session.options.min_interruption_duration:
+                self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1257,11 +1306,14 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        if ev.alternatives[0].text and self._turn_detection not in ("manual", "realtime_llm"):
+            decision = self._interruption_arbiter.handle_transcript(
+                ev.alternatives[0].text,
+                is_final=False,
+                user_still_speaking=speaking,
+            )
+            if decision == InterruptionDecision.INTERRUPT:
+                self._apply_interruption_decision(decision)
 
             if (
                 speaking is False
@@ -1288,11 +1340,14 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
-        if self._audio_recognition and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        if self._audio_recognition and self._turn_detection not in ("manual", "realtime_llm"):
+            decision = self._interruption_arbiter.handle_transcript(
+                ev.alternatives[0].text,
+                is_final=True,
+                user_still_speaking=speaking,
+            )
+            if decision == InterruptionDecision.INTERRUPT:
+                self._apply_interruption_decision(decision)
 
             if (
                 speaking is False
@@ -1344,6 +1399,10 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+
+        if not self._interruption_arbiter.should_commit_turn(info.new_transcript):
+            self._cancel_preemptive_generation()
+            return False
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
@@ -1561,6 +1620,23 @@ class AgentActivity(RecognitionHooks):
     def retrieve_chat_ctx(self) -> llm.ChatContext:
         return self._agent.chat_ctx
 
+    # handing the case where on using soft inputs, the model accumualates it to the conversation history
+    # and stops 
+    def should_accumulate_transcript(self, transcript: str) -> bool:
+        if not transcript or not transcript.strip():
+            return True
+
+        # check if to be ignored -> don't accumulate if it is
+        if self._interruption_arbiter._last_final:
+            normalized = _normalize_text(transcript)
+            if (
+                self._interruption_arbiter._last_final.decision == InterruptionDecision.IGNORE
+                and self._interruption_arbiter._last_final.transcript == normalized
+            ):
+                return False
+
+        return True
+
     # endregion
 
     def _on_pipeline_reply_done(self, _: asyncio.Task[None]) -> None:
@@ -1610,6 +1686,7 @@ class AgentActivity(RecognitionHooks):
 
         def _on_first_frame(_: asyncio.Future[None]) -> None:
             self._session._update_agent_state("speaking")
+            self.on_audio_playout_started()
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:
@@ -1663,6 +1740,8 @@ class AgentActivity(RecognitionHooks):
             await speech_handle.wait_if_not_interrupted(
                 [asyncio.ensure_future(audio_output.wait_for_playout())]
             )
+            # Mark audio playout as finished after wait_for_playout completes
+            self.on_audio_playout_finished()
 
         if speech_handle.interrupted:
             await utils.aio.cancel_and_wait(*tasks)
@@ -1833,6 +1912,7 @@ class AgentActivity(RecognitionHooks):
             nonlocal started_speaking_at
             started_speaking_at = time.time()
             self._session._update_agent_state("speaking")
+            self.on_audio_playout_started()
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:
@@ -1936,6 +2016,10 @@ class AgentActivity(RecognitionHooks):
                 speech_handle._item_added([msg])
                 current_span.set_attribute(trace_types.ATTR_RESPONSE_TEXT, forwarded_text)
 
+            # Mark audio playout as finished on interruption
+            if audio_output is not None:
+                self.on_audio_playout_finished()
+
             if self._session.agent_state == "speaking":
                 self._session._update_agent_state("listening")
 
@@ -1962,6 +2046,10 @@ class AgentActivity(RecognitionHooks):
             self._session._conversation_item_added(msg)
             speech_handle._item_added([msg])
             current_span.set_attribute(trace_types.ATTR_RESPONSE_TEXT, text_out.text)
+
+        # Mark audio playout as finished on normal completion
+        if audio_output is not None:
+            self.on_audio_playout_finished()
 
         if len(tool_output.output) > 0:
             self._session._update_agent_state("thinking")
@@ -2157,6 +2245,7 @@ class AgentActivity(RecognitionHooks):
             nonlocal started_speaking_at
             started_speaking_at = time.time()
             self._session._update_agent_state("speaking")
+            self.on_audio_playout_started()
 
         tasks: list[asyncio.Task[Any]] = []
         tees: list[utils.aio.itertools.Tee[Any]] = []
@@ -2325,6 +2414,7 @@ class AgentActivity(RecognitionHooks):
             await speech_handle.wait_if_not_interrupted(
                 [asyncio.ensure_future(audio_output.wait_for_playout())]
             )
+            self.on_audio_playout_finished()
             self._session._update_agent_state("listening")
             current_span.set_attribute(
                 trace_types.ATTR_SPEECH_INTERRUPTED, speech_handle.interrupted
@@ -2393,6 +2483,10 @@ class AgentActivity(RecognitionHooks):
                     speech_handle._item_added([msg])
                     self._session._conversation_item_added(msg)
                     current_span.set_attribute(trace_types.ATTR_RESPONSE_TEXT, forwarded_text)
+
+            # Mark audio playout as finished on interruption
+            if audio_output is not None:
+                self.on_audio_playout_finished()
 
             speech_handle._mark_generation_done()
             await utils.aio.cancel_and_wait(exe_task)

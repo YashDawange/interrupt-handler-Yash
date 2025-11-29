@@ -42,13 +42,44 @@ agents that can see, hear, and understand.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
 
-## Installation
 
-To install the core Agents library, along with plugins for popular model providers:
+## Interruption Handling
 
-```bash
-pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"
+Agents now distinguish between passive acknowledgements ("yeah", "ok", "hmm") and active interruptions based on context. When the agent is speaking, backchannel phrases are ignored completely, allowing natural conversational flow without unwanted pauses.
+
+The interruption arbiter sits between VAD events and the interrupt decision and classifies user speech before acting.
+
+| User input         | Agent state | Behavior    |
+|-------------------|-------------|-------------|
+| "Yeah / Ok / Hmm" | Speaking    | Continue speaking (ignored) |
+| "Wait / Stop / No"| Speaking    | Stop immediately |
+| "Yeah / Ok / Hmm" | Silent      | Process as valid response |
+| "Start / Hello"   | Silent      | Normal conversation behaviour | 
+
+Configure behavior through environment variables:
+
+```python
+session = AgentSession(
+    vad=silero.VAD.load(),
+    stt=deepgram.STT(model="nova-3"),
+    llm=openai.LLM(model="gpt-4o-mini"),
+    tts=cartesia.TTS(),
+    interruption_ignore_phrases=["yeah", "ok", "hmm", "right"],
+    interruption_command_phrases=["stop", "wait", "hold on"],
+)
+
+# or update at runtime
+session.configure_interruptions(
+    ignore_phrases=["yeah", "mhmm", "uh-huh"],
+    command_phrases=["stop", "pause"]
+)
 ```
+
+Environment variables: `LIVEKIT_INTERRUPTION_IGNORE`, `LIVEKIT_INTERRUPTION_COMMANDS`, `LIVEKIT_INTERRUPTION_SEMANTIC_MODEL`, `LIVEKIT_INTERRUPTION_SEMANTIC_THRESHOLD`, `LIVEKIT_INTERRUPTION_FALSE_START_DELAY`.
+
+For semantic classification, install `sentence-transformers` to enable intent-based matching beyond lexical rules.
+
+
 
 ## Docs and guides
 

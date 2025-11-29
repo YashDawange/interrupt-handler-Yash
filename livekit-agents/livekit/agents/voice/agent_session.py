@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import os
 import time
 from collections.abc import AsyncIterable, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -40,6 +41,7 @@ from ._utils import _set_participant_attributes
 from .agent import Agent
 from .agent_activity import AgentActivity
 from .audio_recognition import TurnDetectionMode
+from .interruptions import InterruptionFilterConfig
 from .events import (
     AgentEvent,
     AgentState,
@@ -89,6 +91,48 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    interruption_ignore_phrases: tuple[str, ...]
+    interruption_command_phrases: tuple[str, ...]
+    interruption_semantic_model: str | None
+    interruption_semantic_threshold: float
+    interruption_false_start_delay: float
+
+
+_DEFAULT_INTERRUPTION_CONFIG = InterruptionFilterConfig()
+
+
+def _normalize_phrase_list(phrases: Sequence[str]) -> tuple[str, ...]:
+    normalized = tuple(
+        " ".join(phrase.strip().lower().split())
+        for phrase in phrases
+        if phrase and phrase.strip()
+    )
+    return normalized
+
+
+def _env_phrase_list(var_name: str, default: Sequence[str]) -> tuple[str, ...]:
+    raw_value = os.getenv(var_name)
+    if not raw_value:
+        return tuple(default)
+
+    phrases = tuple(part.strip() for part in raw_value.split(",") if part.strip())
+    return (
+        _normalize_phrase_list(phrases)
+        if phrases
+        else tuple(default)
+    )
+
+
+def _env_float(var_name: str, default: float) -> float:
+    raw_value = os.getenv(var_name)
+    if not raw_value:
+        return default
+
+    try:
+        return float(raw_value)
+    except ValueError:
+        logger.warning("Invalid float for %s: %s", var_name, raw_value)
+        return default
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +203,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        interruption_ignore_phrases: NotGivenOr[Sequence[str]] = NOT_GIVEN,
+        interruption_command_phrases: NotGivenOr[Sequence[str]] = NOT_GIVEN,
+        interruption_semantic_model: NotGivenOr[str | None] = NOT_GIVEN,
+        interruption_semantic_threshold: NotGivenOr[float] = NOT_GIVEN,
+        interruption_false_start_delay: NotGivenOr[float] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +294,21 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            interruption_ignore_phrases (Sequence[str], optional): List of passive acknowledgements
+                ("yeah", "ok", etc.) that should be ignored while the agent is speaking. Defaults to
+                the built-in list or ``LIVEKIT_INTERRUPTION_IGNORE`` when set.
+            interruption_command_phrases (Sequence[str], optional): Words/phrases that should always
+                interrupt the agent (e.g., "stop", "wait"). Defaults to the built-in list or
+                ``LIVEKIT_INTERRUPTION_COMMANDS`` when set.
+            interruption_semantic_model (str, optional): Optional Sentence-Transformer identifier or
+                local path used to semantically classify transcripts. Defaults to the environment
+                variable ``LIVEKIT_INTERRUPTION_SEMANTIC_MODEL``.
+            interruption_semantic_threshold (float, optional): Cosine similarity threshold used by
+                the semantic classifier when ``interruption_semantic_model`` is configured. Defaults
+                to ``LIVEKIT_INTERRUPTION_SEMANTIC_THRESHOLD`` or ``0.75``.
+            interruption_false_start_delay (float, optional): Minimum time (seconds) of sustained
+                speech before an interrupt is emitted unless a hard command phrase is detected.
+                Defaults to ``LIVEKIT_INTERRUPTION_FALSE_START_DELAY`` or ``0.15``.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -263,6 +327,47 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             video_sampler = VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.3)
 
         self._video_sampler = video_sampler
+
+        ignore_phrases_tuple = (
+            _normalize_phrase_list(cast(Sequence[str], interruption_ignore_phrases))
+            if is_given(interruption_ignore_phrases)
+            else _env_phrase_list(
+                "LIVEKIT_INTERRUPTION_IGNORE",
+                _DEFAULT_INTERRUPTION_CONFIG.ignore_phrases,
+            )
+        )
+        command_phrases_tuple = (
+            _normalize_phrase_list(cast(Sequence[str], interruption_command_phrases))
+            if is_given(interruption_command_phrases)
+            else _env_phrase_list(
+                "LIVEKIT_INTERRUPTION_COMMANDS",
+                _DEFAULT_INTERRUPTION_CONFIG.command_phrases,
+            )
+        )
+        env_semantic_model = os.getenv("LIVEKIT_INTERRUPTION_SEMANTIC_MODEL")
+        if not env_semantic_model:
+            env_semantic_model = _DEFAULT_INTERRUPTION_CONFIG.semantic_model
+        semantic_model_value = (
+            cast(str | None, interruption_semantic_model)
+            if is_given(interruption_semantic_model)
+            else env_semantic_model
+        )
+        semantic_threshold_value = (
+            cast(float, interruption_semantic_threshold)
+            if is_given(interruption_semantic_threshold)
+            else _env_float(
+                "LIVEKIT_INTERRUPTION_SEMANTIC_THRESHOLD",
+                _DEFAULT_INTERRUPTION_CONFIG.semantic_threshold,
+            )
+        )
+        false_start_delay_value = (
+            cast(float, interruption_false_start_delay)
+            if is_given(interruption_false_start_delay)
+            else _env_float(
+                "LIVEKIT_INTERRUPTION_FALSE_START_DELAY",
+                _DEFAULT_INTERRUPTION_CONFIG.false_start_delay,
+            )
+        )
 
         # This is the "global" chat_context, it holds the entire conversation history
         self._chat_ctx = ChatContext.empty()
@@ -288,6 +393,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            interruption_ignore_phrases=ignore_phrases_tuple,
+            interruption_command_phrases=command_phrases_tuple,
+            interruption_semantic_model=semantic_model_value,
+            interruption_semantic_threshold=semantic_threshold_value,
+            interruption_false_start_delay=false_start_delay_value,
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
@@ -394,8 +504,47 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         return self._opts
 
     @property
+    def interruption_config(self) -> InterruptionFilterConfig:
+        return InterruptionFilterConfig(
+            ignore_phrases=self._opts.interruption_ignore_phrases,
+            command_phrases=self._opts.interruption_command_phrases,
+            semantic_model=self._opts.interruption_semantic_model,
+            semantic_threshold=self._opts.interruption_semantic_threshold,
+            false_start_delay=self._opts.interruption_false_start_delay,
+        )
+
+    @property
     def conn_options(self) -> SessionConnectOptions:
         return self._conn_options
+
+    def configure_interruptions(
+        self,
+        *,
+        ignore_phrases: Sequence[str] | None = None,
+        command_phrases: Sequence[str] | None = None,
+        semantic_model: str | None = None,
+        semantic_threshold: float | None = None,
+        false_start_delay: float | None = None,
+    ) -> None:
+        """Update interruption filtering options at runtime."""
+
+        if ignore_phrases is not None:
+            self._opts.interruption_ignore_phrases = _normalize_phrase_list(ignore_phrases)
+
+        if command_phrases is not None:
+            self._opts.interruption_command_phrases = _normalize_phrase_list(command_phrases)
+
+        if semantic_model is not None:
+            self._opts.interruption_semantic_model = semantic_model
+
+        if semantic_threshold is not None:
+            self._opts.interruption_semantic_threshold = semantic_threshold
+
+        if false_start_delay is not None:
+            self._opts.interruption_false_start_delay = false_start_delay
+
+        if self._activity is not None:
+            self._activity.update_interruption_config(self.interruption_config)
 
     @property
     def history(self) -> llm.ChatContext:
@@ -1180,6 +1329,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             "agent_state_changed",
             AgentStateChangedEvent(old_state=old_state, new_state=state),
         )
+        if self._activity is not None:
+            self._activity.on_agent_state_changed(state == "speaking")
 
     def _update_user_state(
         self, state: UserState, *, last_speaking_time: float | None = None

@@ -100,6 +100,10 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        min_interruption_duration=0.2, 
+        min_interruption_words=0,     
+        min_endpointing_delay=0.2, 
+        max_endpointing_delay=1.0,
     )
 
     # log metrics as they are emitted, and total usage after session is over
