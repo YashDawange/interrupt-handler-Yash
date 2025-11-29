@@ -94,12 +94,7 @@ async def entrypoint(ctx: JobContext):
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
         # allow the LLM to generate a response while waiting for the end of turn
-        # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
-        preemptive_generation=True,
-        # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
-        # when it's detected, you may resume the agent's speech
-        resume_false_interruption=True,
-        false_interruption_timeout=1.0,
+        filtered_words = ["yeah", "ok", "okay", "uh huh", "uh-huh", "hmm", "hm", "yep", "right", "um hm", "mhm", "mhmm"],
     )
 
     # log metrics as they are emitted, and total usage after session is over
