@@ -54,6 +54,74 @@ pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"
 
 Documentation on the framework and how to use it can be found [here](https://docs.livekit.io/agents/)
 
+
+## 🧠 Intelligent Interruption Handling (Challenge Submission)
+
+This branch implements a logic handling layer to solve the **"sensitive VAD"** problem. The agent now distinguishes between **passive acknowledgement** (backchanneling) and **active interruption** based on semantic analysis of the user's speech.
+
+---
+
+## 🛠 How the Logic Works
+
+The solution is implemented as a **filtering layer within the agent's event loop** (specifically checking transcriptions before triggering an interruption). It utilizes a **strict validation strategy** to ensure the agent only yields the floor when intended.
+
+### 🔁 Logic Flow
+
+1. **Input Normalization**  
+   Incoming transcripts are processed to remove:
+   - Diacritics (accents)
+   - Punctuation
+   - Casing  
+
+   This ensures that `"Yeah!"`, `"yeah..."`, and `"YEAH"` are treated identically.
+
+2. **Tokenization**  
+   The normalized text is split into individual tokens/words.
+
+3. **Semantic Filtering**
+   - The system checks if **every single word** in the input exists in the `ignored_words` configuration.
+   - **Passive Case:**  
+     If the input is only `["yeah", "ok"]`, the system logs:  
+     `IGNORING interruption` and the agent continues speaking seamlessly.
+   - **Active/Mixed Case:**  
+     If the input contains even one non-ignored word (e.g., `"Yeah wait"`), the system logs:  
+     `PROCEEDING with interruption` and the agent stops immediately to listen.
+
+4. **Caching**  
+   The normalized ignore list is cached at the instance level to ensure **low-latency performance** during real-time conversations.
+
+---
+
+## ⚙️ Configuration
+
+The list of ignored words is configurable via:
+
+
+These cover the most common backchanneling phrases.
+
+---
+
+## 🧪 Verified Scenarios
+
+| User Input     | Agent State | Result        | Logic Applied |
+|----------------|-------------|---------------|----------------|
+| "Yeah / Ok"    | Speaking    | ✅ IGNORED     | Agent continues speaking (Backchanneling) |
+| "Stop / Wait" | Speaking    | ✅ INTERRUPT   | Agent stops (Command) |
+| "Yeah wait"   | Speaking    | ✅ INTERRUPT   | Agent stops (Mixed Input) |
+| "Yeah / Ok"   | Silent      | ✅ RESPOND     | Agent processes input (Valid Answer) |
+
+---
+
+## 📝 Logs & Verification
+
+You can verify the logic by running the agent and observing the console logs.
+
+### ✅ When ignoring `"Yeah"`
+```text
+DEBUG:root:Current transcript: 'yeah'
+INFO:root:IGNORING interruption - all words are ignored: 'yeah'
+
+
 ## Core concepts
 
 - Agent: An LLM-based application with defined instructions.
