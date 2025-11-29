@@ -1,4 +1,6 @@
 import logging
+import os
+import re  # <-- add this
 
 from dotenv import load_dotenv
 
@@ -13,7 +15,10 @@ from livekit.agents import (
     cli,
     metrics,
     room_io,
+    AgentStateChangedEvent,      # added this
+    UserInputTranscribedEvent,   # added this
 )
+
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
@@ -63,6 +68,58 @@ class MyAgent(Agent):
         return "sunny with a temperature of 70 degrees."
 
 
+
+
+# Interrupt / backchannel logic helper
+
+class InterruptHandler:
+    def __init__(self) -> None:
+        ignore_words = os.getenv(
+            "INTERRUPT_IGNORE_WORDS",
+            "yeah,ok,okay,kk,hmm,huh,right,uh,uhh,uhm,umm,uhhuh,uh-huh,mm,mmhmm,mm-hmm,mhm,sure,alright,go,continue,good,fine,indeed,correct,yep,yup,gotcha,gotit,alrighty,okayokay,yeahyeah",
+        )
+        interrupt_words = os.getenv(
+            "INTERRUPT_COMMAND_WORDS",
+            "stop,wait,no,cancel,enough,hold,just,second,minute,moment,sorry,interrupt,pause,hang,wrong,stopper,holdon,stopit,dont,clarify",
+        )
+
+
+        self.ignore_tokens = {w.strip().lower() for w in ignore_words.split(",") if w.strip()}
+        self.command_tokens = {w.strip().lower() for w in interrupt_words.split(",") if w.strip()}
+
+    def _tokenize(self, text: str) -> list[str]:
+        # basic word tokenizer
+        return re.findall(r"[a-z']+", text.lower())
+
+    def classify(self, text: str, agent_is_speaking: bool) -> str:
+        """
+        Returns one of: "ignore", "interrupt", "respond"
+        """
+        tokens = self._tokenize(text)
+        if not tokens:
+            return "respond"
+
+        has_command = any(t in self.command_tokens for t in tokens)
+        soft_only = all(t in self.ignore_tokens for t in tokens)
+
+        # ANY command word means interrupt, regardless of speaking state
+        if has_command:
+            return "interrupt"
+
+        # Only ignore soft fillers while the agent is speaking
+        if agent_is_speaking and soft_only:
+            return "ignore"
+
+        # Everything else is normal conversational input
+        return "respond"
+
+
+
+
+
+
+
+
 server = AgentServer()
 
 
@@ -98,9 +155,68 @@ async def entrypoint(ctx: JobContext):
         preemptive_generation=True,
         # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
         # when it's detected, you may resume the agent's speech
-        resume_false_interruption=True,
+        resume_false_interruption=False,
         false_interruption_timeout=1.0,
+        # IMPORTANT: we will control interruptions ourselves
+        allow_interruptions=False,                # don't let default VAD interrupt
+        discard_audio_if_uninterruptible=False,   # BUT still send audio to STT so we can see "stop/yeah/..."
+        # (optional) these are mainly for default interruptions, but safe to set:
+        # min_interruption_duration=0.0,
+        # min_interruption_words=1,
     )
+
+
+    interrupt_handler = InterruptHandler()
+    agent_state = {"is_speaking": False}
+
+    @session.on("agent_state_changed")
+    def _on_agent_state_changed(ev: AgentStateChangedEvent):
+        # new_state is a string like "speaking", "listening", "thinking"
+        agent_state["is_speaking"] = ev.new_state == "speaking"
+        logger.info(f"Agent state changed: {ev.old_state} -> {ev.new_state}")
+
+
+    @session.on("user_input_transcribed")
+    def _on_user_input_transcribed(ev: UserInputTranscribedEvent):
+        text = (ev.transcript or "").strip()
+        if not text:
+            return
+
+        speaking = agent_state["is_speaking"]
+        action = interrupt_handler.classify(text, speaking)
+
+        logger.info(
+            f"Transcript: '{text}' (final={ev.is_final}) "
+            f"→ {action} (speaking={speaking})"
+        )
+
+        if action == "interrupt":
+            # HARD STOP: no matter what the state says, user clearly wants to cut
+            logger.info("Interrupting agent due to command word.")
+            session.interrupt(force=True)
+            # Also clear the current user turn so we don't respond to "stop" as a question
+            session.clear_user_turn()
+            return
+
+        if speaking and action == "ignore":
+            # Backchannel while speaking – only clear once on final transcript
+            if ev.is_final:
+                session.clear_user_turn()
+                logger.info("Ignoring backchannel while speaking (final).")
+            return
+
+        # If agent is silent or action == "respond", let it flow as normal input
+        if not ev.is_final:
+            # avoid spamming LLM with partials when listening
+            return
+
+        logger.info("Agent silent or normal input → letting transcript flow normally.")
+        # Do nothing else here: the standard pipeline will handle the user turn.
+
+
+
+
+
 
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
@@ -108,7 +224,7 @@ async def entrypoint(ctx: JobContext):
     @session.on("metrics_collected")
     def _on_metrics_collected(ev: MetricsCollectedEvent):
         metrics.log_metrics(ev.metrics)
-        usage_collector.collect(ev.metrics)
+        usage_collector.collect(ev.metrics) 
 
     async def log_usage():
         summary = usage_collector.get_summary()
