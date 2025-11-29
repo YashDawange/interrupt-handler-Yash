@@ -1,4 +1,3 @@
-# tests/test_interrupt_handler.py
 import pytest
 from livekit.agents.voice import interrupt_handler
 

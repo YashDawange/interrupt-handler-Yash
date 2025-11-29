@@ -54,32 +54,25 @@ async def decide_action(
 
     # --- If the agent is speaking right now ---
     if agent_is_speaking:
-        # check interrupt phrases (multi-word)
         for phrase in INTERRUPT_PHRASES:
             if phrase and phrase in t:
                 return {"decision": "INTERRUPT", "mode": None, "reason": "found interrupt phrase"}
 
-        # check interrupt tokens
         if any(tok in INTERRUPT_WORDS for tok in tokens):
             return {"decision": "INTERRUPT", "mode": None, "reason": "found interrupt word"}
 
-        # if all tokens are ignore words => IGNORE
         if tokens and all(tok in IGNORE_WORDS for tok in tokens):
             return {"decision": "IGNORE", "mode": None, "reason": "pure ignore words while speaking"}
 
-        # check ignore phrases
         for phrase in IGNORE_PHRASES:
             if phrase and phrase in t:
                 return {"decision": "IGNORE", "mode": None, "reason": "ignore phrase while speaking"}
 
-        # default while speaking: ignore (no interrupt detected)
         return {"decision": "IGNORE", "mode": None, "reason": "default ignore while speaking"}
 
     # --- Agent is silent ---
-    # Two subcases: recently spoken vs not recently spoken
 
     if was_speaking_recently:
-        # If user only said an ignore/backchannel -> respond and CONTINUE speaking
         if tokens and all(tok in IGNORE_WORDS for tok in tokens):
             return {"decision": "RESPOND", "mode": "continue", "reason": "recently spoke; user gave backchannel -> respond and continue speaking"}
 
@@ -87,12 +80,9 @@ async def decide_action(
             if phrase and phrase in t:
                 return {"decision": "RESPOND", "mode": "continue", "reason": "recently spoke; ignore phrase -> respond and continue speaking"}
 
-        # Otherwise respond once (default)
         return {"decision": "RESPOND", "mode": "once", "reason": "recently spoke; non-backchannel input -> respond once"}
 
     else:
-        # Agent silent and hasn't spoken recently
-        # If user says start/hello -> respond once
         for phrase in START_PHRASES:
             if phrase and phrase in t:
                 return {"decision": "RESPOND", "mode": "once", "reason": "start/hello while silent -> respond once"}
@@ -100,7 +90,6 @@ async def decide_action(
         if any(tok in START_WORDS for tok in tokens):
             return {"decision": "RESPOND", "mode": "once", "reason": "start word while silent -> respond once"}
 
-        # Default: respond once to any user input while silent
         return {"decision": "RESPOND", "mode": "once", "reason": "agent silent & no recent speech -> respond once"}
 
 
@@ -130,7 +119,6 @@ async def enqueue_potential_interrupt(
     try:
         transcript = await asyncio.wait_for(get_transcript(), timeout=timeout_ms / 1000)
     except asyncio.TimeoutError:
-        # STT timed out: if speaking -> IGNORE; if silent -> RESPOND_ONCE (safe default)
         if agent_is_speaking:
             decision = {"decision": "IGNORE", "mode": None, "reason": "stt_timeout_while_speaking"}
             logger("", decision["decision"], decision["reason"])
@@ -143,7 +131,7 @@ async def enqueue_potential_interrupt(
             decision = {"decision": "RESPOND", "mode": "once", "reason": "stt_timeout_while_silent"}
             logger("", decision["decision"], decision["reason"])
             try:
-                await on_interrupt()  # call on_interrupt style to start the reply
+                await on_interrupt()
             except Exception:
                 pass
             return decision
@@ -156,25 +144,17 @@ async def enqueue_potential_interrupt(
             pass
         return decision
 
-    # Normal case: we got a transcript
     decision = await decide_action(transcript, agent_is_speaking, was_speaking_recently)
     logger(transcript, decision["decision"], decision["reason"])
 
-    # Callbacks: on_interrupt used generically to start a response or stop speech.
     try:
         if decision["decision"] == "INTERRUPT":
             await on_interrupt()
         elif decision["decision"] == "IGNORE":
             await on_ignore()
-        else:  # RESPOND
-            # call on_interrupt-style callback to trigger your respond flow.
-            # The callback should inspect agent state / mode and act:
-            # - if mode == "continue": start speaking and remain speaking until stopped
-            # - if mode == "once": speak one reply and then stop
+        else:
             await on_interrupt()
     except Exception:
-        # swallow errors in user callbacks so handler remains stable
         pass
 
-    # return the full decision to caller so they can act explicitly if they want
     return decision
