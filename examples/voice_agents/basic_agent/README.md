@@ -66,9 +66,9 @@ stop, wait, no, cancel, enough, hold on, pause, sorry, interrupt...
 
 ```
 basic_agent/
-├── basic_agent.py     # your modified agent with full interrupt logic
-├── README.md          # this file
-└── proof.mp4/logs     # optional — your demo evidence
+├── basic_agent.py
+├── README.md
+└── proof.mp4/logs
 ```
 
 ---
