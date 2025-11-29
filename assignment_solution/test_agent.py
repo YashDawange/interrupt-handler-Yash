@@ -85,6 +85,7 @@ async def entrypoint(ctx: JobContext):
         vad=ctx.proc.userdata["vad"],
         preemptive_generation=True,
         resume_false_interruption=True,
+        min_interruption_duration=1.0,
         false_interruption_timeout=1.0,
         discard_audio_if_uninterruptible=False,  # keep audio even if uninterruptible
         allow_interruptions=False,  # start with interruptions disabled
