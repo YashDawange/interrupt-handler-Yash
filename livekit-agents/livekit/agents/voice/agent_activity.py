@@ -1566,6 +1566,22 @@ class AgentActivity(RecognitionHooks):
             self._preemptive_generation = None
 
         if speech_handle is None:
+            # Check for urgent keywords to suppress reply
+            import string
+            normalized_text = user_message.text_content.lower().strip().strip(string.punctuation)
+            urgent_keywords = ["wait", "stop", "hold on"]
+            is_urgent = any(w in normalized_text.split() for w in urgent_keywords) or "wait a sec" in normalized_text
+
+            if is_urgent:
+                logger.info(
+                    "suppressing reply due to urgent keyword",
+                    extra={"user_input": user_message.text_content},
+                )
+                # Manually add to chat context since we are skipping _generate_reply
+                self._agent._chat_ctx.items.append(user_message)
+                self._session._conversation_item_added(user_message)
+                return
+
             # Ensure the new message is passed to generate_reply
             # This preserves the original message_id, making it easier for users to track responses
             speech_handle = self._generate_reply(
