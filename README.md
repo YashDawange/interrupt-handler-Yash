@@ -294,9 +294,17 @@ GOOGLE_API_KEY=your-gemini-key
 ```
 
 4. **Run the agent:**
+
+**For console mode:**
 ```bash
 cd examples/voice_agents
 python interrupt_handler_agent.py console
+```
+
+**For agent playground:**
+```bash
+cd examples/voice_agents
+python interrupt_handler_agent.py dev
 ```
 
 **Note:** Make sure you're in the `examples/voice_agents` directory before running the agent.
