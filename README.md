@@ -121,6 +121,8 @@ You can verify the logic by running the agent and observing the console logs.
 DEBUG:root:Current transcript: 'yeah'
 INFO:root:IGNORING interruption - all words are ignored: 'yeah'
 
+### Video proof 
+https://drive.google.com/file/d/1RmbXUrKEPysVDQGnY7-moLBVPiu7UGz2/view?usp=sharing
 
 ## Core concepts
 
