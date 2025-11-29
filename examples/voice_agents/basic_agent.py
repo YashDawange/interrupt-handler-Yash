@@ -128,12 +128,12 @@ async def entrypoint(ctx: JobContext):
         stt="deepgram/nova-3",
         llm="openai/gpt-4.1-mini",
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
-        turn_detection=MultilingualModel(),
+        turn_detection=MultilingualModel(),    # ignore very short bursts of sound (<400ms)),
         vad=ctx.proc.userdata["vad"],
         preemptive_generation=True,
         # These settings help handle false interruptions
         resume_false_interruption=True,
-        false_interruption_timeout=2.5,  # Wait 2.5s for STT before giving up
+        false_interruption_timeout=0.15,  # Wait 2.5s for STT before giving up
         min_interruption_words=1,  # Require at least 2 words to interrupt
     )
 
@@ -148,35 +148,47 @@ async def entrypoint(ctx: JobContext):
     # Intercept and filter transcriptions based on context
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(ev: UserInputTranscribedEvent):
-        # Only process final transcriptions for filtering decisions
-        if not ev.is_final:
-            return
-        
         transcript = ev.transcript.strip()
+        normalized = normalize_text(transcript)
         logger.info(f"📝 Transcribed: '{transcript}' | Agent speaking: {agent_instance.is_agent_speaking}")
-        
-        # Apply filtering logic only when agent is speaking
+
+        # ------------------------------------------------------------
+        # 1. Handle PARTIAL transcripts BEFORE interruption occurs
+        # ------------------------------------------------------------
+        if agent_instance.is_agent_speaking and not ev.is_final:
+
+            # COMMAND words (stop, wait, pause) MUST interrupt
+            for cmd in COMMAND_WORDS:
+                if normalized.startswith(cmd[:2]):
+                    logger.info(f"[Partial command detected] '{transcript}' — ALLOW INTERRUPTION")
+                    return
+
+            # FILLER words should NOT interrupt the agent
+            for filler in IGNORE_WORDS:
+                if normalized.startswith(filler[:2]):
+                    logger.info(f"[Partial filler detected] '{transcript}' — BLOCKING INTERRUPTION")
+                    session.clear_user_turn()
+                    return
+
+            # Unknown partial — allow normal behavior
+            return
+
+        # ------------------------------------------------------------
+        # 2. Final transcript logic (your original code)
+        # ------------------------------------------------------------
         if agent_instance.is_agent_speaking:
-            # Priority 1: Check for command words (always interrupt)
             if contains_command(transcript):
                 logger.info(f"Command detected: '{transcript}' - ALLOWING INTERRUPTION")
-                return  # Allow interruption to proceed
-            
-            # Priority 2: Check if only filler words (ignore)
+                return
+
             if is_only_filler(transcript):
                 logger.info(f"Filler-only detected: '{transcript}' - IGNORING & CLEARING")
-                
-                # Clear the user turn to prevent agent from responding
                 session.clear_user_turn()
-                
-                # The resume_false_interruption setting will automatically
-                # resume agent speech if it was paused
                 return
-            
-            # Priority 3: Mixed content or substantive input (allow interruption)
+
             logger.info(f"✓ Substantive input: '{transcript}' - ALLOWING INTERRUPTION")
+
         else:
-            # Agent is silent - treat all input as valid
             logger.info(f"✓ Agent silent - accepting input: '{transcript}'")
 
     # log metrics as they are emitted, and total usage after session is over
