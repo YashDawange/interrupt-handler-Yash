@@ -444,16 +444,36 @@ class AudioRecognition:
             self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
             self._audio_interim_transcript = ev.alternatives[0].text
 
-        elif ev.type == stt.SpeechEventType.END_OF_SPEECH and self._turn_detection_mode == "stt":
+        elif ev.type == vad.VADEventType.END_OF_SPEECH:
             with trace.use_span(self._ensure_user_turn_span()):
-                self._hooks.on_end_of_speech(None)
+                self._hooks.on_end_of_speech(ev)
 
             self._speaking = False
-            self._user_turn_committed = True
-            self._last_speaking_time = time.time()
 
-            chat_ctx = self._hooks.retrieve_chat_ctx().copy()
-            self._run_eou_detection(chat_ctx)
+            try:
+                session = self._session
+                async def _get_transcript() -> str:
+                    return self.current_transcript
+
+                if getattr(session, "_agent_is_speaking", False):
+                    false_interruption_timeout = (
+                        session.options.false_interruption_timeout
+                        if getattr(session, "options", None) and session.options.false_interruption_timeout is not None
+                        else 0.15
+                    )
+                    await session.handle_potential_interrupt(
+                        _get_transcript, timeout_ms=int(false_interruption_timeout * 1000)
+                    )
+                    return
+            except Exception:
+                logger.exception("error while handling potential interrupt, falling back to default endpointing")
+
+            if self._vad_base_turn_detection or (
+                self._turn_detection_mode == "stt" and self._user_turn_committed
+            ):
+                chat_ctx = self._hooks.retrieve_chat_ctx().copy()
+                self._run_eou_detection(chat_ctx)
+
 
         elif ev.type == stt.SpeechEventType.START_OF_SPEECH and self._turn_detection_mode == "stt":
             with trace.use_span(self._ensure_user_turn_span()):

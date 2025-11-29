@@ -56,6 +56,7 @@ from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
+from . import interrupt_handler as _interrupt_handler
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
@@ -354,6 +355,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         self._recorded_events: list[AgentEvent] = []
         self._enable_recording: bool = False
         self._started_at: float | None = None
+
+        self._agent_is_speaking: bool = False
+        self._interrupt_decision_log: list[tuple[str, str, str]] = []
 
         # ivr activity
         self._ivr_activity: IVRActivity | None = None
@@ -965,6 +969,58 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         self._activity.clear_user_turn()
 
+    async def interrupt_and_listen(self) -> None:
+        """
+            Stop the current agent speech and ensure the session transitions to a listening state
+            so incoming user input can be processed. This is what on_interrupt should call.
+        """
+        try:
+            fut = self.interrupt(force=True)
+        # interrupt() returns a Future, wait for it
+            await fut
+        except Exception as e:
+            logger.exception("error while interrupting agent: %s", e)
+
+
+    async def handle_potential_interrupt(
+        self,
+        get_transcript_coro,
+        *,
+        timeout_ms: int | None = None,
+    ) -> dict:
+        """
+        Wrapper to be called when VAD indicates potential end-of-speech while the agent is speaking.
+        get_transcript_coro: a coroutine function (callable) that returns the STT transcript string.
+        timeout_ms: optional override for STT wait time (falls back to session option or env).
+        Returns the decision dict returned by the interrupt handler.
+        """
+    # choose timeout: prefer explicit arg, otherwise session option or default 150ms
+        timeout = (
+            timeout_ms
+            if timeout_ms is not None
+            else (self._opts.false_interruption_timeout if self._opts.false_interruption_timeout else 0.15)
+        )
+    # map on_interrupt/on_ignore to session methods
+        async def _on_interrupt():
+            await self.interrupt_and_listen()
+
+        async def _on_ignore():
+        # no-op: continue speaking
+            return None
+
+    # call the shared interrupt decision layer
+        decision = await _interrupt_handler.enqueue_potential_interrupt(
+            get_transcript=get_transcript_coro,
+            agent_is_speaking=self._agent_is_speaking,
+            on_interrupt=_on_interrupt,
+            on_ignore=_on_ignore,
+            timeout_ms=int(timeout * 1000) if timeout else 150,
+            logger=self._log_interrupt_decision,
+        )
+
+        return decision
+
+
     def commit_user_turn(
         self, *, transcript_timeout: float = 2.0, stt_flush_duration: float = 2.0
     ) -> None:
@@ -1148,9 +1204,31 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             self._user_away_timer.cancel()
             self._user_away_timer = None
 
+    def _log_interrupt_decision(self, transcript: str, decision: str, reason: str) -> None:
+        """Record and log interrupt decisions for debugging / proof."""
+        try:
+        # append to local short log
+            self._interrupt_decision_log.append((transcript, decision, reason))
+        # keep last 50 for memory safety
+            if len(self._interrupt_decision_log) > 50:
+                self._interrupt_decision_log.pop(0)
+        except Exception:
+            pass
+
+        logger.info(
+        "[interrupt_decision] transcript=%r agent_is_speaking=%s decision=%s reason=%s",
+            transcript,
+            getattr(self, "_agent_is_speaking", False),
+            decision,
+            reason,
+        )
+
     def _update_agent_state(self, state: AgentState) -> None:
         if self._agent_state == state:
             return
+
+        became_speaking = state == "speaking"
+        self._agent_is_speaking = became_speaking
 
         if state == "speaking":
             self._llm_error_counts = 0
