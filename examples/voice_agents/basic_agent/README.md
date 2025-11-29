@@ -144,21 +144,26 @@ Agent **cuts off immediately**.
 
 ---
 
-## **Proof (Video)**
+## **Proof (Video/Logs)**
 
 ### **Video Demo**
 
 
 ```
-proof.mp4
+Agents-Assignment Video.mp4
 ```
 
-<!-- OR
-Paste a Google Drive link.
+### **Logs**
+
+
+```
+logs.txt
+```
+
+
 
 ### **Log Transcript Example**
 
-(Replace with your actual logs)
 
 ```
 Transcript: 'yeah' → ignore (speaking=True)
@@ -169,7 +174,7 @@ Agent silent or normal input → letting transcript flow normally.
 
 Transcript: 'stop' → interrupt (speaking=True)
 Interrupting agent due to command word.
-``` -->
+```
 
 ---
 
