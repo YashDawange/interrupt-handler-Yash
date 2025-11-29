@@ -61,7 +61,12 @@ from .events import (
     SpeechCreatedEvent,
     UserInputTranscribedEvent,
 )
-from .interruptions import InterruptionArbiter, InterruptionDecision, InterruptionFilterConfig
+from .interruptions import (
+    InterruptionArbiter,
+    InterruptionDecision,
+    InterruptionFilterConfig,
+    _normalize_text,
+)
 from .generation import (
     ToolExecutionOutput,
     _AudioOutput,
@@ -150,6 +155,10 @@ class AgentActivity(RecognitionHooks):
         self._interruption_arbiter.update_agent_state(
             speaking=self._session.agent_state == "speaking"
         )
+
+        # Track pending VAD-triggered interruptions awaiting STT confirmation
+        self._pending_vad_interrupt: asyncio.Event | None = None
+        self._pending_interrupt_timer: asyncio.TimerHandle | None = None
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1275,7 +1284,13 @@ class AgentActivity(RecognitionHooks):
                 self._interrupt_by_audio_activity()
             return
 
-        self._interruption_arbiter.on_user_speech_detected()
+        # arbiter will wait for the classification if STT is available
+        should_wait_for_stt = self._interruption_arbiter.on_user_speech_detected()
+        
+        if not should_wait_for_stt:
+            # if not, do VAD based interruption test
+            if ev.speech_duration >= self._session.options.min_interruption_duration:
+                self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1605,6 +1620,23 @@ class AgentActivity(RecognitionHooks):
     def retrieve_chat_ctx(self) -> llm.ChatContext:
         return self._agent.chat_ctx
 
+    # handing the case where on using soft inputs, the model accumualates it to the conversation history
+    # and stops 
+    def should_accumulate_transcript(self, transcript: str) -> bool:
+        if not transcript or not transcript.strip():
+            return True
+
+        # check if to be ignored -> don't accumulate if it is
+        if self._interruption_arbiter._last_final:
+            normalized = _normalize_text(transcript)
+            if (
+                self._interruption_arbiter._last_final.decision == InterruptionDecision.IGNORE
+                and self._interruption_arbiter._last_final.transcript == normalized
+            ):
+                return False
+
+        return True
+
     # endregion
 
     def _on_pipeline_reply_done(self, _: asyncio.Task[None]) -> None:
@@ -1708,6 +1740,8 @@ class AgentActivity(RecognitionHooks):
             await speech_handle.wait_if_not_interrupted(
                 [asyncio.ensure_future(audio_output.wait_for_playout())]
             )
+            # Mark audio playout as finished after wait_for_playout completes
+            self.on_audio_playout_finished()
 
         if speech_handle.interrupted:
             await utils.aio.cancel_and_wait(*tasks)
@@ -1738,10 +1772,6 @@ class AgentActivity(RecognitionHooks):
                 )
                 speech_handle._item_added([msg])
                 self._session._conversation_item_added(msg)
-
-        # Mark audio playout as finished
-        if audio_output is not None:
-            self.on_audio_playout_finished()
 
         if self._session.agent_state == "speaking":
             self._session._update_agent_state("listening")

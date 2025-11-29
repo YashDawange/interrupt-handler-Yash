@@ -39,7 +39,8 @@ def test_acknowledgement_is_ignored_during_agent_speech() -> None:
     clock = _FakeClock()
     arbiter = _make_arbiter(clock)
     arbiter.update_agent_state(speaking=True)
-    arbiter.on_user_speech_detected()
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is True  # Should gate VAD interrupt
     clock.advance(0.02)
     decision = arbiter.handle_transcript("ok yeah uh huh", is_final=True, user_still_speaking=True)
 
@@ -51,7 +52,8 @@ def test_affirmation_is_consumed_when_agent_is_listening() -> None:
     clock = _FakeClock()
     arbiter = _make_arbiter(clock)
     arbiter.update_agent_state(speaking=False)
-    arbiter.on_user_speech_detected()
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is False  # Not during agent speech, no need to gate
 
     decision = arbiter.handle_transcript("yeah", is_final=True, user_still_speaking=False)
 
@@ -63,18 +65,22 @@ def test_hard_command_interrupts_immediately() -> None:
     clock = _FakeClock()
     arbiter = _make_arbiter(clock)
     arbiter.update_agent_state(speaking=True)
-    arbiter.on_user_speech_detected()
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is True  # Should gate initially
     clock.advance(0.2)
 
     decision = arbiter.handle_transcript("stop stop", is_final=False, user_still_speaking=True)
     assert decision == InterruptionDecision.INTERRUPT
+    # After classifying as interrupt, VAD gating should be cleared
+    assert arbiter.should_gate_vad_interrupt() is False
 
 
 def test_mixed_input_with_command_interrupts() -> None:
     clock = _FakeClock()
     arbiter = _make_arbiter(clock)
     arbiter.update_agent_state(speaking=True)
-    arbiter.on_user_speech_detected()
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is True
     clock.advance(0.1)
 
     decision = arbiter.handle_transcript(
@@ -95,7 +101,8 @@ def test_classifier_basic_decisions(utterance: str, expected: InterruptionDecisi
     clock = _FakeClock()
     arbiter = _make_arbiter(clock)
     arbiter.update_agent_state(speaking=True)
-    arbiter.on_user_speech_detected()
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is True
     clock.advance(0.2)
 
     assert (
@@ -158,4 +165,62 @@ def test_respond_listening_when_audio_playout_finished() -> None:
     # User says "yeah" - should be treated as response now
     decision = arbiter.handle_transcript("yeah", is_final=True, user_still_speaking=False)
     assert decision == InterruptionDecision.RESPOND_LISTENING
+
+
+def test_vad_gating_during_agent_speech() -> None:
+    """Test that VAD interrupt is gated during agent speech, waiting for STT."""
+    clock = _FakeClock()
+    arbiter = _make_arbiter(clock)
+
+    # Agent is speaking
+    arbiter.update_agent_state(speaking=True)
+    arbiter.update_audio_playing(playing=True)
+
+    # VAD detects user speech - should return True (wait for STT)
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is True
+    assert arbiter.should_gate_vad_interrupt() is True
+
+    # STT provides transcript - "yeah" should be ignored
+    decision = arbiter.handle_transcript("yeah", is_final=True, user_still_speaking=False)
+    assert decision == InterruptionDecision.IGNORE
+    assert arbiter.should_gate_vad_interrupt() is False  # Gating cleared after classification
+
+
+def test_vad_no_gating_when_agent_idle() -> None:
+    """Test that VAD interrupt is not gated when agent is idle."""
+    clock = _FakeClock()
+    arbiter = _make_arbiter(clock)
+
+    # Agent is NOT speaking
+    arbiter.update_agent_state(speaking=False)
+    arbiter.update_audio_playing(playing=False)
+
+    # VAD detects user speech - should return False (no need to wait)
+    should_wait = arbiter.on_user_speech_detected()
+    assert should_wait is False
+    assert arbiter.should_gate_vad_interrupt() is False
+
+
+def test_backchannel_heuristics() -> None:
+    """Test that common backchannel variations are correctly ignored."""
+    clock = _FakeClock()
+    arbiter = _make_arbiter(clock)
+    arbiter.update_agent_state(speaking=True)
+    arbiter.on_user_speech_detected()
+    clock.advance(0.2)
+
+    # Test various backchannel forms
+    assert arbiter.handle_transcript("mhmm", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    assert arbiter.handle_transcript("mmhmm", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    assert arbiter.handle_transcript("uhuh", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    assert arbiter.handle_transcript("uh-huh", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    assert arbiter.handle_transcript("yup", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    
+    # Very short single-word backchannels
+    assert arbiter.handle_transcript("k", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    assert arbiter.handle_transcript("yea", is_final=True, user_still_speaking=False) == InterruptionDecision.IGNORE
+    
+    # But actual commands should still interrupt
+    assert arbiter.handle_transcript("stop now", is_final=True, user_still_speaking=False) == InterruptionDecision.INTERRUPT
 

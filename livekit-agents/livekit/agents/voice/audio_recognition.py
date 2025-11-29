@@ -90,6 +90,7 @@ class RecognitionHooks(Protocol):
     def on_preemptive_generation(self, info: _PreemptiveGenerationInfo) -> None: ...
 
     def retrieve_chat_ctx(self) -> llm.ChatContext: ...
+    def should_accumulate_transcript(self, transcript: str) -> bool: ... #add to hooks
 
 
 class AudioRecognition:
@@ -366,9 +367,13 @@ class AudioRecognition:
             logger.debug("received user transcript", extra=extra)
 
             self._last_final_transcript_time = time.time()
-            self._audio_transcript += f" {transcript}"
-            self._audio_transcript = self._audio_transcript.lstrip()
-            self._final_transcript_confidence.append(confidence)
+            
+            # Check if this transcript should be accumulated (not ignored as backchannel)
+            if self._hooks.should_accumulate_transcript(transcript):
+                self._audio_transcript += f" {transcript}"
+                self._audio_transcript = self._audio_transcript.lstrip()
+                self._final_transcript_confidence.append(confidence)
+            
             transcript_changed = self._audio_transcript != self._audio_preflight_transcript
             self._audio_interim_transcript = ""
             self._audio_preflight_transcript = ""

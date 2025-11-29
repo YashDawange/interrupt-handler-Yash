@@ -1,0 +1,72 @@
+**12:02:56-12:02:59** (Duration: ~2.32s TTS)
+- **User**: "Hello."
+- **Agent**: "Hey there how can i brighten your day today"
+
+---
+
+**12:03:02-12:03:08** (Duration: ~63.11s TTS - Line 137)
+- **User**: "I wanna know about the history of the so called space race between USSR and America. Tell me about it in detail."
+
+**During Agent Speaking (12:03:25):**
+- **User**: "Yeah." → **Decision: IGNORE** ✓ Agent continues
+
+**During Agent Speaking (12:03:30):**
+- **User**: "Right." → **Decision: IGNORE** ✓ Agent continues
+
+**During Agent Speaking (12:03:35):**
+- **User**: "Mhmm." → **Decision: IGNORE** ✓ Agent continues
+
+**During Agent Speaking (12:03:45):**
+- **User**: "Okay." → **Decision: IGNORE** ✓ Agent continues
+
+**During Agent Speaking (12:03:50):**
+- **User**: "Right." (2nd time) → **Decision: IGNORE** ✓ Agent continues
+
+- **Agent**: (Full 63-second response about space race: Sputnik, Gagarin, Leonov, Apollo 11, Armstrong, Aldrin, global prestige, Apollo-Soyuz 1975, asking if user wants more details)
+
+---
+
+**12:04:17-12:04:28** (Duration: ~23.96s TTS - Line 241)
+- **User**: "You tell me about the first woman in space?"
+
+**During Agent Speaking (12:04:33):**
+- **User**: "Yeah." → **Decision: IGNORE** ✓ Agent continues
+
+**During Agent Speaking (12:04:38):**
+- **User**: "Right." → **Decision: IGNORE** ✓ Agent continues
+
+- **Agent**: (23-second response about Valentina Tereshkova, Vostok 6, 1963, 48 Earth orbits, milestone for women, asking about training or post-flight career)
+
+---
+
+**12:04:41-12:05:16** (Duration: ~26.19s TTS - Line 430)
+- **User**: "Hold on." → **Decision: INTERRUPT** (Line 262) ✓
+- **Agent**: "Sure thing just let me know when youre ready"
+
+- **User**: "Who do you think won the space race?" → **Decision: PENDING** (Line 301-308)
+- **Agent**: (26-second response about tough call, Soviets early lead with Sputnik/Gagarin, USA moon landing as ultimate win, fierce rivalry)
+
+---
+
+**12:05:36-12:05:45** (Duration: ~38.36s TTS - Line 487)
+- **User**: "Absolutely."
+- **Agent**: (Long 38-second response about space race technology spillovers: GPS satellites, water purification, memory foam, miniaturized electronics, thermal insulation)
+
+**During Agent Speaking (12:05:54):**
+- **User**: "Stop." → **Decision: INTERRUPT** (Line 492-494) ✓ Agent stops!
+
+- **Agent**: (Interrupted mid-sentence)
+
+---
+
+**12:05:55-12:05:58** (Duration: ~2.28s TTS)
+- **User**: "That's it."
+- **Agent**: "Got it if you ever want to blast off into more topics just say the word"
+
+---
+
+**12:06:08-12:06:10** (Duration: ~2.28s TTS)
+- **User**: "Thank you."
+- **Agent**: (Response not shown in log - likely session ending)
+
+---

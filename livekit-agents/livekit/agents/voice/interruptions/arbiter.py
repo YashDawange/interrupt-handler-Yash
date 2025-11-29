@@ -30,14 +30,25 @@ class InterruptionFilterConfig:
     ignore_phrases: tuple[str, ...] = (
         "yeah",
         "yep",
+        "yup",
         "ok",
         "okay",
         "hmm",
+        "mhmm",
         "mm-hmm",
-        "right",
+        "mm hmm",
+        "mmhmm",
+        "uh-huh",
         "uh huh",
+        "uhuh",
+        "right",
         "sure",
         "got it",
+        "gotcha",
+        "alright",
+        "nice",
+        "i see",
+        "makes sense",
     )
     command_phrases: tuple[str, ...] = (
         "stop",
@@ -46,7 +57,6 @@ class InterruptionFilterConfig:
         "hang on",
         "pause",
         "no",
-        "cancel",
     )
     semantic_model: str | None = None
     semantic_threshold: float = 0.75
@@ -149,8 +159,34 @@ class BackchannelClassifier:
         if semantic_decision is not None:
             return semantic_decision
 
+        if self._looks_like_backchannel(normalized_text):
+            return InterruptionDecision.IGNORE
+
         # default fallback is to interrupt because the utterance carries meaning
         return InterruptionDecision.INTERRUPT
+
+    def _looks_like_backchannel(self, normalized_text: str) -> bool:
+        if not normalized_text:
+            return False
+
+        tokens = normalized_text.split()
+        # heurestics to check if backchannel
+        if len(tokens) <= 2 and len(normalized_text) <= 5:
+            if not self.contains_command(normalized_text):
+                return True
+        # do fuzzy matching
+        for ignore_phrase in self._ignore_phrases:
+            if ignore_phrase and len(ignore_phrase) >= 3:
+                if ignore_phrase in normalized_text or normalized_text in ignore_phrase:
+                    return True
+                
+                phrase_no_space = ignore_phrase.replace(" ", "")
+                text_no_space = normalized_text.replace(" ", "")
+                if phrase_no_space and (phrase_no_space in text_no_space or text_no_space in phrase_no_space):
+                    if len(text_no_space) >= 3:
+                        return True
+
+        return False
 
     def _semantic_decision(self, normalized_text: str) -> InterruptionDecision | None:
         if not self._model:
@@ -168,8 +204,6 @@ class BackchannelClassifier:
 
 
 class InterruptionArbiter:
-    """Gates LiveKit's low-level interruption events using transcript semantics."""
-
     def __init__(
         self,
         *,
@@ -182,9 +216,10 @@ class InterruptionArbiter:
         self._clock = clock
         self._classifier = BackchannelClassifier(config=self._config, logger=self._logger)
         self._agent_speaking = False
-        self._audio_playing = False  # tracks whether audio is still being played out
+        self._audio_playing = False 
         self._candidate: _InterruptionCandidate | None = None
         self._last_final: _InterruptionCandidate | None = None
+        self._vad_interrupt_pending = False  # VAD flag
 
     @property
     def supports_semantics(self) -> bool:
@@ -192,30 +227,38 @@ class InterruptionArbiter:
 
     @property
     def is_agent_active(self) -> bool:
-        """Returns True if the agent is speaking OR audio is still playing out."""
         return self._agent_speaking or self._audio_playing
 
     def update_agent_state(self, *, speaking: bool) -> None:
         if not speaking and not self._audio_playing:
             self._candidate = None
+            self._vad_interrupt_pending = False
         self._agent_speaking = speaking
 
     def update_audio_playing(self, *, playing: bool) -> None:
-        """Update whether audio is currently being played out to the user."""
         if not playing and not self._agent_speaking:
             self._candidate = None
+            self._vad_interrupt_pending = False
         self._audio_playing = playing
+
+    def should_gate_vad_interrupt(self) -> bool:
+        return self.is_agent_active and self._vad_interrupt_pending
 
     def update_config(self, config: InterruptionFilterConfig) -> None:
         self._config = config
         self._classifier = BackchannelClassifier(config=config, logger=self._logger)
 
-    def on_user_speech_detected(self) -> None:
+    def on_user_speech_detected(self) -> bool:
         if not self.is_agent_active:
-            return
+            return False 
+        
         if self._candidate is None:
             now = self._clock()
             self._candidate = _InterruptionCandidate(started_at=now, updated_at=now)
+        
+        # wait for STT to classify
+        self._vad_interrupt_pending = True
+        return True
 
     def handle_transcript(
         self,
@@ -229,6 +272,9 @@ class InterruptionArbiter:
         if decision == InterruptionDecision.INTERRUPT:
             if not self._should_allow_interrupt():
                 decision = InterruptionDecision.PENDING
+        
+        self._vad_interrupt_pending = False
+        
         if is_final:
             self._last_final = _InterruptionCandidate(
                 transcript=_normalize_text(transcript),
@@ -288,7 +334,6 @@ class InterruptionArbiter:
             return True
 
         if self._candidate.decision == InterruptionDecision.INTERRUPT:
-            # Allow early interrupt only if a hard command phrase was present.
             return self._classifier.contains_command(self._candidate.transcript)
 
         return False

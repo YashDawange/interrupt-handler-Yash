@@ -177,3 +177,10 @@ docs/
 
 # Examples for development
 examples/dev/*
+
+# Interruption handling test artifacts
+conv_log*.txt
+conv*.txt
+test_run.txt
+test_run2.txt
+tests/test_interruption_filter.py

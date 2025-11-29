@@ -3,6 +3,7 @@ from .arbiter import (
     InterruptionArbiter,
     InterruptionDecision,
     InterruptionFilterConfig,
+    _normalize_text,
 )
 
 __all__ = [
@@ -10,5 +11,6 @@ __all__ = [
     "InterruptionArbiter",
     "InterruptionDecision",
     "InterruptionFilterConfig",
+    "_normalize_text",
 ]
 
