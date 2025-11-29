@@ -11,6 +11,16 @@ My goals:
 
 ---
 
+## Demo video
+
+I recorded a short demo showing all four key behaviors (backchannels while speaking, “yeah” when silent, explicit “stop”, and mixed phrases):
+
+**Demo:** [Demo video](https://drive.google.com/file/d/1mJjEXv5IZPam73bMaZRS1sFk52dMGXDO/view?usp=sharing)
+
+
+---
+
+
 ## How I run it
 
 ### 1. Environment
@@ -173,6 +183,4 @@ I use four simple checks:
 
 This matches the assignment’s functionality, state-awareness, code-quality, and documentation expectations.
 
-```
-::contentReference[oaicite:0]{index=0}
-```
+
