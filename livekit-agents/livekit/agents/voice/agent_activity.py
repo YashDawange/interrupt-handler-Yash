@@ -1183,7 +1183,7 @@ class AgentActivity(RecognitionHooks):
         
         # Urgent keywords that should trigger immediate interruption
         # bypassing min_interruption_words and other checks
-        urgent_keywords = ["wait", "stop", "hold on"]
+        urgent_keywords = ["wait", "stop", "hold on", "no"]
         is_urgent = any(w in normalized_text.split() for w in urgent_keywords) or "wait a sec" in normalized_text
 
         if not is_urgent:

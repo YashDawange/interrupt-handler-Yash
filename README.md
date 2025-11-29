@@ -58,11 +58,14 @@ We have implemented a robust, logic-based interruption handling system that impr
 -   **Robust Whitespace Handling**: Transcripts are rigorously normalized (stripping whitespace and punctuation) to ensure accurate matching of keywords like " yeah " or "stop!".
 -   **Transcript Buffer Management**: Ignored transcripts are explicitly discarded from the buffer to prevent them from accumulating and affecting subsequent interruption checks (solving the "yeah... okay" accumulation issue).
 -   **Configurable Lists**: The ignored words list and urgent keywords are easily configurable.
+    -   **Ignored Words**: `examples/voice_agents/basic_agent.py` (Line 103)
+        -   Current list: `["yeah", "ok", "okay", "uh huh", "uh-huh", "hmm", "hm", "yep", "right", "um hm", "mhm", "mhmm"]`
+    -   **Urgent Keywords**: `livekit-agents/livekit/agents/voice/agent_activity.py` (Lines 1186, 1572)
+        -   Current list: `["wait", "stop", "hold on", "no"]` (also checks for "wait a sec")
 
 ## Demo
 
-<video src="public/demo_video.mp4" controls="controls" style="max-width: 100%;">
-</video>
+[![Demo Video](https://img.youtube.com/vi/cF4kLmyEt5U/0.jpg)](https://youtu.be/cF4kLmyEt5U)
 
 ## Installation
 
