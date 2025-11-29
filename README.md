@@ -20,7 +20,7 @@ Added a context-aware interruption handler that distinguishes between:
 ## ⚙️ Implementation
 
 
-### `interruption_handler.py`
+### `interruption.py`
 
 * Defines a configurable ignore/interrupt word filter
 * Uses the agent’s current speaking state to decide whether to ignore or stop
