@@ -1192,9 +1192,12 @@ class AgentActivity(RecognitionHooks):
                     # wait for the transcript to be available to check against the filter
                     return
 
-                if normalized_text in [
-                    w.lower().strip().strip(string.punctuation) for w in opt.interruption_speech_filter
-                ]:
+                # Check if the entire sentence is composed of ignored words
+                # e.g. "yeah ok" should be ignored if both "yeah" and "ok" are in the list
+                input_words = [w.strip(string.punctuation) for w in normalized_text.split()]
+                filter_words = set(w.lower().strip().strip(string.punctuation) for w in opt.interruption_speech_filter)
+                
+                if input_words and all(w in filter_words for w in input_words):
                     return
 
             if (
@@ -1411,10 +1414,10 @@ class AgentActivity(RecognitionHooks):
             import string
 
             text = info.new_transcript.lower().strip().strip(string.punctuation)
-            if text in [
-                w.lower().strip().strip(string.punctuation)
-                for w in self._session.options.interruption_speech_filter
-            ]:
+            input_words = [w.strip(string.punctuation) for w in text.split()]
+            filter_words = set(w.lower().strip().strip(string.punctuation) for w in self._session.options.interruption_speech_filter)
+
+            if input_words and all(w in filter_words for w in input_words):
                 self._cancel_preemptive_generation()
                 if self._audio_recognition:
                     self._audio_recognition.discard_user_turn()
