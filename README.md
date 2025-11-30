@@ -30,6 +30,22 @@ agents that can see, hear, and understand.
 
 <!--END_DESCRIPTION-->
 
+## Intelligent Interruption Handling (Challenge Submission)
+
+This repository has been modified to solve the **Intelligent Interruption Handling Challenge**. The goal is to allow the agent to ignore passive "backchanneling" (e.g., "yeah", "uh-huh") while it is speaking, but still respond to them when silent.
+
+### Core Logic Implementation
+The logic is implemented primarily in `livekit-agents/livekit/agents/voice/agent_activity.py`.
+
+1.  **Ignore List:** A comprehensive `IGNORE_WORDS` set is defined, containing common affirmations (e.g., "yeah", "ok", "right") and filler sounds.
+2.  **VAD Modification (`on_vad_inference_done`):** The default VAD interruption is suppressed if the `agent_state` is currently "speaking". This prevents the agent from cutting off due to non-speech noise or quick sounds.
+3.  **Transcript Filtering (`on_interim_transcript` & `on_final_transcript`):**
+    * Incoming user text is cleaned (lowercase, punctuation removed).
+    * If the text matches a word in the `IGNORE_WORDS` list AND the agent is speaking, the interruption signal is blocked.
+    * If the text contains other words (e.g., "Yeah wait"), the interruption is allowed to proceed.
+4.  **Turn Suppression (`on_end_of_turn`):**
+    * If a turn ends with an ignored word while the agent is speaking, the turn is explicitly dropped to prevent the LLM from generating a response (e.g., stopping the agent from saying "How can I help?" after the user says "Yeah" to confirm listening).
+
 ## Features
 
 - **Flexible integrations**: A comprehensive ecosystem to mix and match the right STT, LLM, TTS, and Realtime API to suit your use case.
@@ -44,12 +60,15 @@ agents that can see, hear, and understand.
 
 ## Installation
 
-To install the core Agents library, along with plugins for popular model providers:
+To install the core Agents library (in editable mode for the challenge logic) along with plugins:
 
 ```bash
+# 1. Install the local modified library in editable mode
+pip install -e ./livekit-agents
+
+# 2. Install the plugins
 pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"
 ```
-
 ## Docs and guides
 
 Documentation on the framework and how to use it can be found [here](https://docs.livekit.io/agents/)
