@@ -1,6 +1,6 @@
 # Intelligent Interruption Handling
 
-Demo Video - [https://drive.google.com/file/d/1fSCWHF4F6WUgtLt2yAQAg7kh9mBni8CD/view?usp=sharing](Demo)
+Demo Video - https://drive.google.com/file/d/1fSCWHF4F6WUgtLt2yAQAg7kh9mBni8CD/view?usp=sharing
 
 This implementation adds context-aware interruption handling to LiveKit agents, allowing them to distinguish between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
 
