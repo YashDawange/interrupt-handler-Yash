@@ -56,6 +56,7 @@ from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
+from .interuption_handler import InterruptionHandler, InterruptionConfig
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels

@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interuption_handler import InterruptionHandler, InterruptionConfig
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -1248,6 +1249,17 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript_text = ev.alternatives[0].text
+        if transcript_text and not self._session._interruption_handler.should_interrupt(transcript_text):
+            logger.debug(
+                "Ignoring backchannel input during agent speech",
+                extra={
+                    "transcript": transcript_text,
+                    "agent_speaking": self._session._agent_state == "speaking"
+                }
+            )
+            return  # Don't process this backchannel input
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
@@ -1275,6 +1287,19 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
+
+        transcript_text = ev.alternatives[0].text
+        if transcript_text and not self._session._interruption_handler.should_interrupt(transcript_text):
+            logger.debug(
+                "Ignoring backchannel input during agent speech",
+                extra={
+                    "transcript": transcript_text,
+                    "agent_speaking": self._session._agent_state == "speaking",
+                    "is_final": True
+                }
+            )
+            return
+
 
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
