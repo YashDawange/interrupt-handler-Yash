@@ -8,14 +8,6 @@ This implementation adds context-aware interruption handling to LiveKit agents, 
 
 LiveKit's default Voice Activity Detection (VAD) is too sensitive. When the AI agent is explaining something important, user feedback like "yeah," "ok," "aha," or "hmm" (known as backchanneling) is misinterpreted as an interruption, causing the agent to abruptly stop speaking.
 
-
-=======
-This implementation adds context-aware interruption handling to LiveKit agents, allowing them to distinguish between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
-
-## Problem
-
-LiveKit's default Voice Activity Detection (VAD) is too sensitive. When the AI agent is explaining something important, user feedback like "yeah," "ok," "aha," or "hmm" (known as backchanneling) is misinterpreted as an interruption, causing the agent to abruptly stop speaking.
-
 ## Running the Example
 1. Clone the repository and install the dependencies
 
