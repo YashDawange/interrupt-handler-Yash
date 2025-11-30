@@ -1,5 +1,6 @@
 # Intelligent Interruption Handling
 
+<<<<<<< Updated upstream
 Demo Video - [https://drive.google.com/file/d/1fSCWHF4F6WUgtLt2yAQAg7kh9mBni8CD/view?usp=sharing](Demo)
 
 This implementation adds context-aware interruption handling to LiveKit agents, allowing them to distinguish between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
@@ -9,6 +10,15 @@ This implementation adds context-aware interruption handling to LiveKit agents, 
 LiveKit's default Voice Activity Detection (VAD) is too sensitive. When the AI agent is explaining something important, user feedback like "yeah," "ok," "aha," or "hmm" (known as backchanneling) is misinterpreted as an interruption, causing the agent to abruptly stop speaking.
 
 
+=======
+This implementation adds context-aware interruption handling to LiveKit agents, allowing them to distinguish between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
+
+## Problem
+
+LiveKit's default Voice Activity Detection (VAD) is too sensitive. When the AI agent is explaining something important, user feedback like "yeah," "ok," "aha," or "hmm" (known as backchanneling) is misinterpreted as an interruption, causing the agent to abruptly stop speaking.
+
+
+>>>>>>> Stashed changes
 ## Running the Example
 1. Clone the repository and install the dependencies
 
@@ -221,7 +231,11 @@ The interruption handler uses a **hybrid approach** with two detection methods:
 - No external dependencies
 - Works offline
 
+<<<<<<< Updated upstream
 #### 2. Embedding-Based Semantic Similarity
+=======
+#### 2. Embedding-Based Semantic Similarity (Optional)
+>>>>>>> Stashed changes
 - More robust and accurate
 - Understands semantic meaning, not just exact words
 - Handles variations and paraphrases
@@ -252,6 +266,8 @@ The agent determines if it's speaking by checking:
 
 
 ## Files Modified
+<<<<<<< Updated upstream
+=======
 
 1. `livekit/agents/voice/interruption_handler.py` - New module for interruption logic
 2. `livekit/agents/voice/agent_activity.py` - Integrated interruption handler into agent activity
@@ -260,4 +276,28 @@ The agent determines if it's speaking by checking:
 
 1. `examples/voice_agents/intelligent_interruption_agent.py` - Example agent demonstrating the functionality
 2. `.env.example` - Example environment variables
+>>>>>>> Stashed changes
 
+1. `livekit/agents/voice/interruption_handler.py` - New module for interruption logic
+2. `livekit/agents/voice/agent_activity.py` - Integrated interruption handler into agent activity
+
+<<<<<<< Updated upstream
+## Files Added
+
+1. `examples/voice_agents/intelligent_interruption_agent.py` - Example agent demonstrating the functionality
+2. `.env.example` - Example environment variables
+
+=======
+
+
+## Notes
+
+- The interruption handler does not modify the low-level VAD kernel
+- It operates as a logic handling layer within the agent's event loop
+- The solution handles real-time constraints with minimal latency
+- Works with both streaming and non-streaming STT implementations
+- Embedding-based checking is optional and falls back to word matching if unavailable
+- Embeddings are cached to minimize API calls and improve performance
+- Requires `numpy` for optimal performance (falls back to manual cosine similarity if unavailable)
+
+>>>>>>> Stashed changes

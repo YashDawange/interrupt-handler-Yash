@@ -74,6 +74,7 @@ from .generation import (
     remove_instructions,
     update_instructions,
 )
+from .interruption_handler import InterruptionHandler
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -141,6 +142,18 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        # Initialize intelligent interruption handler
+        self._interruption_handler = InterruptionHandler()
+
+        # Track pending interruptions that need STT validation
+        # This handles the case where VAD triggers before STT confirms the word
+        self._pending_interruption: str | None = None
+        self._pending_interruption_timer: asyncio.TimerHandle | None = None
+        # Flag to prevent any pause operations while waiting for STT confirmation
+        self._waiting_for_stt_confirmation: bool = False
+        # Set of transcripts that have been confirmed as backchanneling - prevent any pause for these
+        self._confirmed_backchanneling: set[str] = set()
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -453,6 +466,10 @@ class AgentActivity(RecognitionHooks):
 
                     if isinstance(self.tts, tts.TTS):
                         self.tts.prewarm()
+                    
+                    # Initialize embeddings for interruption handler (if enabled)
+                    # This must be done in async context on main thread for plugins
+                    await self._interruption_handler.initialize_embeddings()
 
                 # don't use start_span for _start_session, avoid nested user/assistant turns
                 await self._start_session()
@@ -1166,7 +1183,7 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
-    def _interrupt_by_audio_activity(self) -> None:
+    def _interrupt_by_audio_activity(self, transcript: str | None = None) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1174,18 +1191,127 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Get transcript from audio recognition if not provided
+        # CRITICAL: Always check current_transcript first, even if transcript parameter is None
+        # This catches cases where STT has already started processing
+        if self._audio_recognition is not None:
+            current_transcript = self._audio_recognition.current_transcript
+            if current_transcript and transcript is None:
+                transcript = current_transcript
+            elif current_transcript and transcript:
+                # Use the longer/more complete transcript
+                transcript = current_transcript if len(current_transcript) > len(transcript) else transcript
+
+        # Determine if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ) or self._session.agent_state == "speaking"
+
+        # CRITICAL: Check for backchanneling FIRST, before ANY other logic
+        # This ensures we NEVER pause for backchanneling words - seamless continuation
+        if transcript and agent_is_speaking:
+            should_interrupt = self._interruption_handler.should_interrupt(
+                transcript=transcript,
+                agent_is_speaking=agent_is_speaking,
+                activity=self,
+            )
+
+            if not should_interrupt:
+                # This is a backchanneling word - ignore the interruption completely
+                # Clear any pending interruption timers and waiting flag
+                self._waiting_for_stt_confirmation = False
+                if self._pending_interruption_timer:
+                    self._pending_interruption_timer.cancel()
+                    self._pending_interruption_timer = None
+                self._pending_interruption = None
+                
+                # CRITICAL: If audio was paused (shouldn't happen, but safety), resume immediately
+                if (
+                    self._paused_speech
+                    and self._session.output.audio
+                    and self._session.output.audio.can_pause
+                ):
+                    logger.warning(
+                        f"Audio was paused for backchanneling '{transcript}' - resuming immediately"
+                    )
+                    self._session.output.audio.resume()
+                    self._session._update_agent_state("speaking")
+                    self._paused_speech = None
+                
+                logger.info(
+                    f"Ignoring backchanneling: '{transcript}' while agent is speaking "
+                    f"(agent continues seamlessly - NO PAUSE)"
+                )
+                return
+
+        # Check minimum interruption words (only if we have transcript and it's not backchanneling)
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
+            and transcript
         ):
-            text = self._audio_recognition.current_transcript
-
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+            if len(split_words(transcript, split_character=True)) < opt.min_interruption_words:
+                # Transcript is too short - don't interrupt
                 return
 
+        # If transcript is not available yet (VAD triggered before STT), 
+        # mark as pending and wait for STT confirmation
+        # CRITICAL: DO NOT pause/interrupt yet - wait for STT to confirm what was said
+        # This prevents ANY pause from happening for backchanneling words
+        if not transcript and agent_is_speaking:
+            # Set flag to prevent any pause operations
+            self._waiting_for_stt_confirmation = True
+            
+            # If we already have a pending interruption, extend the timer
+            if self._pending_interruption is None:
+                self._pending_interruption = ""
+                # Set a minimal timer to check if STT confirms this is ignorable
+                # STT typically arrives quickly for short words, so we use minimal delay (50ms)
+                if self._pending_interruption_timer:
+                    self._pending_interruption_timer.cancel()
+                self._pending_interruption_timer = self._session._loop.call_later(
+                    0.05,  # Wait 50ms for STT to confirm (minimal latency)
+                    self._process_pending_interruption
+                )
+                logger.debug(
+                    "VAD triggered before STT, waiting for transcript confirmation "
+                    "(pending interruption - NO PAUSE until confirmed, waiting up to 50ms)"
+                )
+            else:
+                # Already have a pending interruption, extend the timer
+                # This gives STT more time when VAD keeps triggering
+                if self._pending_interruption_timer:
+                    self._pending_interruption_timer.cancel()
+                self._pending_interruption_timer = self._session._loop.call_later(
+                    0.05,  # Reset timer to give STT more time (minimal latency)
+                    self._process_pending_interruption
+                )
+                logger.debug(
+                    "VAD triggered again while waiting for STT confirmation "
+                    "(extending wait time - NO PAUSE)"
+                )
+            # CRITICAL: Return early WITHOUT calling start_user_activity, pause, or interrupt
+            # This ensures NO pause happens while waiting for STT
+            return
+
+        # Clear pending interruption if we're proceeding
+        if self._pending_interruption_timer:
+            self._pending_interruption_timer.cancel()
+            self._pending_interruption_timer = None
+        self._pending_interruption = None
+
+        # Only reach here if we have a transcript AND it's confirmed to be a valid interrupt
+        # (not backchanneling). Now we can safely proceed with interruption.
+        logger.info(f"Proceeding with valid interruption for transcript: '{transcript}'")
+        
+        # CRITICAL: Only call start_user_activity/interrupt AFTER we've confirmed it's not backchanneling
+        # This prevents any server-side pause from happening for backchanneling words
+        # At this point, we've confirmed it's NOT backchanneling, so it's safe to interrupt
+        # NOTE: We only call start_user_activity here, not earlier, to prevent any pause
         if self._rt_session is not None:
+            # Only start user activity if we have a confirmed non-backchanneling transcript
             self._rt_session.start_user_activity()
 
         if (
@@ -1193,14 +1319,34 @@ class AgentActivity(RecognitionHooks):
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
+            # CRITICAL: Check if this transcript was already confirmed as backchanneling
+            # This prevents pause even if we somehow reach here with a backchanneling word
+            # Check BEFORE setting _paused_speech to prevent any pause state
+            transcript_normalized = transcript.lower().strip() if transcript else ""
+            if transcript_normalized in self._confirmed_backchanneling:
+                logger.warning(
+                    f" Attempted to pause for confirmed backchanneling '{transcript}' - preventing pause"
+                )
+                return
+            
+            # CRITICAL: NEVER pause if we're still waiting for STT confirmation
+            # This is the key fix - prevent ANY pause until we know it's not backchanneling
+            if self._waiting_for_stt_confirmation:
+                logger.info(
+                    f" Preventing pause while waiting for STT confirmation (transcript: '{transcript}') - "
+                    f"NO PAUSE until confirmed"
+                )
+                return
+            
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
             if self._false_interruption_timer:
                 self._false_interruption_timer.cancel()
                 self._false_interruption_timer = None
-
+            
             if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
+                # Only pause if we've confirmed it's NOT backchanneling
                 self._session.output.audio.pause()
                 self._session._update_agent_state("listening")
             else:
@@ -1208,6 +1354,110 @@ class AgentActivity(RecognitionHooks):
                     self._rt_session.interrupt()
 
                 self._current_speech.interrupt()
+
+    def _process_pending_interruption(self) -> None:
+        """Process a pending interruption after waiting for STT confirmation."""
+        # CRITICAL: Check if pending interruption was already cancelled
+        # This prevents race conditions where backchanneling was detected but timer still fires
+        if self._pending_interruption is None:
+            logger.debug("Pending interruption was already cancelled - ignoring timer")
+            self._waiting_for_stt_confirmation = False
+            return
+
+        # CRITICAL: Clear waiting flag first to prevent any pause operations
+        self._waiting_for_stt_confirmation = False
+
+        # Get the current transcript
+        transcript = ""
+        if self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ) or self._session.agent_state == "speaking"
+
+        if transcript:
+            should_interrupt = self._interruption_handler.should_interrupt(
+                transcript=transcript,
+                agent_is_speaking=agent_is_speaking,
+                activity=self,
+            )
+
+            if should_interrupt:
+                # Proceed with interruption
+                logger.debug(f"Pending interruption confirmed as valid interrupt: '{transcript}'")
+                self._pending_interruption = None
+                self._interrupt_by_audio_activity(transcript=transcript)
+            else:
+                # It was just backchanneling - cancel the pending interruption
+                # CRITICAL: Resume audio IMMEDIATELY if it was paused
+                logger.info(
+                    f"Pending interruption confirmed as backchanneling: '{transcript}' "
+                    f"(cancelling - NO INTERRUPTION, agent continues)"
+                )
+                self._pending_interruption = None
+                
+                # CRITICAL: Resume audio if it was paused (shouldn't happen, but safety check)
+                if (
+                    self._paused_speech
+                    and self._session.output.audio
+                    and self._session.output.audio.can_pause
+                ):
+                    logger.warning(
+                        f" Audio was paused for backchanneling '{transcript}' - resuming IMMEDIATELY"
+                    )
+                    self._session.output.audio.resume()
+                    self._session._update_agent_state("speaking")
+                    self._paused_speech = None
+        else:
+            # No transcript yet, but we've waited
+            # Check if user is still speaking - if so, wait a bit more
+            # If user stopped speaking and no transcript, it might be noise - don't interrupt
+            user_speaking = self._session.user_state == "speaking"
+            
+            if user_speaking:
+                # User is still speaking but no transcript yet - wait a bit more
+                # STT might be processing a longer utterance
+                logger.debug(
+                    f"No transcript yet but user still speaking, extending wait "
+                    f"(pending interruption - NO PAUSE, will wait for STT)"
+                )
+                # Set waiting flag again and extend the timer
+                self._waiting_for_stt_confirmation = True
+                if self._pending_interruption_timer:
+                    self._pending_interruption_timer.cancel()
+                self._pending_interruption_timer = self._session._loop.call_later(
+                    0.05,  # Wait another 50ms (minimal latency)
+                    self._process_pending_interruption
+                )
+                return
+            else:
+                # User stopped speaking and no transcript - likely noise or false VAD trigger
+                # Don't interrupt for noise - cancel the pending interruption
+                logger.info(
+                    "No transcript and user stopped speaking - likely noise or backchanneling, "
+                    "cancelling pending interruption (NO INTERRUPTION, agent continues)"
+                )
+                self._pending_interruption = None
+                
+                # CRITICAL: Resume audio if it was paused (shouldn't happen, but safety check)
+                if (
+                    self._paused_speech
+                    and self._session.output.audio
+                    and self._session.output.audio.can_pause
+                ):
+                    logger.warning(
+                        " Audio was paused but no transcript - resuming IMMEDIATELY (likely noise)"
+                    )
+                    self._session.output.audio.resume()
+                    self._session._update_agent_state("speaking")
+                    self._paused_speech = None
+                
+                # CRITICAL: Don't interrupt - this was likely a false positive or backchanneling
+                # that STT didn't transcribe (e.g., just a grunt or "uh")
+                return
 
     # region recognition hooks
 
@@ -1241,27 +1491,159 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # CRITICAL: VAD triggers before STT, so we should NEVER call interrupt logic
+            # until STT confirms what was said. This prevents ANY pause from happening.
+            # Instead, we set a pending interruption flag and wait for STT to confirm.
+            
+            # Check if agent is speaking
+            agent_is_speaking = (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            ) or self._session.agent_state == "speaking"
+            
+            if not agent_is_speaking:
+                # Agent is not speaking, so we can proceed normally
+                self._interrupt_by_audio_activity(transcript=None)
+                return
+            
+            # Agent is speaking - check if we have a transcript yet
+            transcript = None
+            if self._audio_recognition is not None:
+                transcript = self._audio_recognition.current_transcript
+            
+            if transcript:
+                # We have a transcript - check if it's backchanneling
+                should_interrupt = self._interruption_handler.should_interrupt(
+                    transcript=transcript,
+                    agent_is_speaking=agent_is_speaking,
+                    activity=self,
+                )
+                if not should_interrupt:
+                    # It's backchanneling - ignore completely, don't call interrupt logic
+                    logger.info(
+                        f" VAD detected but transcript '{transcript}' is backchanneling - "
+                        f"ignoring (NO INTERRUPTION, agent continues)"
+                    )
+                    return
+                # It's a valid interrupt - proceed
+                self._interrupt_by_audio_activity(transcript=transcript)
+            else:
+                # No transcript yet - set pending interruption and wait for STT
+                # DO NOT call _interrupt_by_audio_activity - this prevents any pause
+                if self._pending_interruption is None:
+                    self._pending_interruption = ""
+                    self._waiting_for_stt_confirmation = True
+                    if self._pending_interruption_timer:
+                        self._pending_interruption_timer.cancel()
+                    self._pending_interruption_timer = self._session._loop.call_later(
+                        0.05,  # Wait 50ms for STT (minimal latency)
+                        self._process_pending_interruption
+                    )
+                    logger.debug(
+                        "VAD triggered before STT, setting pending interruption "
+                        "(NO INTERRUPTION LOGIC CALLED - waiting for STT confirmation)"
+                    )
+                else:
+                    # Already have pending interruption - extend timer
+                    self._waiting_for_stt_confirmation = True
+                    if self._pending_interruption_timer:
+                        self._pending_interruption_timer.cancel()
+                    self._pending_interruption_timer = self._session._loop.call_later(
+                        0.05,  # Minimal latency
+                        self._process_pending_interruption
+                    )
+                    logger.debug(
+                        "VAD triggered again, extending pending interruption wait "
+                        "(NO INTERRUPTION LOGIC CALLED)"
+                    )
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text if ev.alternatives else ""
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
-                language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                language=ev.alternatives[0].language if ev.alternatives else None,
+                transcript=transcript,
                 is_final=False,
-                speaker_id=ev.alternatives[0].speaker_id,
+                speaker_id=ev.alternatives[0].speaker_id if ev.alternatives else None,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        if transcript and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Cancel pending interruption timer if we have transcript now
+            if self._pending_interruption_timer:
+                self._pending_interruption_timer.cancel()
+                self._pending_interruption_timer = None
+
+            # CRITICAL: Use the FULL accumulated transcript, not just this incremental event
+            # This handles cases like "Okay... yeah... uh-huh" where words come sequentially
+            full_transcript = transcript
+            if self._audio_recognition is not None:
+                accumulated = self._audio_recognition.current_transcript
+                if accumulated and len(accumulated) > len(transcript):
+                    full_transcript = accumulated
+                    logger.debug(
+                        f"Using accumulated transcript: '{full_transcript}' "
+                        f"(incremental was: '{transcript}')"
+                    )
+
+            # Check if this is an ignorable backchanneling word while agent is speaking
+            agent_is_speaking = (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            ) or self._session.agent_state == "speaking"
+
+            if agent_is_speaking:
+                should_interrupt = self._interruption_handler.should_interrupt(
+                    transcript=full_transcript,
+                    agent_is_speaking=agent_is_speaking,
+                    activity=self,
+                )
+
+                if not should_interrupt:
+                    # This is backchanneling - mark as confirmed and ignore completely
+                    transcript_normalized = full_transcript.lower().strip()
+                    self._confirmed_backchanneling.add(transcript_normalized)
+                    
+                    self._waiting_for_stt_confirmation = False
+                    if self._pending_interruption_timer:
+                        self._pending_interruption_timer.cancel()
+                        self._pending_interruption_timer = None
+                    self._pending_interruption = None
+                    
+                    # Resume audio if it was paused
+                    if (
+                        self._paused_speech
+                        and self._session.output.audio
+                        and self._session.output.audio.can_pause
+                    ):
+                        logger.warning(
+                            f" Audio was paused for backchanneling '{full_transcript}' - resuming IMMEDIATELY"
+                        )
+                        self._session.output.audio.resume()
+                        self._session._update_agent_state("speaking")
+                        self._paused_speech = None
+                    
+                    logger.info(
+                        f" Ignoring backchanneling in interim transcript: '{full_transcript}' "
+                        f"while agent is speaking (agent continues seamlessly - NO INTERRUPTION, NO PAUSE)"
+                    )
+                    return
+
+            # Process interruption with full transcript (either agent not speaking, or valid interrupt)
+            # Only reaches here if should_interrupt is True or agent is not speaking
+            # CRITICAL: Clear waiting flag before calling interrupt logic
+            self._waiting_for_stt_confirmation = False
+            self._interrupt_by_audio_activity(transcript=full_transcript)
 
             if (
                 speaking is False
@@ -1276,12 +1658,14 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text if ev.alternatives else ""
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
-                language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                language=ev.alternatives[0].language if ev.alternatives else None,
+                transcript=transcript,
                 is_final=True,
-                speaker_id=ev.alternatives[0].speaker_id,
+                speaker_id=ev.alternatives[0].speaker_id if ev.alternatives else None,
             ),
         )
         # agent speech might not be interrupted if VAD failed and a final transcript is received
@@ -1292,7 +1676,75 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Cancel pending interruption timer if we have final transcript now
+            if self._pending_interruption_timer:
+                self._pending_interruption_timer.cancel()
+                self._pending_interruption_timer = None
+
+            # CRITICAL: Use the FULL accumulated transcript for final events too
+            # This ensures sequential backchanneling like "Okay... yeah... uh-huh" is handled correctly
+            full_transcript = transcript
+            if self._audio_recognition is not None:
+                accumulated = self._audio_recognition.current_transcript
+                if accumulated and len(accumulated) > len(transcript):
+                    # Use the accumulated transcript which includes all words said so far
+                    full_transcript = accumulated
+                    logger.debug(
+                        f"Using accumulated transcript for final: '{full_transcript}' "
+                        f"(event was: '{transcript}')"
+                    )
+
+            # Check if this is an ignorable backchanneling word while agent is speaking
+            agent_is_speaking = (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            ) or self._session.agent_state == "speaking"
+
+            if agent_is_speaking:
+                should_interrupt = self._interruption_handler.should_interrupt(
+                    transcript=full_transcript,  # Use full accumulated transcript
+                    agent_is_speaking=agent_is_speaking,
+                    activity=self,
+                )
+
+                if not should_interrupt:
+                    # This is backchanneling - CRITICAL: Mark as confirmed backchanneling
+                    # This prevents any future pause attempts for this transcript
+                    transcript_normalized = full_transcript.lower().strip()
+                    self._confirmed_backchanneling.add(transcript_normalized)
+                    
+                    # Clear waiting flag and pending interruption
+                    self._waiting_for_stt_confirmation = False
+                    if self._pending_interruption_timer:
+                        self._pending_interruption_timer.cancel()
+                        self._pending_interruption_timer = None
+                    self._pending_interruption = None
+                    
+                    logger.info(
+                        f" Ignoring backchanneling in final transcript: '{full_transcript}' "
+                        f"while agent is speaking (agent continues seamlessly - NO INTERRUPTION, NO PAUSE, marked as backchanneling)"
+                    )
+                    
+                    # CRITICAL: Resume audio if it was paused (shouldn't happen, but safety check)
+                    # This handles the case where pause happened before we could prevent it
+                    if (
+                        self._paused_speech
+                        and self._session.output.audio
+                        and self._session.output.audio.can_pause
+                    ):
+                        logger.warning(
+                            f" Audio was paused for backchanneling '{full_transcript}' - resuming IMMEDIATELY"
+                        )
+                        self._session.output.audio.resume()
+                        self._session._update_agent_state("speaking")
+                        self._paused_speech = None
+                    
+                    # CRITICAL: Don't process this as an interruption - return early
+                    return
+
+            # Process interruption with full transcript (either agent not speaking, or valid interrupt)
+            self._interrupt_by_audio_activity(transcript=full_transcript)
 
             if (
                 speaking is False
@@ -1344,6 +1796,30 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+        
+        # CRITICAL: Check if this is backchanneling FIRST, before ANY other logic
+        # If it's backchanneling while agent is speaking, ignore this turn completely
+        # This prevents the interruption that happens in _user_turn_completed_task
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ) or self._session.agent_state == "speaking"
+        
+        if agent_is_speaking and info.new_transcript:
+            should_interrupt = self._interruption_handler.should_interrupt(
+                transcript=info.new_transcript,
+                agent_is_speaking=agent_is_speaking,
+                activity=self,
+            )
+            if not should_interrupt:
+                # This is backchanneling - do NOT commit this turn
+                # This prevents the speech interruption that would happen later
+                logger.info(
+                    f" Ignoring backchanneling turn: '{info.new_transcript}' while agent is speaking - "
+                    f"NOT committing turn (prevents interruption)"
+                )
+                return False  # Don't commit the turn
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
