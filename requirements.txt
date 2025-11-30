@@ -1,0 +1,14 @@
+# Core LiveKit Agents Framework
+livekit-agents>=1.0.0
+
+# Plugins used by the backchanneling agent example
+livekit-plugins-deepgram>=1.3.3
+livekit-plugins-groq>=1.3.3
+livekit-plugins-silero>=1.3.3
+
+# Environment variable management
+python-dotenv>=1.0.1
+
+# Note: This is a workspace project, so if you're developing locally,
+# you should use `uv sync --all-extras --dev` instead of pip install.
+# This requirements.txt is provided for reference or non-workspace installations.
