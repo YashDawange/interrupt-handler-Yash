@@ -1,0 +1,4 @@
+livekit-agents[openai, cartesia, elevenlabs, deepgram, silero, turn-detector, mcp]>=1.0
+livekit-plugins-groq
+python-dotenv>=1.0
+duckduckgo-search>=8.0
