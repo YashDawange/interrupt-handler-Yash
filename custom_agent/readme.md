@@ -99,8 +99,6 @@ STT: deepgram/nova-3
 
 LLM: openai/gpt-4o-mini
 
-TTS: cartesia/sonic-2
-
 Connect to your worker
 
 🔑 Required Environment Variables
