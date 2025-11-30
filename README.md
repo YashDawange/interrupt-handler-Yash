@@ -214,11 +214,8 @@ The interruption handler uses a **hybrid approach** with two detection methods:
 - No external dependencies
 - Works offline
 
-
-#### 2. Embedding-Based Semantic Similarity
-=======
 #### 2. Embedding-Based Semantic Similarity (Optional)
->>>>>>> Stashed changes
+
 - More robust and accurate
 - Understands semantic meaning, not just exact words
 - Handles variations and paraphrases
@@ -249,7 +246,6 @@ The agent determines if it's speaking by checking:
 
 
 ## Files Modified
-=======
 
 1. `livekit/agents/voice/interruption_handler.py` - New module for interruption logic
 2. `livekit/agents/voice/agent_activity.py` - Integrated interruption handler into agent activity
@@ -268,7 +264,7 @@ The agent determines if it's speaking by checking:
 1. `examples/voice_agents/intelligent_interruption_agent.py` - Example agent demonstrating the functionality
 2. `.env.example` - Example environment variables
 
-=======
+
 
 
 ## Notes
@@ -281,4 +277,3 @@ The agent determines if it's speaking by checking:
 - Embeddings are cached to minimize API calls and improve performance
 - Requires `numpy` for optimal performance (falls back to manual cosine similarity if unavailable)
 
->>>>>>> Stashed changes
