@@ -1,375 +1,263 @@
-<!--BEGIN_BANNER_IMAGE-->
+# Intelligent Interruption Handling
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="/.github/banner_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="/.github/banner_light.png">
-  <img style="width:100%;" alt="The LiveKit icon, the name of the repository and some sample code in the background." src="https://raw.githubusercontent.com/livekit/agents/main/.github/banner_light.png">
-</picture>
+Demo Video - [https://drive.google.com/file/d/1fSCWHF4F6WUgtLt2yAQAg7kh9mBni8CD/view?usp=sharing](Demo)
 
-<!--END_BANNER_IMAGE-->
-<br />
+This implementation adds context-aware interruption handling to LiveKit agents, allowing them to distinguish between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
 
-![PyPI - Version](https://img.shields.io/pypi/v/livekit-agents)
-[![PyPI Downloads](https://static.pepy.tech/badge/livekit-agents/month)](https://pepy.tech/projects/livekit-agents)
-[![Slack community](https://img.shields.io/endpoint?url=https%3A%2F%2Flivekit.io%2Fbadges%2Fslack)](https://livekit.io/join-slack)
-[![Twitter Follow](https://img.shields.io/twitter/follow/livekit)](https://twitter.com/livekit)
-[![Ask DeepWiki for understanding the codebase](https://deepwiki.com/badge.svg)](https://deepwiki.com/livekit/agents)
-[![License](https://img.shields.io/github/license/livekit/livekit)](https://github.com/livekit/livekit/blob/master/LICENSE)
+## Problem
 
-<br />
+LiveKit's default Voice Activity Detection (VAD) is too sensitive. When the AI agent is explaining something important, user feedback like "yeah," "ok," "aha," or "hmm" (known as backchanneling) is misinterpreted as an interruption, causing the agent to abruptly stop speaking.
 
-Looking for the JS/TS library? Check out [AgentsJS](https://github.com/livekit/agents-js)
 
-## What is Agents?
-
-<!--BEGIN_DESCRIPTION-->
-
-The Agent Framework is designed for building realtime, programmable participants
-that run on servers. Use it to create conversational, multi-modal voice
-agents that can see, hear, and understand.
-
-<!--END_DESCRIPTION-->
-
-## Features
-
-- **Flexible integrations**: A comprehensive ecosystem to mix and match the right STT, LLM, TTS, and Realtime API to suit your use case.
-- **Integrated job scheduling**: Built-in task scheduling and distribution with [dispatch APIs](https://docs.livekit.io/agents/build/dispatch/) to connect end users to agents.
-- **Extensive WebRTC clients**: Build client applications using LiveKit's open-source SDK ecosystem, supporting all major platforms.
-- **Telephony integration**: Works seamlessly with LiveKit's [telephony stack](https://docs.livekit.io/sip/), allowing your agent to make calls to or receive calls from phones.
-- **Exchange data with clients**: Use [RPCs](https://docs.livekit.io/home/client/data/rpc/) and other [Data APIs](https://docs.livekit.io/home/client/data/) to seamlessly exchange data with clients.
-- **Semantic turn detection**: Uses a transformer model to detect when a user is done with their turn, helps to reduce interruptions.
-- **MCP support**: Native support for MCP. Integrate tools provided by MCP servers with one loc.
-- **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
-- **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
-
-## Installation
-
-To install the core Agents library, along with plugins for popular model providers:
+## Running the Example
+1. Clone the repository and install the dependencies
 
 ```bash
-pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"
+git clone https://github.com/Dark-Sys-Jenkins/agents-assignment.git
+cd agents-assignment
+uv sync --all-extras --dev
+```
+2. Set up environment variables and update the .env file with your LiveKit credentials and model provider API keys.
+```bash
+cp .env.example .env
 ```
 
-## Docs and guides
+3. Run the example agent
+```bash
+uv run python examples/voice_agents/intelligent_interruption_agent.py console
+```
 
-Documentation on the framework and how to use it can be found [here](https://docs.livekit.io/agents/)
+## Solution
 
-## Core concepts
+The intelligent interruption handler implements a logic layer that:
 
-- Agent: An LLM-based application with defined instructions.
-- AgentSession: A container for agents that manages interactions with end users.
-- entrypoint: The starting point for an interactive session, similar to a request handler in a web server.
-- Worker: The main process that coordinates job scheduling and launches agents for user sessions.
+1. **Ignores backchanneling words when agent is speaking**: Words like "yeah", "ok", "hmm" are filtered out when the agent is actively generating or playing audio.
+
+2. **Responds to backchanneling when agent is silent**: The same words are treated as valid input when the agent is not speaking, allowing natural conversation flow.
+
+3. **Always interrupts for commands**: Words like "stop", "wait", "no" always interrupt the agent, regardless of state.
+
+4. **Handles mixed inputs**: If the user says something like "yeah okay but wait", the agent will interrupt because "wait" is a command word.
+
+## Implementation Details
+
+### Core Components
+
+1. **InterruptionHandler** (`livekit/agents/voice/interruption_handler.py`):
+   - Configurable list of ignore words (backchanneling)
+   - Configurable list of interrupt words (commands)
+   - State-aware filtering logic
+   - Word extraction and normalization
+   - **Embedding-based semantic similarity checking** (optional, using OpenAI embeddings)
+   - Hybrid approach: embeddings first, word matching as fallback
+
+2. **AgentActivity Integration** (`livekit/agents/voice/agent_activity.py`):
+   - Integrated into the `_interrupt_by_audio_activity` method
+   - Handles false start interruptions (VAD triggers before STT confirms)
+   - Processes interim and final transcripts with intelligent filtering
+
+### Key Features
+
+- **Configurable Ignore List**: Define words to ignore when agent is speaking (default: "yeah", "ok", "hmm", "uh-huh", "right", etc.)
+- **Configurable Interrupt List**: Define words that always interrupt (default: "stop", "wait", "no", "halt", "cancel", "pause")
+- **State-Based Filtering**: Only applies ignore logic when agent is actively speaking
+- **False Start Handling**: Handles cases where VAD triggers before STT confirms the word is ignorable
+- **Environment Variable Support**: Configure ignore/interrupt words via environment variables
+- **Embedding-Based Semantic Checking**: Optional OpenAI embedding-based detection for more robust backchanneling identification
+- **Hybrid Approach**: Uses embeddings when available, falls back to word matching for reliability
+
+## Configuration
+
+### Environment Variables
+
+You can configure the ignore and interrupt words using environment variables:
+
+```bash
+# Comma-separated list of words to ignore when agent is speaking
+LIVEKIT_AGENT_IGNORE_WORDS="yeah,ok,okay,hmm,uh-huh,right,sure,yep,mhm,aha"
+
+# Comma-separated list of words that should always interrupt
+LIVEKIT_AGENT_INTERRUPT_WORDS="stop,wait,no,halt,cancel,pause"
+
+# Enable embedding-based semantic similarity checking (optional)
+LIVEKIT_AGENT_USE_EMBEDDINGS=true
+
+# Set similarity threshold for embeddings (0.0-1.0, higher = more strict)
+# Default: 0.75
+LIVEKIT_AGENT_EMBEDDING_THRESHOLD=0.75
+
+# Set OpenAI embedding model to use
+# Default: text-embedding-3-small
+LIVEKIT_AGENT_EMBEDDING_MODEL=text-embedding-3-small
+
+# OpenAI API key (required if using embeddings)
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+### Embedding-Based Semantic Checking
+
+The interruption handler now supports **embedding-based semantic similarity checking** using OpenAI embeddings. This provides a more robust way to detect backchanneling by understanding the semantic meaning of user input, not just exact word matches.
+
+#### Benefits of Embedding-Based Checking
+
+- **Handles Variations**: Recognizes semantic equivalents like "gotcha", "I understand", "makes sense" as backchanneling
+- **More Robust**: Understands context and meaning, not just exact word matches
+- **Handles Paraphrases**: Catches variations like "that's right", "exactly", "absolutely" as backchanneling
+- **Hybrid Approach**: Falls back to word-based matching if embeddings fail or are unavailable
+
+#### How It Works
+
+1. When embeddings are enabled, the handler:
+   - Generates embeddings for the user's transcript using OpenAI's embedding API
+   - Compares it against cached embeddings of known backchanneling phrases
+   - Uses cosine similarity to determine if the transcript is semantically similar to backchanneling
+   - If similarity exceeds the threshold (default: 0.75), treats it as backchanneling
+
+2. **Caching**: 
+   - Backchanneling embeddings are initialized once and cached
+   - Transcript embeddings are cached for 1 hour to reduce API calls
+   - Significantly improves performance and reduces costs
+
+3. **Fallback**:
+   - If embeddings fail or are disabled, automatically falls back to word-based matching
+   - Ensures reliability even if the OpenAI API is unavailable
+
+#### Performance Considerations
+
+- **First Use**: Initial embedding generation for backchanneling phrases happens on first use (one-time cost)
+- **Subsequent Uses**: Transcript embeddings are cached, making subsequent checks fast
+- **API Costs**: Minimal - embeddings are cached and only generated once per unique transcript
+- **Latency**: Embedding checks add ~50-200ms latency on first use, then use cached results
+
+#### When to Use Embeddings
+
+- **Recommended for**: Production environments where you want maximum accuracy
+- **Not needed for**: Simple use cases where word-based matching is sufficient
+- **Requires**: OpenAI API key and internet connection
+
+### Programmatic Configuration
+
+The `InterruptionHandler` can also be configured programmatically:
+
+```python
+from livekit.agents.voice.interruption_handler import InterruptionHandler
+
+handler = InterruptionHandler(
+    ignore_words=["yeah", "ok", "hmm"],
+    interrupt_words=["stop", "wait"],
+    use_embeddings=True,
+    embedding_similarity_threshold=0.75,
+    embedding_model="text-embedding-3-small"
+)
+```
+
+Note: The handler is automatically initialized in `AgentActivity`. For custom configurations, you would need to modify the `AgentActivity.__init__` method.
 
 ## Usage
 
-### Simple voice agent
+The intelligent interruption handler is **automatically enabled** for all agents. No additional configuration is required - it works out of the box with the existing LiveKit agent framework.
 
----
+### Example Agent
+
+See `examples/voice_agents/intelligent_interruption_agent.py` for a complete example.
 
 ```python
-from livekit.agents import (
-    Agent,
-    AgentSession,
-    JobContext,
-    RunContext,
-    WorkerOptions,
-    cli,
-    function_tool,
+from livekit.agents import voice_assistant
+
+assistant = voice_assistant.VoiceAssistant(
+    vad=vad.VAD.load(),
+    stt=stt.STT.load(),
+    llm=llm.LLM.load(),
+    tts=tts.TTS.load(),
 )
-from livekit.plugins import deepgram, elevenlabs, openai, silero
-
-@function_tool
-async def lookup_weather(
-    context: RunContext,
-    location: str,
-):
-    """Used to look up weather information."""
-
-    return {"weather": "sunny", "temperature": 70}
-
-
-async def entrypoint(ctx: JobContext):
-    await ctx.connect()
-
-    agent = Agent(
-        instructions="You are a friendly voice assistant built by LiveKit.",
-        tools=[lookup_weather],
-    )
-    session = AgentSession(
-        vad=silero.VAD.load(),
-        # any combination of STT, LLM, TTS, or realtime API can be used
-        stt=deepgram.STT(model="nova-3"),
-        llm=openai.LLM(model="gpt-4o-mini"),
-        tts=elevenlabs.TTS(),
-    )
-
-    await session.start(agent=agent, room=ctx.room)
-    await session.generate_reply(instructions="greet the user and ask about their day")
-
-
-if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
 
-You'll need the following environment variables for this example:
+The interruption handler is automatically integrated and will:
+- Ignore "yeah", "ok", "hmm" when the agent is speaking
+- Respond to these words when the agent is silent
+- Always interrupt for "stop", "wait", "no"
 
-- DEEPGRAM_API_KEY
-- OPENAI_API_KEY
-- ELEVEN_API_KEY
+## Behavior Matrix
 
-### Multi-agent handoff
+| User Input | Agent State | Behavior |
+|------------|-------------|----------|
+| "Yeah" / "Ok" / "Hmm" | Agent is Speaking | **IGNORE** - Agent continues speaking |
+| "Wait" / "Stop" / "No" | Agent is Speaking | **INTERRUPT** - Agent stops immediately |
+| "Yeah" / "Ok" / "Hmm" | Agent is Silent | **RESPOND** - Agent processes as valid input |
+| "Start" / "Hello" | Agent is Silent | **RESPOND** - Normal conversational behavior |
+| "Yeah okay but wait" | Agent is Speaking | **INTERRUPT** - Contains interrupt word |
 
----
+## Test Scenarios
 
-This code snippet is abbreviated. For the full example, see [multi_agent.py](examples/voice_agents/multi_agent.py)
+### Scenario 1: The Long Explanation
+- **Context**: Agent is reading a long paragraph about history
+- **User Action**: User says "Okay... yeah... uh-huh" while the agent is talking
+- **Result**: Agent audio does not break. It ignores the user input completely.
 
-```python
-...
-class IntroAgent(Agent):
-    def __init__(self) -> None:
-        super().__init__(
-            instructions=f"You are a story teller. Your goal is to gather a few pieces of information from the user to make the story personalized and engaging."
-            "Ask the user for their name and where they are from"
-        )
+### Scenario 2: The Passive Affirmation
+- **Context**: Agent asks "Are you ready?" and goes silent
+- **User Action**: User says "Yeah."
+- **Result**: Agent processes "Yeah" as an answer and proceeds (e.g., "Okay, starting now")
 
-    async def on_enter(self):
-        self.session.generate_reply(instructions="greet the user and gather information")
+### Scenario 3: The Correction
+- **Context**: Agent is counting "One, two, three..."
+- **User Action**: User says "No stop."
+- **Result**: Agent cuts off immediately.
 
-    @function_tool
-    async def information_gathered(
-        self,
-        context: RunContext,
-        name: str,
-        location: str,
-    ):
-        """Called when the user has provided the information needed to make the story personalized and engaging.
+### Scenario 4: The Mixed Input
+- **Context**: Agent is speaking
+- **User Action**: User says "Yeah okay but wait."
+- **Result**: Agent stops (because "but wait" contains interrupt words).
 
-        Args:
-            name: The name of the user
-            location: The location of the user
-        """
+## Technical Details
 
-        context.userdata.name = name
-        context.userdata.location = location
+### Detection Methods
 
-        story_agent = StoryAgent(name, location)
-        return story_agent, "Let's start the story!"
+The interruption handler uses a **hybrid approach** with two detection methods:
+
+#### 1. Word-Based Matching (Default)
+- Fast and lightweight
+- Exact word matching with fuzzy variations (e.g., "mhmm" → "mhm")
+- No external dependencies
+- Works offline
+
+#### 2. Embedding-Based Semantic Similarity
+- More robust and accurate
+- Understands semantic meaning, not just exact words
+- Handles variations and paraphrases
+- Requires OpenAI API key
+- Uses cosine similarity to compare embeddings
+- Falls back to word matching if unavailable
+
+The handler tries embedding-based checking first (if enabled), then falls back to word-based matching for reliability.
+
+### False Start Interruption Handling
+
+One challenge is that VAD (Voice Activity Detection) can trigger before STT (Speech-to-Text) confirms what the user said. The implementation handles this by:
+
+1. When VAD triggers but no transcript is available yet, the interruption is marked as "pending"
+2. A timer (800ms) is set to wait for STT confirmation
+3. When STT provides the transcript:
+   - If it's an ignorable word (via word matching or embeddings), the pending interruption is cancelled
+   - If it's a command word, the interruption proceeds
+   - If no transcript arrives within the timeout, the interruption proceeds (handles STT failures)
+
+### State Detection
+
+The agent determines if it's speaking by checking:
+- `_current_speech` is not None and not interrupted
+- `_current_speech.allow_interruptions` is True
+- `_session.agent_state == "speaking"`
 
 
-class StoryAgent(Agent):
-    def __init__(self, name: str, location: str) -> None:
-        super().__init__(
-            instructions=f"You are a storyteller. Use the user's information in order to make the story personalized."
-            f"The user's name is {name}, from {location}"
-            # override the default model, switching to Realtime API from standard LLMs
-            llm=openai.realtime.RealtimeModel(voice="echo"),
-            chat_ctx=chat_ctx,
-        )
 
-    async def on_enter(self):
-        self.session.generate_reply()
+## Files Modified
 
+1. `livekit/agents/voice/interruption_handler.py` - New module for interruption logic
+2. `livekit/agents/voice/agent_activity.py` - Integrated interruption handler into agent activity
 
-async def entrypoint(ctx: JobContext):
-    await ctx.connect()
+## Files Added
 
-    userdata = StoryData()
-    session = AgentSession[StoryData](
-        vad=silero.VAD.load(),
-        stt=deepgram.STT(model="nova-3"),
-        llm=openai.LLM(model="gpt-4o-mini"),
-        tts=openai.TTS(voice="echo"),
-        userdata=userdata,
-    )
+1. `examples/voice_agents/intelligent_interruption_agent.py` - Example agent demonstrating the functionality
+2. `.env.example` - Example environment variables
 
-    await session.start(
-        agent=IntroAgent(),
-        room=ctx.room,
-    )
-...
-```
-
-### Testing
-
-Automated tests are essential for building reliable agents, especially with the non-deterministic behavior of LLMs. LiveKit Agents include native test integration to help you create dependable agents.
-
-```python
-@pytest.mark.asyncio
-async def test_no_availability() -> None:
-    llm = google.LLM()
-    async AgentSession(llm=llm) as sess:
-        await sess.start(MyAgent())
-        result = await sess.run(
-            user_input="Hello, I need to place an order."
-        )
-        result.expect.skip_next_event_if(type="message", role="assistant")
-        result.expect.next_event().is_function_call(name="start_order")
-        result.expect.next_event().is_function_call_output()
-        await (
-            result.expect.next_event()
-            .is_message(role="assistant")
-            .judge(llm, intent="assistant should be asking the user what they would like")
-        )
-
-```
-
-## Examples
-
-<table>
-<tr>
-<td width="50%">
-<h3>🎙️ Starter Agent</h3>
-<p>A starter agent optimized for voice conversations.</p>
-<p>
-<a href="examples/voice_agents/basic_agent.py">Code</a>
-</p>
-</td>
-<td width="50%">
-<h3>🔄 Multi-user push to talk</h3>
-<p>Responds to multiple users in the room via push-to-talk.</p>
-<p>
-<a href="examples/voice_agents/push_to_talk.py">Code</a>
-</p>
-</td>
-</tr>
-
-<tr>
-<td width="50%">
-<h3>🎵 Background audio</h3>
-<p>Background ambient and thinking audio to improve realism.</p>
-<p>
-<a href="examples/voice_agents/background_audio.py">Code</a>
-</p>
-</td>
-<td width="50%">
-<h3>🛠️ Dynamic tool creation</h3>
-<p>Creating function tools dynamically.</p>
-<p>
-<a href="examples/voice_agents/dynamic_tool_creation.py">Code</a>
-</p>
-</td>
-</tr>
-
-<tr>
-<td width="50%">
-<h3>☎️ Outbound caller</h3>
-<p>Agent that makes outbound phone calls</p>
-<p>
-<a href="https://github.com/livekit-examples/outbound-caller-python">Code</a>
-</p>
-</td>
-<td width="50%">
-<h3>📋 Structured output</h3>
-<p>Using structured output from LLM to guide TTS tone.</p>
-<p>
-<a href="examples/voice_agents/structured_output.py">Code</a>
-</p>
-</td>
-</tr>
-
-<tr>
-<td width="50%">
-<h3>🔌 MCP support</h3>
-<p>Use tools from MCP servers</p>
-<p>
-<a href="examples/voice_agents/mcp">Code</a>
-</p>
-</td>
-<td width="50%">
-<h3>💬 Text-only agent</h3>
-<p>Skip voice altogether and use the same code for text-only integrations</p>
-<p>
-<a href="examples/other/text_only.py">Code</a>
-</p>
-</td>
-</tr>
-
-<tr>
-<td width="50%">
-<h3>📝 Multi-user transcriber</h3>
-<p>Produce transcriptions from all users in the room</p>
-<p>
-<a href="examples/other/transcription/multi-user-transcriber.py">Code</a>
-</p>
-</td>
-<td width="50%">
-<h3>🎥 Video avatars</h3>
-<p>Add an AI avatar with Tavus, Beyond Presence, and Bithuman</p>
-<p>
-<a href="examples/avatar_agents/">Code</a>
-</p>
-</td>
-</tr>
-
-<tr>
-<td width="50%">
-<h3>🍽️ Restaurant ordering and reservations</h3>
-<p>Full example of an agent that handles calls for a restaurant.</p>
-<p>
-<a href="examples/voice_agents/restaurant_agent.py">Code</a>
-</p>
-</td>
-<td width="50%">
-<h3>👁️ Gemini Live vision</h3>
-<p>Full example (including iOS app) of Gemini Live agent that can see.</p>
-<p>
-<a href="https://github.com/livekit-examples/vision-demo">Code</a>
-</p>
-</td>
-</tr>
-
-</table>
-
-## Running your agent
-
-### Testing in terminal
-
-```shell
-python myagent.py console
-```
-
-Runs your agent in terminal mode, enabling local audio input and output for testing.
-This mode doesn't require external servers or dependencies and is useful for quickly validating behavior.
-
-### Developing with LiveKit clients
-
-```shell
-python myagent.py dev
-```
-
-Starts the agent server and enables hot reloading when files change. This mode allows each process to host multiple concurrent agents efficiently.
-
-The agent connects to LiveKit Cloud or your self-hosted server. Set the following environment variables:
-- LIVEKIT_URL
-- LIVEKIT_API_KEY
-- LIVEKIT_API_SECRET
-
-You can connect using any LiveKit client SDK or telephony integration.
-To get started quickly, try the [Agents Playground](https://agents-playground.livekit.io/).
-
-### Running for production
-
-```shell
-python myagent.py start
-```
-
-Runs the agent with production-ready optimizations.
-
-## Contributing
-
-The Agents framework is under active development in a rapidly evolving field. We welcome and appreciate contributions of any kind, be it feedback, bugfixes, features, new plugins and tools, or better documentation. You can file issues under this repo, open a PR, or chat with us in LiveKit's [Slack community](https://livekit.io/join-slack).
-
-<!--BEGIN_REPO_NAV-->
-<br/><table>
-<thead><tr><th colspan="2">LiveKit Ecosystem</th></tr></thead>
-<tbody>
-<tr><td>LiveKit SDKs</td><td><a href="https://github.com/livekit/client-sdk-js">Browser</a> · <a href="https://github.com/livekit/client-sdk-swift">iOS/macOS/visionOS</a> · <a href="https://github.com/livekit/client-sdk-android">Android</a> · <a href="https://github.com/livekit/client-sdk-flutter">Flutter</a> · <a href="https://github.com/livekit/client-sdk-react-native">React Native</a> · <a href="https://github.com/livekit/rust-sdks">Rust</a> · <a href="https://github.com/livekit/node-sdks">Node.js</a> · <a href="https://github.com/livekit/python-sdks">Python</a> · <a href="https://github.com/livekit/client-sdk-unity">Unity</a> · <a href="https://github.com/livekit/client-sdk-unity-web">Unity (WebGL)</a> · <a href="https://github.com/livekit/client-sdk-esp32">ESP32</a></td></tr><tr></tr>
-<tr><td>Server APIs</td><td><a href="https://github.com/livekit/node-sdks">Node.js</a> · <a href="https://github.com/livekit/server-sdk-go">Golang</a> · <a href="https://github.com/livekit/server-sdk-ruby">Ruby</a> · <a href="https://github.com/livekit/server-sdk-kotlin">Java/Kotlin</a> · <a href="https://github.com/livekit/python-sdks">Python</a> · <a href="https://github.com/livekit/rust-sdks">Rust</a> · <a href="https://github.com/agence104/livekit-server-sdk-php">PHP (community)</a> · <a href="https://github.com/pabloFuente/livekit-server-sdk-dotnet">.NET (community)</a></td></tr><tr></tr>
-<tr><td>UI Components</td><td><a href="https://github.com/livekit/components-js">React</a> · <a href="https://github.com/livekit/components-android">Android Compose</a> · <a href="https://github.com/livekit/components-swift">SwiftUI</a> · <a href="https://github.com/livekit/components-flutter">Flutter</a></td></tr><tr></tr>
-<tr><td>Agents Frameworks</td><td><b>Python</b> · <a href="https://github.com/livekit/agents-js">Node.js</a> · <a href="https://github.com/livekit/agent-playground">Playground</a></td></tr><tr></tr>
-<tr><td>Services</td><td><a href="https://github.com/livekit/livekit">LiveKit server</a> · <a href="https://github.com/livekit/egress">Egress</a> · <a href="https://github.com/livekit/ingress">Ingress</a> · <a href="https://github.com/livekit/sip">SIP</a></td></tr><tr></tr>
-<tr><td>Resources</td><td><a href="https://docs.livekit.io">Docs</a> · <a href="https://github.com/livekit-examples">Example apps</a> · <a href="https://livekit.io/cloud">Cloud</a> · <a href="https://docs.livekit.io/home/self-hosting/deployment">Self-hosting</a> · <a href="https://github.com/livekit/livekit-cli">CLI</a></td></tr>
-</tbody>
-</table>
-<!--END_REPO_NAV-->
