@@ -2,7 +2,7 @@
 
 ## Demo Video Link
 
-[text](https://drive.google.com/file/d/17U6Vh20zr3VTd4XOv6uQ3YKwhn9wQC2e/view?usp=drivesdk)
+[Demo Video Link Here](https://drive.google.com/file/d/17U6Vh20zr3VTd4XOv6uQ3YKwhn9wQC2e/view?usp=drivesdk)
 
 ## Overview
 
