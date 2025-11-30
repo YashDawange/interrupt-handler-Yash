@@ -93,7 +93,7 @@ python -m dotenv run -- python agent_test.py console
 
 ## 🎥 Demo Video
 
-A short demo video namded **demo.mp3** showing all test cases has been uploaded along with this submission to demonstrate:
+A short demo video namded **demo.mp4** showing all test cases has been uploaded along with this submission to demonstrate:
 
 1. The agent ignoring filler words while speaking
 2. Responding correctly when silent
