@@ -16,7 +16,6 @@ from livekit.agents import (
 )
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -91,7 +90,8 @@ async def entrypoint(ctx: JobContext):
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
-        turn_detection=MultilingualModel(),
+        # Using simple "vad" mode for testing (no model file needed)
+        turn_detection="vad",
         vad=ctx.proc.userdata["vad"],
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
@@ -100,6 +100,9 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        # Intelligent interruption handling: ignore backchannel words when agent is speaking
+        # but process them normally when agent is silent
+        ignored_interruption_words=["yeah", "ok", "hmm", "right", "uh-huh"],
     )
 
     # log metrics as they are emitted, and total usage after session is over

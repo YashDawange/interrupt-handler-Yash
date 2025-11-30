@@ -164,6 +164,31 @@ class AgentActivity(RecognitionHooks):
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
 
+    def _is_ignored_transcript(self, text: str) -> bool:
+        """
+        Check if the transcript should be ignored based on the ignored_interruption_words list.
+        Returns True if ALL words in the transcript are in the ignored list.
+        """
+        import string
+
+        # Normalize text: lowercase and remove punctuation
+        text = text.lower().strip()
+        text = text.translate(str.maketrans("", "", string.punctuation))
+        words = text.split()
+
+        if not words:
+            return False
+
+        ignored_words = self._session.options.ignored_interruption_words
+        # Normalize ignored words as well to match text normalization
+        normalized_ignored_words = set()
+        for word in ignored_words:
+            w = word.lower().strip()
+            w = w.translate(str.maketrans("", "", string.punctuation))
+            normalized_ignored_words.add(w)
+
+        return all(word in normalized_ignored_words for word in words)
+
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
     ) -> TurnDetectionMode | None:
@@ -1185,6 +1210,21 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        # Intelligent Interruption Handling
+        # If the agent is speaking, we check if the transcript consists only of ignored words.
+        # If so, we do NOT interrupt.
+        # If we don't have a transcript yet (VAD only), we also do NOT interrupt (wait for STT).
+        if self.stt is not None and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+            if not text:
+                # VAD triggered but no transcript yet.
+                # To support "Stop!", we must wait for STT.
+                # So we ignore VAD-only interruptions when speaking.
+                return
+
+            if self._is_ignored_transcript(text):
+                return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1377,6 +1417,19 @@ class AgentActivity(RecognitionHooks):
         ):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
+            return False
+
+        if (
+            self._current_speech is not None
+            and self._current_speech.allow_interruptions
+            and not self._current_speech.interrupted
+            and self._is_ignored_transcript(info.new_transcript)
+        ):
+            self._cancel_preemptive_generation()
+            logger.debug(
+                "ignoring user input (interruption ignored)",
+                extra={"user_input": info.new_transcript},
+            )
             return False
 
         old_task = self._user_turn_completed_atask
