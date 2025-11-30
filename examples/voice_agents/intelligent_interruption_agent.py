@@ -18,7 +18,7 @@ from livekit.agents import (
     cli,
     function_tool,
 )
-from livekit.agents.llm import RunContext
+from livekit.agents.voice.events import RunContext
 from livekit.plugins import deepgram, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
