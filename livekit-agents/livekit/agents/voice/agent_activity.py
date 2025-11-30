@@ -1174,6 +1174,32 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Check for backchannel filtering when agent is speaking
+        if (
+            self.stt is not None
+            and opt.backchannel_words is not None
+            and len(opt.backchannel_words) > 0
+            and self._audio_recognition is not None
+            and self._current_speech is not None
+            and not self._current_speech.interrupted
+        ):
+            text = self._audio_recognition.current_transcript.strip().lower()
+            if text:
+                # Split the transcript into words
+                words = split_words(text, split_character=True)
+                # Normalize backchannel words to lowercase
+                backchannel_set = {word.lower() for word in opt.backchannel_words}
+                
+                # Check if ALL words in the transcript are backchannel words
+                non_backchannel_words = [w for w in words if w.lower() not in backchannel_set]
+                
+                if len(non_backchannel_words) == 0 and len(words) > 0:
+                    # User only said backchannel words while agent is speaking - ignore interruption
+                    logger.debug(
+                        f"Ignoring backchannel input while agent speaking: '{text}'"
+                    )
+                    return
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
@@ -1241,6 +1267,20 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
+            # If backchannel filtering is enabled and STT is available,
+            # delay VAD-based interruption until we have transcript to check
+            opt = self._session.options
+            if (
+                self.stt is not None
+                and opt.backchannel_words is not None
+                and len(opt.backchannel_words) > 0
+                and self._current_speech is not None
+                and not self._current_speech.interrupted
+            ):
+                # Don't interrupt on VAD alone - wait for STT transcript
+                # The on_interim_transcript callback will handle interruption with text
+                return
+            
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
