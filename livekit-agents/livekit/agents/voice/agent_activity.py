@@ -74,6 +74,8 @@ from .generation import (
     remove_instructions,
     update_instructions,
 )
+from .interruption_config import InterruptionConfig
+from .interruption_filter import InterruptionDecision, InterruptionFilter
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -163,6 +165,17 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+        # Initialize interruption filter if smart interruption is enabled
+        self._interruption_filter: InterruptionFilter | None = None
+        if self._session.options.enable_smart_interruption:
+            config = self._session.options.interruption_config or InterruptionConfig()
+            self._interruption_filter = InterruptionFilter(config)
+            logger.info(
+                "Smart interruption filter enabled with %d backchannel words and %d interrupt keywords",
+                len(config.backchannel_words),
+                len(config.interrupt_keywords),
+            )
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1214,6 +1227,10 @@ class AgentActivity(RecognitionHooks):
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
 
+        # Update interruption filter state
+        if self._interruption_filter:
+            self._interruption_filter.update_agent_state(self._session._agent_state)
+
         if self._false_interruption_timer:
             # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
@@ -1235,29 +1252,68 @@ class AgentActivity(RecognitionHooks):
             # schedule a resume timer when user stops speaking
             self._start_false_interruption_timer(timeout)
 
-    def on_vad_inference_done(self, ev: vad.VADEvent) -> None:
+    async def on_vad_inference_done(self, ev: vad.VADEvent) -> None:
         if self._turn_detection in ("manual", "realtime_llm"):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
 
+        # Check with interruption filter if enabled
+        if self._interruption_filter and ev.speech_duration >= self._session.options.min_interruption_duration:
+            # Update filter with current agent state
+            self._interruption_filter.update_agent_state(self._session._agent_state)
+
+            # Pass VAD event to filter for decision
+            decision, processed_event = await self._interruption_filter.on_vad_event(ev)
+
+            if decision == InterruptionDecision.PENDING:
+                # Filter is waiting for STT confirmation, don't interrupt yet
+                logger.debug("Smart interruption: buffering VAD event, waiting for STT")
+                return
+            elif decision == InterruptionDecision.IGNORE:
+                # Filter determined this is backchannel, ignore
+                logger.debug("Smart interruption: ignoring VAD event (agent speaking)")
+                return
+            # decision == RESPOND: process normally (fall through)
+
         if ev.speech_duration >= self._session.options.min_interruption_duration:
             self._interrupt_by_audio_activity()
 
-    def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
+    async def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript_text = ev.alternatives[0].text
+
+        # Check with interruption filter if enabled and we have pending interruptions
+        should_interrupt = True
+        if self._interruption_filter and self._interruption_filter.has_pending_interruptions():
+            # Pass STT transcript to filter for analysis
+            decision = await self._interruption_filter.on_stt_event(
+                transcript=transcript_text,
+                is_final=False  # interim transcripts are not final
+            )
+
+            if decision == InterruptionDecision.IGNORE:
+                # Filter determined this is backchannel, don't interrupt
+                logger.debug(
+                    f"Smart interruption: ignoring interim transcript '{transcript_text}' (backchannel)"
+                )
+                should_interrupt = False
+            elif decision == InterruptionDecision.PENDING:
+                # Still waiting for more data
+                should_interrupt = False
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript_text,
                 is_final=False,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        if should_interrupt and transcript_text and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
@@ -1271,15 +1327,33 @@ class AgentActivity(RecognitionHooks):
                 # schedule a resume timer if interrupted after end_of_speech
                 self._start_false_interruption_timer(timeout)
 
-    def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
+    async def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript_text = ev.alternatives[0].text
+
+        # Check with interruption filter if enabled
+        should_interrupt = True
+        if self._interruption_filter:
+            # Pass final STT transcript to filter for analysis
+            decision = await self._interruption_filter.on_stt_event(
+                transcript=transcript_text,
+                is_final=True
+            )
+
+            if decision == InterruptionDecision.IGNORE:
+                # Filter determined this is backchannel, don't interrupt
+                logger.info(
+                    f"Smart interruption: ignoring final transcript '{transcript_text}' (backchannel)"
+                )
+                should_interrupt = False
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript_text,
                 is_final=True,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
@@ -1288,7 +1362,7 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
-        if self._audio_recognition and self._turn_detection not in (
+        if should_interrupt and self._audio_recognition and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
@@ -1302,9 +1376,10 @@ class AgentActivity(RecognitionHooks):
                 # schedule a resume timer if interrupted after end_of_speech
                 self._start_false_interruption_timer(timeout)
 
-        self._interrupt_paused_speech_task = asyncio.create_task(
-            self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
-        )
+        if should_interrupt:
+            self._interrupt_paused_speech_task = asyncio.create_task(
+                self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
+            )
 
     def on_preemptive_generation(self, info: _PreemptiveGenerationInfo) -> None:
         if (
