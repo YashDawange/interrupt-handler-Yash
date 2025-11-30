@@ -980,6 +980,44 @@ class AgentActivity(RecognitionHooks):
 
         return future
 
+    def semantic_interrupt(self, reason: str = "semantic command") -> None:
+        """Interrupt current speech based on semantic analysis.
+        
+        This is the public API for semantic interruption handling. Use this method
+        instead of directly accessing _current_speech when triggering interruptions
+        based on semantic classification of user input.
+        
+        This method:
+        - Checks if a speech is currently active
+        - Logs the interruption with reason for debugging
+        - Triggers the interruption if applicable
+        - Emits warnings if interruption cannot be performed
+        
+        Args:
+            reason: Human-readable explanation of why the interruption was triggered.
+                Used for logging, debugging, and potential future metrics/events.
+                Examples: "command word detected", "substantive question asked"
+        
+        Example:
+            >>> # In semantic controller
+            >>> if utterance_type == UtteranceType.COMMAND:
+            ...     self.agent_activity.semantic_interrupt("command word detected")
+        
+        Note:
+            This method is specifically designed for semantic interruption mode.
+            For VAD-based or manual interruptions, use interrupt() instead.
+        """
+        if self._current_speech is not None:
+            logger.info(
+                f"[SEMANTIC INTERRUPTION] Triggering interruption via public API: {reason}"
+            )
+            self._current_speech.interrupt()
+        else:
+            logger.warning(
+                f"[SEMANTIC INTERRUPTION] Cannot interrupt - no active speech "
+                f"(reason: {reason})"
+            )
+
     def clear_user_turn(self) -> None:
         if self._audio_recognition:
             self._audio_recognition.clear_user_turn()
@@ -1321,20 +1359,25 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
-        # NEW: Semantic filtering (if controller active)
+        # Semantic filtering via interruption controller
         if self._interruption_controller:
             should_process = self._interruption_controller.should_process_transcript(
                 ev.alternatives[0].text, is_final=True
             )
-
-            # Reset utterance after processing final transcript
             self._interruption_controller.reset_utterance()
 
             if not should_process:
-                # Swallow backchannel transcripts (no user turn)
+                # Emit event for UI visibility even if processing is skipped
+                self._session._user_input_transcribed(
+                    UserInputTranscribedEvent(
+                        language=ev.alternatives[0].language,
+                        transcript=ev.alternatives[0].text,
+                        is_final=True,
+                        speaker_id=ev.alternatives[0].speaker_id,
+                    ),
+                )
                 return
 
-        # ORIGINAL: Forward to session
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
@@ -1403,6 +1446,15 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+
+        # Check if turn should be processed (e.g. filter backchannels)
+        if self._interruption_controller:
+            should_process = self._interruption_controller.should_process_transcript(
+                info.new_transcript, is_final=True
+            )
+            self._interruption_controller.reset_utterance()
+            if not should_process:
+                return True
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()

@@ -46,10 +46,8 @@ class TestInterruptionController:
         mock_session = Mock()
         mock_session.agent_state = "speaking"
         
-        # Mock current speech
-        mock_speech = Mock()
+        # Mock agent_activity with semantic_interrupt method
         mock_activity = Mock()
-        mock_activity._current_speech = mock_speech
         
         config = InterruptionConfig()
         controller = InterruptionController(config, mock_session, mock_activity)
@@ -58,27 +56,32 @@ class TestInterruptionController:
         result = controller.should_process_transcript("stop", is_final=True)
         
         assert result == True  # Passes through
-        assert mock_speech.interrupt.called  # Interruption triggered
+        assert mock_activity.semantic_interrupt.called  # Interruption triggered via public API
 
     def test_should_interrupt_once_per_utterance(self):
         """Interruption should only fire once per utterance."""
         mock_session = Mock()
         mock_session.agent_state = "speaking"
         
-        mock_speech = Mock()
         mock_activity = Mock()
-        mock_activity._current_speech = mock_speech
         
         config = InterruptionConfig()
         controller = InterruptionController(config, mock_session, mock_activity)
         
         # First command in utterance
         controller.should_process_transcript("stop", is_final=False)
-        assert mock_speech.interrupt.call_count == 1
+        assert mock_activity.semantic_interrupt.call_count == 1
         
-        # Second command in same utterance (before reset)
-        controller.should_process_transcript("wait", is_final=False)
-        assert mock_speech.interrupt.call_count == 1  # Still 1, not 2
+        # Same command again (before reset)
+        controller.should_process_transcript("stop", is_final=False)
+        assert mock_activity.semantic_interrupt.call_count == 1  # Still 1 (not called again)
+        
+        # Reset utterance
+        controller.reset_utterance()
+        
+        # New command in new utterance
+        controller.should_process_transcript("wait", is_final=True)
+        assert mock_activity.semantic_interrupt.call_count == 2  # Now 2
 
     def test_reset_utterance_clears_state(self):
         """reset_utterance should clear buffer and interruption flag."""
@@ -106,9 +109,7 @@ class TestInterruptionController:
         mock_session = Mock()
         mock_session.agent_state = "speaking"
         
-        mock_speech = Mock()
         mock_activity = Mock()
-        mock_activity._current_speech = mock_speech
         
         config = InterruptionConfig(interrupt_on_normal_content=True)
         controller = InterruptionController(config, mock_session, mock_activity)
@@ -116,7 +117,7 @@ class TestInterruptionController:
         result = controller.should_process_transcript("What time is it?", is_final=True)
         
         assert result == True  # Passes through
-        assert mock_speech.interrupt.called  # Interruption triggered
+        assert mock_activity.semantic_interrupt.called  # Interruption triggered
 
     def test_normal_content_with_policy_false(self):
         """With interrupt_on_normal_content=False, normal content should be ignored."""
@@ -137,9 +138,7 @@ class TestInterruptionController:
         mock_session = Mock()
         mock_session.agent_state = "speaking"
         
-        mock_speech = Mock()
         mock_activity = Mock()
-        mock_activity._current_speech = mock_speech
         
         config = InterruptionConfig()
         controller = InterruptionController(config, mock_session, mock_activity)
@@ -147,7 +146,7 @@ class TestInterruptionController:
         result = controller.should_process_transcript("yeah okay but wait", is_final=True)
         
         assert result == True  # Passes through
-        assert mock_speech.interrupt.called  # Command detected, interrupts
+        assert mock_activity.semantic_interrupt.called  # Command detected, interrupts
 
     def test_no_current_speech_safety(self):
         """Command with no current_speech should not crash."""

@@ -29,24 +29,6 @@ class InterruptionClassifier:
     2. Command tokens are checked next (word match)
     3. Pure backchannel is detected (all tokens in ignore list)
     4. Everything else is normal content
-    
-    The classifier is stateless and can be called on any text fragment.
-    
-    Example:
-        >>> config = InterruptionConfig()
-        >>> classifier = InterruptionClassifier(config)
-        >>> 
-        >>> classifier.classify("yeah ok")
-        <UtteranceType.BACKCHANNEL: 'backchannel'>
-        >>> 
-        >>> classifier.classify("stop")
-        <UtteranceType.COMMAND: 'command'>
-        >>> 
-        >>> classifier.classify("yeah wait a second")
-        <UtteranceType.COMMAND: 'command'>
-        >>> 
-        >>> classifier.classify("What time is it?")
-        <UtteranceType.NORMAL: 'normal'>
     """
     
     def __init__(self, config: InterruptionConfig):
@@ -60,21 +42,11 @@ class InterruptionClassifier:
     def classify(self, text: str) -> UtteranceType:
         """Classify text as backchannel, command, or normal content.
         
-        Algorithm:
-        1. Normalize text (lowercase, strip whitespace)
-        2. Check for command phrases (substring match)
-        3. Check for command tokens (word match)
-        4. Check if all tokens are backchannel
-        5. Otherwise return normal
-        
         Args:
             text: Raw STT text to classify.
         
         Returns:
             Classification of the utterance.
-        
-        Note:
-            Empty text is classified as BACKCHANNEL (treated as noise).
         """
         # Normalize text
         normalized = text.lower().strip()

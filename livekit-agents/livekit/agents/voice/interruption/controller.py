@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .classifier import InterruptionClassifier, UtteranceType
@@ -12,6 +14,32 @@ if TYPE_CHECKING:
     from .config import InterruptionConfig
 
 
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class InterruptionDecision:
+    """Result of an interruption decision with full context.
+    
+    This structured object allows for:
+    - Clear logging and debugging
+    - Metrics collection
+    - Test assertions on decision reasoning
+    
+    Attributes:
+        should_process: Whether transcript should create a user turn.
+        should_interrupt: Whether to interrupt current agent speech.
+        utterance_type: Classification of the utterance.
+        reason: Human-readable explanation of the decision.
+        matched_words: Words that influenced the decision (commands/backchannel).
+    """
+    should_process: bool
+    should_interrupt: bool
+    utterance_type: UtteranceType
+    reason: str
+    matched_words: list[str]
+
+
 class InterruptionController:
     """Manages interruption state and decisions for a single agent session.
     
@@ -20,28 +48,6 @@ class InterruptionController:
     - Swallow backchannel events (no interruption, no user turn)
     - Trigger interruption for commands
     - Allow normal user turns
-    
-    The controller is stateful and tied to a single AgentSession lifecycle.
-    
-    Key responsibilities:
-    - Track current utterance buffer
-    - Prevent duplicate interruption triggers per utterance
-    - Check agent speaking state before applying semantic filtering
-    - Provide clean reset points for utterance lifecycle
-    
-    Example:
-        >>> controller = InterruptionController(config, session, activity)
-        >>> 
-        >>> # On new user speech
-        >>> controller.reset_utterance()
-        >>> 
-        >>> # On STT interim result
-        >>> if controller.should_process_transcript("yeah", is_final=False):
-        ...     # Pass through to user turn handling
-        ...     pass
-        >>> else:
-        ...     # Swallow event
-        ...     pass
     """
     
     def __init__(
@@ -84,16 +90,6 @@ class InterruptionController:
     def should_process_transcript(self, text: str, is_final: bool) -> bool:
         """Determine if transcript should create a user turn.
         
-        This is the main decision point for semantic interruption handling.
-        
-        Logic:
-        1. Update utterance buffer with latest text
-        2. If agent not speaking → always pass through
-        3. If agent is speaking:
-           - Backchannel → swallow (return False)
-           - Command → trigger interruption + pass through (return True)
-           - Normal content → apply policy (interrupt_on_normal_content)
-        
         Args:
             text: Latest STT text (interim or final).
             is_final: Whether this is a final transcript.
@@ -101,59 +97,122 @@ class InterruptionController:
         Returns:
             True if transcript should be processed as user turn.
             False if transcript should be swallowed (backchannel while speaking).
-        
-        Side effects:
-            May trigger interruption via agent_activity if command detected.
         """
-        # Update buffer with latest text
+        # Make decision using internal method
+        decision = self._make_decision(text, is_final)
+        
+        # Log decision with full context
+        transcript_type = "final" if is_final else "interim"
+        logger.info(
+            f"[SEMANTIC INTERRUPTION] {decision.utterance_type.value.upper()} | "
+            f"Agent: {self.session.agent_state} | "
+            f"Action: {'PROCESS' if decision.should_process else 'SWALLOW'} | "
+            f"Interrupt: {decision.should_interrupt} | "
+            f"Text: '{text[:50]}{'...' if len(text) > 50 else ''}' | "
+            f"Type: {transcript_type} | "
+            f"Reason: {decision.reason}"
+        )
+        
+        if decision.matched_words:
+            logger.debug(f"[SEMANTIC INTERRUPTION] Matched words: {decision.matched_words}")
+        
+        # Trigger interruption if needed
+        if decision.should_interrupt and not self._interruption_fired:
+            self._trigger_interruption(decision.reason)
+            self._interruption_fired = True
+        
+        return decision.should_process
+    
+    def _make_decision(self, text: str, is_final: bool) -> InterruptionDecision:
+        """Make interruption decision with full context.
+        
+        This internal method creates a structured decision object that
+        can be logged, tested, and used for metrics.
+        
+        Args:
+            text: Latest STT text.
+            is_final: Whether this is final transcript.
+        
+        Returns:
+            InterruptionDecision with full reasoning and context.
+        """
+        # Update buffer
         self._current_utterance_buffer = text
         
-        # Check agent speaking state
+        # Check agent state
         agent_speaking = self.session.agent_state == "speaking"
         
         if not agent_speaking:
-            # Agent not speaking → pass through everything
-            # User can say "yeah", "stop", or anything else and it becomes a normal turn
-            return True
+            # Not speaking → everything passes through as normal input
+            return InterruptionDecision(
+                should_process=True,
+                should_interrupt=False,
+                utterance_type=UtteranceType.NORMAL,
+                reason=f"Agent is {self.session.agent_state}, processing as normal input",
+                matched_words=[],
+            )
         
-        # Agent IS speaking → apply semantic filtering
+        # Agent IS speaking → classify and decide
         utterance_type = self.classifier.classify(text)
         
+        # Extract matched words for logging/debugging
+        words = text.lower().split()
+        matched_commands = [w for w in words if w in self.config.command_words]
+        matched_backchannel = [w for w in words if w in self.config.ignore_words]
+        
         if utterance_type == UtteranceType.BACKCHANNEL:
-            # Swallow backchannel utterances while agent is speaking
-            # No interruption, no user turn
-            return False
+            return InterruptionDecision(
+                should_process=False,  # Swallow backchannel to prevent LLM from generating a response that interrupts
+                should_interrupt=False,  # But don't interrupt current speech
+                utterance_type=UtteranceType.BACKCHANNEL,
+                reason="Pure backchannel detected while agent speaking, swallowing event",
+                matched_words=matched_backchannel,
+            )
         
         elif utterance_type == UtteranceType.COMMAND:
-            # Command detected → interrupt immediately
-            if not self._interruption_fired:
-                self._trigger_interruption()
-                self._interruption_fired = True
-            
-            # Pass through to form user message
-            return True
+            return InterruptionDecision(
+                should_process=True,
+                should_interrupt=True,
+                utterance_type=UtteranceType.COMMAND,
+                reason="Command word/phrase detected while agent speaking, interrupting",
+                matched_words=matched_commands,
+            )
         
         elif utterance_type == UtteranceType.NORMAL:
-            # Normal content → apply policy
             if self.config.interrupt_on_normal_content:
-                # Default behavior: interrupt on any substantive utterance
-                if not self._interruption_fired:
-                    self._trigger_interruption()
-                    self._interruption_fired = True
-                return True
+                return InterruptionDecision(
+                    should_process=True,
+                    should_interrupt=True,
+                    utterance_type=UtteranceType.NORMAL,
+                    reason="Normal content while agent speaking (policy: interrupt)",
+                    matched_words=[],
+                )
             else:
-                # Alternative policy: ignore normal content while speaking
-                # (rare use case, but configurable)
-                return False
+                return InterruptionDecision(
+                    should_process=False,
+                    should_interrupt=False,
+                    utterance_type=UtteranceType.NORMAL,
+                    reason="Normal content while agent speaking (policy: ignore)",
+                    matched_words=[],
+                )
         
-        # Fallback: pass through
-        return True
+        # Fallback
+        return InterruptionDecision(
+            should_process=True,
+            should_interrupt=False,
+            utterance_type=UtteranceType.NORMAL,
+            reason="Fallback: processing as normal input",
+            matched_words=[],
+        )
     
-    def _trigger_interruption(self) -> None:
+    def _trigger_interruption(self, reason: str = "semantic command") -> None:
         """Request interruption of current speech.
         
         This is called when a command or normal content (policy-dependent)
         is detected while the agent is speaking.
+        
+        Args:
+            reason: Human-readable reason for interruption (for logging/metrics).
         """
-        if self.agent_activity._current_speech:
-            self.agent_activity._current_speech.interrupt()
+        # Use public API instead of directly accessing _current_speech
+        self.agent_activity.semantic_interrupt(reason)

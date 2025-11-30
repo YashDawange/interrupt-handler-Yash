@@ -162,7 +162,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         ivr_detection: bool = False,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
-        # New: semantic interruption configuration
+        # Semantic interruption configuration
         interruption_config: InterruptionConfig | None = None,
         # deprecated
         agent_false_interruption_timeout: NotGivenOr[float | None] = NOT_GIVEN,
@@ -252,6 +252,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
                 session to. Falls back to :pyfunc:`asyncio.get_event_loop()`.
+            interruption_config (InterruptionConfig, optional): Configuration for
+                semantic interruption handling.
         """
         super().__init__()
         self._loop = loop or asyncio.get_event_loop()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 
@@ -9,38 +10,12 @@ from dataclasses import dataclass, field
 class InterruptionConfig:
     """Configuration for semantic interruption handling.
     
-    This configuration controls how the agent handles user speech while it is speaking.
-    
     Attributes:
         ignore_words: Set of backchannel words to ignore while agent is speaking.
-            These words will not interrupt the agent or create user turns.
-            Default: Common English backchannel tokens.
-        
         command_words: Set of command words that always trigger interruption.
-            When detected, these words will stop the agent immediately.
-            Default: Common interruption commands.
-        
         command_phrases: Set of multi-word command phrases that trigger interruption.
-            These are checked before individual tokens.
-            Default: Common multi-word interruption phrases.
-        
         interrupt_on_normal_content: Whether to interrupt when user says substantive
             content (questions, statements) while agent is speaking.
-            - True (default): Any non-backchannel utterance interrupts the agent,
-              just like explicit commands. This matches natural conversation flow.
-            - False: Only explicit commands interrupt. Normal content is ignored
-              while agent is speaking (not recommended for most use cases).
-    
-    Example:
-        >>> # Use defaults
-        >>> config = InterruptionConfig()
-        >>> 
-        >>> # Customize for specific use case
-        >>> config = InterruptionConfig(
-        ...     ignore_words={"yeah", "ok", "mmhmm"},
-        ...     command_words={"stop", "wait", "pause"},
-        ...     interrupt_on_normal_content=False,  # Only commands interrupt
-        ... )
     """
     
     ignore_words: set[str] = field(default_factory=lambda: {
@@ -67,3 +42,51 @@ class InterruptionConfig:
     By default, any substantive utterance while the agent is speaking will interrupt,
     just like commands. To make only explicit commands interrupt, set this to False.
     """
+    
+    @classmethod
+    def from_env(cls) -> InterruptionConfig:
+        """Create configuration from environment variables.
+        
+        Environment variables:
+            INTERRUPTION_IGNORE_WORDS: Comma-separated list of backchannel words
+            INTERRUPTION_COMMAND_WORDS: Comma-separated list of command words
+            INTERRUPTION_COMMAND_PHRASES: Comma-separated list of command phrases
+            INTERRUPTION_INTERRUPT_ON_NORMAL: "true" or "false"
+        """
+        # Parse comma-separated lists from environment
+        def parse_word_list(env_var: str, default: set[str]) -> set[str]:
+            """Parse comma-separated word list from environment."""
+            value = os.getenv(env_var)
+            if not value:
+                return default
+            return {w.strip().lower() for w in value.split(",") if w.strip()}
+        
+        # Parse boolean from environment
+        def parse_bool(env_var: str, default: bool) -> bool:
+            """Parse boolean from environment (true/false, 1/0, yes/no)."""
+            value = os.getenv(env_var)
+            if not value:
+                return default
+            return value.lower() in ("true", "1", "yes", "on")
+        
+        # Create default config to get defaults
+        default_config = cls()
+        
+        return cls(
+            ignore_words=parse_word_list(
+                "INTERRUPTION_IGNORE_WORDS",
+                default_config.ignore_words
+            ),
+            command_words=parse_word_list(
+                "INTERRUPTION_COMMAND_WORDS",
+                default_config.command_words
+            ),
+            command_phrases=parse_word_list(
+                "INTERRUPTION_COMMAND_PHRASES",
+                default_config.command_phrases
+            ),
+            interrupt_on_normal_content=parse_bool(
+                "INTERRUPTION_INTERRUPT_ON_NORMAL",
+                default_config.interrupt_on_normal_content
+            ),
+        )

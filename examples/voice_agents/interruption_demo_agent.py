@@ -20,7 +20,7 @@ from livekit.agents import (
 )
 from livekit.agents.llm import function_tool
 from livekit.agents.voice.interruption import InterruptionConfig
-from livekit.plugins import silero
+from livekit.plugins import deepgram, openai, silero
 
 logger = logging.getLogger("interruption-demo-agent")
 
@@ -65,31 +65,37 @@ server.setup_fnc = prewarm
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
-    ctx.log_context_fields = {
-        "room": ctx.room.name,
-        "participant": ctx.participant.identity,
-    }
-
+    # Set up logging context
     logger.info("Starting semantic interruption demo agent")
 
-    # Create custom interruption configuration
+    # Option 1: Create custom interruption configuration
     interruption_config = InterruptionConfig(
-        # Default ignore words work well for English backchannel
-        # ignore_words={"yeah", "ok", "hmm", ...}  # (default)
-        #
-        # Default command words for explicit interruption
-        # command_words={"stop", "wait", "no", ...}  # (default)
-        #
-        # By default, substantive content also interrupts
-        interrupt_on_normal_content=True,  # Set to False to only interrupt on commands
+        # Words to ignore while the agent is speaking
+        ignore_words={
+            "yeah", "ok", "okay", "hmm", "mm", "uh", "uh-huh", "mm-hmm",
+            "right", "sure", "yep", "yup", "mhm", "ah", "oh", "yes"
+        },
+        # Words that immediately interrupt the agent
+        command_words={"stop", "wait", "no", "pause", "cancel"},
+        interrupt_on_normal_content=True,
     )
+    
+    # Option 2: Load configuration from environment variables
+    # Uncomment to use environment-based config:
+    # interruption_config = InterruptionConfig.from_env()
+    #
+    # Set these environment variables to customize:
+    # export INTERRUPTION_IGNORE_WORDS="yeah,ok,hmm,gotcha"
+    # export INTERRUPTION_COMMAND_WORDS="stop,wait,pause,cancel"
+    # export INTERRUPTION_COMMAND_PHRASES="hold on,wait a sec"
+    # export INTERRUPTION_INTERRUPT_ON_NORMAL="true"
 
     # Initialize agent session with semantic interruption enabled
     session = AgentSession(
         # Model configuration
         stt="deepgram/nova-3",
         llm="openai/gpt-4o-mini",
-        tts="cartesia/sonic-2.0:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+        tts=deepgram.TTS(),  # Using Deepgram TTS for lower latency
         vad=ctx.proc.userdata["vad"],
         # CRITICAL: Must disable audio discarding to keep STT active during TTS
         # This allows the controller to receive transcripts even while agent is speaking
@@ -97,8 +103,8 @@ async def entrypoint(ctx: JobContext):
         # Enable semantic interruption handling
         interruption_config=interruption_config,
         # Optional: Configure other interruption-related settings
-        # resume_false_interruption=True,
-        # false_interruption_timeout=2.0,
+        resume_false_interruption=True,
+        false_interruption_timeout=2.0,
     )
 
     # Start the session with the demo agent
