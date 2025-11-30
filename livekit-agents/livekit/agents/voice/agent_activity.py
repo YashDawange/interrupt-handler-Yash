@@ -75,6 +75,11 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from vad_handler import VADHandler
+
+# reuse existing global if present, otherwise create one
+vad_handler = globals().get("vad_handler") or VADHandler()
+
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -1607,9 +1612,17 @@ class AgentActivity(RecognitionHooks):
             audio_source = _read_text()
 
         tasks: list[asyncio.Task[Any]] = []
-
+        started_speaking_at: float | None = None 
         def _on_first_frame(_: asyncio.Future[None]) -> None:
-            self._session._update_agent_state("speaking")
+        nonlocal started_speaking_at
+        started_speaking_at = time.time()
+        self._session._update_agent_state("speaking")
+    # mark that agent is currently speaking for interrupt logic
+        try:
+            vad_handler.agent_speaking = True
+         except Exception:
+            logger.exception("failed to set vad_handler.agent_speaking = True", exc_info=False)
+
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:

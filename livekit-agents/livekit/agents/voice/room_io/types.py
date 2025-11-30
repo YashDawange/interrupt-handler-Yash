@@ -9,6 +9,12 @@ from livekit import rtc
 from ...log import logger
 from ...types import NOT_GIVEN, NotGivenOr
 from ...utils import is_given
+# add these near other imports
+from interrupt_handler import decide_action
+from vad_handler import VADHandler
+
+# module-level vad handler used to track whether the agent is currently speaking
+vad_handler = VADHandler()
 
 if TYPE_CHECKING:
     from ..agent_session import AgentSession
@@ -48,10 +54,51 @@ NoiseCancellationSelector = Callable[
     [NoiseCancellationParams], Optional[rtc.NoiseCancellationOptions]
 ]
 
+def _default_text_input_cb(sess: "AgentSession", ev: TextInputEvent):
+    """
+    Default handler for text input events.
 
-def _default_text_input_cb(sess: AgentSession, ev: TextInputEvent) -> None:
-    sess.interrupt()
-    sess.generate_reply(user_input=ev.text)
+    Integration:
+      - Uses decide_action(vad_handler.agent_speaking, text)
+      - If action == "ignore": do nothing (user said filler while agent speaking)
+      - If action == "interrupt": stop agent playback and acknowledge
+      - If action == "respond": forward to normal reply generation
+    """
+
+    text = (ev.text or "").strip()
+    if text == "":
+        return None
+
+    # Decide based on whether the agent is speaking right now.
+    action = decide_action(vad_handler.agent_speaking, text)
+    logger.debug(f"[interrupt] participant={getattr(ev.participant, 'sid', 'unknown')} text='{text}' -> action={action}")
+
+    if action == "ignore":
+        # Agent is speaking and user said only filler tokens: ignore.
+        # Do not interrupt or generate any reply.
+        return None
+
+    if action == "interrupt":
+        # User explicitly asked to stop/wait - interrupt ongoing agent playback.
+        # sess.interrupt() is the starter's API that attempts to stop generation/playback.
+        try:
+            sess.interrupt()
+        except Exception:
+            logger.debug("interrupt call failed (but continuing)")
+
+        # If the starter has an explicit "stop playback" API you can call it here.
+        # e.g. if the session provides sess.stop_playback() use that before generating an ack.
+        # NOTE: Many starter implementations run generate_reply as the default reply mechanism.
+        # For a short acknowledgement, you can use generate_reply with a small prompt or
+        # implement a dedicated play_tts method if present.
+        ack_text = "Okay, I stopped. What would you like?"
+        # Return the coroutine so the starter will run it.
+        return sess.generate_reply(user_input=ack_text)
+
+    # action == "respond"
+    # Agent is silent or user said meaningful content -> treat as normal user input.
+    return sess.generate_reply(user_input=text)
+
 
 
 @dataclass
