@@ -3,7 +3,7 @@
 ### Demo Video
 [Click here to watch the recording](./video_recording.mp4)
 
-drive link for video - https://drive.google.com/file/d/1XuPPXEhgjs4FvkbrXF6NoEuCdLQawBRx/view?usp=drive_link
+drive link for video (better quality) - https://drive.google.com/file/d/1HK0UX-vGOQMjxqpPfEzi49J-_WAQD-_9/view?usp=sharing
 
 # Logic
 
