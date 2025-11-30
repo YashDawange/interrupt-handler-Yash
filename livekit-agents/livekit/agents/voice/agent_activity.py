@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from .sementic_inturrupter import get_classifier
 import asyncio
 import contextvars
 import heapq
@@ -83,7 +83,15 @@ if TYPE_CHECKING:
 _AgentActivityContextVar = contextvars.ContextVar["AgentActivity"]("agents_activity")
 _SpeechHandleContextVar = contextvars.ContextVar["SpeechHandle"]("agents_speech_handle")
 
+IGNORE_WORDS = [
+    'yeah', 'ok', 'okay', 'hmm', 'uh-huh', 'mhmm', 
+    'right', 'sure', 'aha', 'got it', 'yes'
+]
 
+INTERRUPT_WORDS = [
+    'wait', 'stop', 'no', 'hold on', 'pause', 
+    'actually', 'but', 'however'
+]
 @dataclass
 class _OnEnterData:
     session: AgentSession
@@ -141,6 +149,7 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+        self._semantic_classifier = get_classifier()
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1165,13 +1174,205 @@ class AgentActivity(RecognitionHooks):
             name="AgentActivity.realtime_generation",
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def is_agent_speaking(self) -> bool:
+        """
+        Check if agent is actively speaking (generating/playing audio).
+        """
+        is_speaking = (
+            self._current_speech is not None 
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+        print(f"🎤 is_agent_speaking: {is_speaking} (current_speech: {self._current_speech is not None})")
+        return is_speaking
+
+    def classify_utterance(self, text: str) -> str:
+        """Fast keyword check first, semantic for uncertain cases."""
+        import string
+
+        if not text or not text.strip():
+            return 'unknown'
+
+        text_clean = text.lower().strip()
+        words = [w.strip(string.punctuation) for w in text_clean.split()]
+    
+        # ⭐ PRIORITY CHECK: Mixed backchannel + interrupt (e.g., "yes but wait")
+        has_interrupt_word = any(w in self.strong_interrupt for w in words)
+        has_backchannel_word = any(w in self.strong_backchannel for w in words)
+    
+        if has_interrupt_word and has_backchannel_word:
+            print(f"📝 MIXED INPUT: '{text}' -> 'interrupt' (contains interrupt word despite backchannel)")
+            return 'interrupt'
+    
+        # ⭐ NEW: If more than 4 words, likely real speech - don't ignore
+        if len(words) > 4:
+            print(f"📝 FAST: '{text}' -> 'interrupt' ({len(words)} words - too long to be backchannel)")
+            return 'interrupt'
+
+        # FAST PATH: Strong keywords (0ms)
+        self.strong_interrupt = {
+            # Stop commands
+            'stop', 'wait', 'no', 'hold', 'pause', 'halt',
+            'hang', 'nope', 'nah', 'wrong', 'incorrect',
+
+            # Attention words
+            'but', 'however', 'actually', 'excuse',
+
+            # Questions
+            'what', 'huh', 'why', 'how', 'when', 'where',
+
+            # Disagreement
+            'disagree', 'not', 'dont', "don't", 'never',
+            'cant', "can't", 'wont', "won't",
+        
+            # ⭐ ADD: Common greetings that should interrupt
+            'hello', 'hi', 'hey',
+        }
+
+        self.strong_backchannel = {
+            # Acknowledgments
+            'yeah', 'yes', 'yep', 'yup', 'okay', 'ok', 'okey',
+            'sure', 'right', 'alright', 'cool', 'nice', 'great',
+
+            # Fillers
+            'mhm', 'hmm', 'hmmm', 'mmm', 'mm-hmm', 'uh-huh',
+            'ah', 'oh', 'aha', 'ooh',
+
+            # Agreement
+            'gotcha', 'got', 'understood', 'exactly',
+        }
+
+        if len(words) <= 2:
+            # Short phrases - check keywords first
+            if any(w in self.strong_interrupt for w in words):
+                print(f"📝 FAST: '{text}' -> 'interrupt' (keyword match)")
+                return 'interrupt'
+            if all(w in self.strong_backchannel for w in words):
+                print(f"📝 FAST: '{text}' -> 'ignore' (keyword match)")
+                return 'ignore'
+    
+        # For 3-4 word utterances
+        if 3 <= len(words) <= 4:
+            # Check if it contains ANY interrupt word
+            if has_interrupt_word:
+                print(f"📝 FAST: '{text}' -> 'interrupt' (contains interrupt keyword)")
+                return 'interrupt'
+        
+            # Check if ALL words are backchannel
+            if all(w in self.strong_backchannel for w in words):
+                print(f"📝 FAST: '{text}' -> 'ignore' (all {len(words)} words are backchannel)")
+                return 'ignore'
+        
+            # Mixed content - treat as real speech
+            print(f"📝 FAST: '{text}' -> 'interrupt' ({len(words)} words, mixed content)")
+            return 'interrupt'
+
+        # SLOW PATH: Semantic for complex cases (30ms)
+        # This should rarely be reached now
+        print(f"📝 SEMANTIC: '{text}' (edge case, using AI classifier)")
+        result = self._semantic_classifier.classify(text_clean)
+        final_result = 'ignore' if result == 'backchannel' else 'interrupt'
+        print(f"   └─ Result: '{final_result}' (confidence: high)")
+        return final_result
+        
+
+    def should_interrupt(self, text: str) -> bool:
+        """
+        Decide if user input should interrupt the agent.
+    
+        Returns:
+            True - Interrupt the agent
+            False - Ignore the input (continue speaking)
+        """
+        agent_speaking = self.is_agent_speaking()
+        classification = self.classify_utterance(text)
+        
+        print(f"🤔 should_interrupt check:")
+        print(f"   agent_speaking: {agent_speaking}")
+        print(f"   classification: {classification}")
+        print(f"   transcript: '{text}'")
+    
+        # CASE 1: Agent is NOT speaking
+        if not agent_speaking:
+            # All user input is valid when agent is silent
+            print(f"   ✅ Decision: INTERRUPT (agent is silent, all input valid)")
+            return True
+    
+        # CASE 2: Agent IS speaking
+        if classification == 'ignore':
+            # Backchanneling - ignore it
+            print(f"   ❌ Decision: IGNORE (backchanneling while agent speaking)")
+            return False
+        elif classification == 'interrupt':
+            # Real interruption - stop the agent
+            print(f"   ✅ Decision: INTERRUPT (real interruption detected)")
+            return True
+        elif classification == 'unknown':
+            # No transcript yet - be conservative
+            # Don't interrupt when uncertain and agent is speaking
+            # This prevents false interruptions on "yeah"
+            print(f"   ❌ Decision: IGNORE (unknown/empty, being conservative)")
+            return False
+    
+        print(f"   ✅ Decision: INTERRUPT (default fallback)")
+        return True  # Default: interrupt
+
 
     def _interrupt_by_audio_activity(self) -> None:
+        print(f"🛑 _interrupt_by_audio_activity called")
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
+            print(f"   ⏭️ Skipping: realtime model has turn detection")
             return
 
         if (
@@ -1182,7 +1383,10 @@ class AgentActivity(RecognitionHooks):
             text = self._audio_recognition.current_transcript
 
             # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+            word_count = len(split_words(text, split_character=True))
+            print(f"   📊 Word count check: {word_count} < {opt.min_interruption_words}?")
+            if word_count < opt.min_interruption_words:
+                print(f"   ⏭️ Skipping: too few words")
                 return
 
         if self._rt_session is not None:
@@ -1193,6 +1397,7 @@ class AgentActivity(RecognitionHooks):
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
+            print(f"   ✅ INTERRUPTING current speech")
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1201,17 +1406,22 @@ class AgentActivity(RecognitionHooks):
                 self._false_interruption_timer = None
 
             if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
+                print(f"   ⏸️ Pausing audio")
                 self._session.output.audio.pause()
                 self._session._update_agent_state("listening")
             else:
+                print(f"   🛑 Hard interrupting")
                 if self._rt_session is not None:
                     self._rt_session.interrupt()
 
                 self._current_speech.interrupt()
+        else:
+            print(f"   ⏭️ No speech to interrupt")
 
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
+        print(f"🎙️ on_start_of_speech triggered")
         self._session._update_user_state("speaking")
 
         if self._false_interruption_timer:
@@ -1220,6 +1430,7 @@ class AgentActivity(RecognitionHooks):
             self._false_interruption_timer = None
 
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
+        print(f"🎙️ on_end_of_speech triggered")
         speech_end_time = time.time()
         if ev:
             speech_end_time = speech_end_time - ev.silence_duration
@@ -1227,7 +1438,6 @@ class AgentActivity(RecognitionHooks):
             "listening",
             last_speaking_time=speech_end_time,
         )
-
         if (
             self._paused_speech
             and (timeout := self._session.options.false_interruption_timeout) is not None
@@ -1236,16 +1446,44 @@ class AgentActivity(RecognitionHooks):
             self._start_false_interruption_timer(timeout)
 
     def on_vad_inference_done(self, ev: vad.VADEvent) -> None:
+        # print(f"\n{'='*60}")
+        # print(f"🔔 VAD INFERENCE DONE")
+        # print(f"   speech_duration: {ev.speech_duration}")
+        # print(f"   min_interruption_duration: {self._session.options.min_interruption_duration}")
+        
         if self._turn_detection in ("manual", "realtime_llm"):
-            # ignore vad inference done event if turn_detection is manual or realtime_llm
+            print(f"   ⏭️ Skipping: turn_detection is {self._turn_detection}")
+            print(f"{'='*60}\n")
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # Get current transcript (might be partial or empty)
+            text = ""
+            if self._audio_recognition is not None:
+                text = self._audio_recognition.current_transcript
+            
+            print(f"   Current transcript: '{text}'")
+        
+            # Check if we should interrupt based on state and transcript
+            if self.should_interrupt(text):
+                print(f"   🚨 CALLING _interrupt_by_audio_activity")
+                self._interrupt_by_audio_activity()
+            else:
+                print(f"   ✋ NOT interrupting (filtered out)")
+            # else: ignore the VAD event (agent continues speaking)
+        
+        
+        
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
+        print(f"\n{'='*60}")
+        print(f"📄 INTERIM TRANSCRIPT")
+        print(f"   text: '{ev.alternatives[0].text}'")
+        print(f"   speaking param: {speaking}")
+        
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
-            # skip stt transcription if user_transcription is enabled on the realtime model
+            print(f"   ⏭️ Skipping: realtime model handles transcription")
+            print(f"{'='*60}\n")
             return
 
         self._session._user_input_transcribed(
@@ -1257,23 +1495,41 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        text = ev.alternatives[0].text
+        if text and self._turn_detection not in ("manual", "realtime_llm"):
+            # Check if we should interrupt based on state and transcript
+            if self.should_interrupt(text):
+                print(f"   🚨 CALLING _interrupt_by_audio_activity")
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    print(f"   ⏲️ Starting false interruption timer")
+                    self._start_false_interruption_timer(timeout)
+            else:
+                print(f"   ✋ NOT interrupting (filtered out)")
+            # else: ignore the transcript (agent continues speaking)
+        else:
+            if not text:
+                print(f"   ⏭️ Skipping: empty text")
+            else:
+                print(f"   ⏭️ Skipping: turn_detection is {self._turn_detection}")
+        
+        print(f"{'='*60}\n")
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
+        print(f"\n{'='*60}")
+        print(f"✅ FINAL TRANSCRIPT")
+        print(f"   text: '{ev.alternatives[0].text}'")
+        print(f"   speaking param: {speaking}")
+        
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
+            print(f"   ⏭️ Skipping: realtime model handles transcription")
+            print(f"{'='*60}\n")
             return
 
         self._session._user_input_transcribed(
@@ -1292,19 +1548,57 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            text = ev.alternatives[0].text
+            print(f"   Current transcript: '{text}'")
+            
+            # Check if we should interrupt based on state and transcript
+            if self.should_interrupt(text):
+                print(f"   🚨 CALLING _interrupt_by_audio_activity")
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    print(f"   ⏲️ Starting false interruption timer")
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
+            else:
+                print(f"   ✋ NOT interrupting (filtered out)")
+        else:
+            if not self._audio_recognition:
+                print(f"   ⏭️ Skipping: no audio recognition")
+            else:
+                print(f"   ⏭️ Skipping: turn_detection is {self._turn_detection}")
 
+        print(f"{'='*60}\n")
+        
         self._interrupt_paused_speech_task = asyncio.create_task(
             self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
         )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def on_preemptive_generation(self, info: _PreemptiveGenerationInfo) -> None:
         if (
@@ -1322,7 +1616,6 @@ class AgentActivity(RecognitionHooks):
             content=[info.new_transcript],
             transcript_confidence=info.transcript_confidence,
         )
-
         chat_ctx = self._agent.chat_ctx.copy()
         speech_handle = self._generate_reply(
             # we need to send in the original user_message because metrics are injected later on
@@ -1341,17 +1634,49 @@ class AgentActivity(RecognitionHooks):
             created_at=time.time(),
         )
 
+
+
+
+
+
+
+
+
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
-
+        
+        print(f"\n{'='*60}")
+        print(f"🔄 on_end_of_turn CALLED")
+        print(f"   new_transcript: '{info.new_transcript}'")
+        
+        text = info.new_transcript.strip()
+        
+        # ---- NEW LOGIC: Filter backchanneling when agent is speaking ----
+        if self.is_agent_speaking():
+            print(f"   Agent is currently speaking - checking if input is backchanneling...")
+            classification = self.classify_utterance(text)
+            
+            if classification == 'ignore':
+                # Backchanneling detected - don't send to LLM
+                print(f"🔇 IGNORING user turn: '{text}' (backchanneling, not sent to LLM)")
+                self._cancel_preemptive_generation()
+                print(f"{'='*60}\n")
+                return False  # <- do NOT finalize turn or generate response
+            else:
+                print(f"✅ PROCESSING user turn: '{text}' (real interruption)")
+        else:
+            print(f"✅ PROCESSING user turn: '{text}' (agent is silent)")
+        # -----------------------------------------------------------------
+        
         if self._scheduling_paused:
+            print(f"⚠️ Scheduling paused - handling accordingly")
             self._cancel_preemptive_generation()
             logger.warning(
                 "skipping user input, speech scheduling is paused",
                 extra={"user_input": info.new_transcript},
             )
-
+            
             if self._session._closing:
                 # add user input to chat context
                 user_message = llm.ChatMessage(
@@ -1361,10 +1686,11 @@ class AgentActivity(RecognitionHooks):
                 )
                 self._agent._chat_ctx.items.append(user_message)
                 self._session._conversation_item_added(user_message)
-
-            # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
+            
+            print(f"{'='*60}\n")
             return True
-
+        
+        # ---- Existing logic kept untouched ----
         if (
             self.stt is not None
             and self._turn_detection != "manual"
@@ -1375,16 +1701,29 @@ class AgentActivity(RecognitionHooks):
             and len(split_words(info.new_transcript, split_character=True))
             < self._session.options.min_interruption_words
         ):
+            print(f"🚫 IGNORING: Transcript too short (min_interruption_words)")
             self._cancel_preemptive_generation()
-            # avoid interruption if the new_transcript is too short
+            print(f"{'='*60}\n")
             return False
-
+        
+        print(f"✅ Creating user_turn_completed_task - WILL SEND TO LLM")
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
             self._user_turn_completed_task(old_task, info),
             name="AgentActivity._user_turn_completed_task",
         )
+        print(f"{'='*60}\n")
         return True
+
+
+
+
+
+
+
+
+
+
 
     @utils.log_exceptions(logger=logger)
     async def _user_turn_completed_task(
