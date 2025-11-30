@@ -1,5 +1,9 @@
 # Semantic Interruption Handling for LiveKit Agents
 
+## Demo Video Link
+
+[text](https://drive.google.com/file/d/17U6Vh20zr3VTd4XOv6uQ3YKwhn9wQC2e/view?usp=drivesdk)
+
 ## Overview
 
 This implementation provides **intelligent interruption control** for LiveKit voice agents that distinguishes between passive backchannel feedback and active interruptions based on conversation context.
@@ -43,7 +47,7 @@ graph TD
     
     F -->|YES| I[InterruptionClassifier]
     
-    I -->|BACKCHANNEL| J[Swallow Event (Show in UI)]
+    I -->|BACKCHANNEL| J["Swallow Event (Show in UI)"]
     I -->|COMMAND| K[Trigger Interrupt]
     I -->|NORMAL| L{Policy Check}
     
