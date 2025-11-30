@@ -125,6 +125,10 @@ class AgentActivity(RecognitionHooks):
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
+        
+        # for backchannel detection: wait for STT to decide if interrupt is needed
+        self._pending_vad_event: vad.VADEvent | None = None
+        self._interruption_pending: bool = False  # Flag indicating we're waiting for STT
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
@@ -727,6 +731,11 @@ class AgentActivity(RecognitionHooks):
 
             self._closed = True
             self._cancel_preemptive_generation()
+            
+            # Cancel pending interruption if exists
+            if self._interruption_pending:
+                self._interruption_pending = False
+                self._pending_vad_event = None
 
             await self._close_session()
             await asyncio.gather(*self._interrupt_background_speeches(force=False))
@@ -1185,6 +1194,9 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        # Note: Backchannel filtering is handled in on_interim_transcript/on_final_transcript
+        # VAD fires faster than STT, so we pause first, then instantly resume if it's a backchannel word
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1218,6 +1230,11 @@ class AgentActivity(RecognitionHooks):
             # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
             self._false_interruption_timer = None
+        
+        # Cancel pending interruption when user starts new speech
+        if self._interruption_pending:
+            self._interruption_pending = False
+            self._pending_vad_event = None
 
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
         speech_end_time = time.time()
@@ -1241,7 +1258,23 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # Check if agent is currently speaking AND we have backchannel detection enabled
+            if (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self.stt is not None
+                and self._audio_recognition is not None
+                and self._session.options.backchannel_words
+            ):
+                # COMPLETELY IGNORE VAD when agent is speaking
+                # Let STT be the sole decision maker to avoid pause/stutter
+                if not self._interruption_pending:
+                    self._interruption_pending = True
+                    logger.debug("VAD detected speech - STT will decide if interrupt is needed")
+                # Do NOT call _interrupt_by_audio_activity() - wait for STT!
+            else:
+                # No backchannel detection configured - normal VAD interruption
+                self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1261,7 +1294,41 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check if this is a backchannel-only transcript
+            transcript_text = ev.alternatives[0].text.strip().lower()
+            is_backchannel_only = False
+            
+            if transcript_text and self._session.options.backchannel_words:
+                words = split_words(transcript_text, ignore_punctuation=True, split_character=True)
+                word_list = [word[0].lower().strip() for word in words if word[0].strip()]
+                is_backchannel_only = word_list and all(
+                    word in self._session.options.backchannel_words for word in word_list
+                )
+            
+            # Check if we have a pending VAD event waiting for STT decision
+            if self._interruption_pending:
+                # If this is backchannel-only, clear flag and DON'T interrupt
+                if is_backchannel_only:
+                    self._interruption_pending = False
+                    logger.debug(
+                        "STT decision: IGNORE - backchannel detected (interim)",
+                        extra={"transcript": transcript_text, "words": word_list}
+                    )
+                    return  # Don't interrupt - agent continues speaking seamlessly
+                else:
+                    # Not backchannel - execute the interrupt NOW
+                    self._interruption_pending = False
+                    logger.debug(
+                        "STT decision: INTERRUPT - command detected (interim)",
+                        extra={"transcript": transcript_text, "words": word_list}
+                    )
+                    self._interrupt_by_audio_activity()
+                    return
+            
+            # No pending VAD event - normal processing (agent wasn't speaking or no backchannel detection)
+            if is_backchannel_only:
+                # Backchannel but agent wasn't speaking - don't interrupt
+                return
 
             if (
                 speaking is False
@@ -1292,7 +1359,41 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check if this is a backchannel-only transcript before interrupting
+            transcript_text = ev.alternatives[0].text.strip().lower()
+            is_backchannel_only = False
+            
+            if transcript_text and self._session.options.backchannel_words:
+                words = split_words(transcript_text, ignore_punctuation=True, split_character=True)
+                word_list = [word[0].lower().strip() for word in words if word[0].strip()]
+                is_backchannel_only = word_list and all(
+                    word in self._session.options.backchannel_words for word in word_list
+                )
+            
+            # Check if we have a pending VAD event waiting for STT decision
+            if self._interruption_pending:
+                # If this is backchannel-only, clear flag and DON'T interrupt
+                if is_backchannel_only:
+                    self._interruption_pending = False
+                    logger.debug(
+                        "STT decision: IGNORE - backchannel detected (final)",
+                        extra={"transcript": transcript_text, "words": word_list}
+                    )
+                    return  # Don't interrupt - agent continues speaking seamlessly
+                else:
+                    # Not backchannel - execute the interrupt NOW
+                    self._interruption_pending = False
+                    logger.debug(
+                        "STT decision: INTERRUPT - command detected (final)",
+                        extra={"transcript": transcript_text, "words": word_list}
+                    )
+                    self._interrupt_by_audio_activity()
+                    return
+            
+            # No pending VAD event - normal processing (agent wasn't speaking or no backchannel detection)
+            if is_backchannel_only:
+                # Backchannel but agent wasn't speaking - don't interrupt
+                return
 
             if (
                 speaking is False
@@ -1406,6 +1507,31 @@ class AgentActivity(RecognitionHooks):
 
         # interrupt all background speeches and wait for them to finish to update the chat context
         await asyncio.gather(*self._interrupt_background_speeches(force=False))
+
+        # Check if this is a backchannel-only input that should be ignored
+        # IMPORTANT: Only skip if the STT transcript was determined to be backchannel-only
+        # by the interim/final transcript handlers (they would have cleared _interruption_pending flag)
+        # If agent was silent, "yeah" should be treated as a valid response
+        transcript_text = info.new_transcript.strip().lower()
+        if transcript_text and self._session.options.backchannel_words:
+            words = split_words(transcript_text, ignore_punctuation=True, split_character=True)
+            word_list = [word[0].lower().strip() for word in words if word[0].strip()]
+            
+            # If ALL words are backchannel words, check if this was during agent speech
+            # We can detect this by checking if the transcript is backchannel-only
+            # AND we're in the context of processing a user turn (which means STT detected speech)
+            is_backchannel_only = word_list and all(word in self._session.options.backchannel_words for word in word_list)
+            
+            if is_backchannel_only:
+                # Check if there was a current speech active (meaning agent was speaking)
+                # We need to track this differently since we don't pause for backchannels anymore
+                # If current_speech exists OR paused_speech exists, agent was speaking
+                if self._current_speech is not None or self._paused_speech is not None:
+                    logger.debug(
+                        "Skipping user turn - backchannel only (agent was speaking)",
+                        extra={"transcript": info.new_transcript, "words": word_list}
+                    )
+                    return  # Don't generate a reply for backchannel-only input during agent speech
 
         if isinstance(self.llm, llm.RealtimeModel):
             if self.llm.capabilities.turn_detection:
