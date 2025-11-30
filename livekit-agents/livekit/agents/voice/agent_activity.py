@@ -1612,17 +1612,21 @@ class AgentActivity(RecognitionHooks):
             audio_source = _read_text()
 
         tasks: list[asyncio.Task[Any]] = []
-        started_speaking_at: float | None = None 
+# declare these here so nested _on_first_frame can use `nonlocal`
+        started_speaking_at: float | None = None
+        stopped_speaking_at: float | None = None
+
         def _on_first_frame(_: asyncio.Future[None]) -> None:
-        nonlocal started_speaking_at
+            nonlocal started_speaking_at
         started_speaking_at = time.time()
         self._session._update_agent_state("speaking")
+    
     # mark that agent is currently speaking for interrupt logic
         try:
             vad_handler.agent_speaking = True
-         except Exception:
+        except Exception:
             logger.exception("failed to set vad_handler.agent_speaking = True", exc_info=False)
-
+        stopped_speaking_at = time.time()
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:
@@ -1676,13 +1680,23 @@ class AgentActivity(RecognitionHooks):
             await speech_handle.wait_if_not_interrupted(
                 [asyncio.ensure_future(audio_output.wait_for_playout())]
             )
+            try:
+                vad_handler.agent_speaking = False
+            except Exception:
+                logger.exception("failed to set vad_handler.agent_speaking = False", exc_info=False)
+            stopped_speaking_at = time.time()
 
         if speech_handle.interrupted:
             await utils.aio.cancel_and_wait(*tasks)
-
+            
             if audio_output is not None:
                 audio_output.clear_buffer()
                 await audio_output.wait_for_playout()
+
+            try:
+                vad_handler.agent_speaking = False
+            except Exception:
+                logger.exception("failed to set vad_handler.agent_speaking = False", exc_info=False)
 
         if tee is not None:
             await tee.aclose()
@@ -1846,6 +1860,10 @@ class AgentActivity(RecognitionHooks):
             nonlocal started_speaking_at
             started_speaking_at = time.time()
             self._session._update_agent_state("speaking")
+            try:
+                vad_handler.agent_speaking = True
+            except Exception:
+                logger.exception("failed to set vad_handler.agent_speaking = True", exc_info=False)
 
         audio_out: _AudioOutput | None = None
         if audio_output is not None:
@@ -2170,6 +2188,10 @@ class AgentActivity(RecognitionHooks):
             nonlocal started_speaking_at
             started_speaking_at = time.time()
             self._session._update_agent_state("speaking")
+            try:
+                vad_handler.agent_speaking = True
+            except Exception:
+                logger.exception("failed to set vad_handler.agent_speaking = True", exc_info=False)
 
         tasks: list[asyncio.Task[Any]] = []
         tees: list[utils.aio.itertools.Tee[Any]] = []
