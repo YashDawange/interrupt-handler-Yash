@@ -19,8 +19,9 @@ This implementation adds intelligent backchannel detection that distinguishes be
 Create a `.env` file in the root directory:
 
 ```env
-# Required: LLM Provider (using Groq - free tier)
-GROQ_API_KEY=your_groq_api_key
+# LLM Provider - Choose ONE (Groq recommended for free tier, OpenAI for paid)
+GROQ_API_KEY=your_groq_api_key          # FREE - Fastest free option (recommended)
+# OPENAI_API_KEY=your_openai_api_key   # PAID - Alternative (uncomment to use)
 
 # Required: STT Provider (using Deepgram - free tier)
 DEEPGRAM_API_KEY=your_deepgram_api_key
@@ -34,21 +35,34 @@ LIVEKIT_API_KEY=your_api_key
 LIVEKIT_API_SECRET=your_api_secret
 ```
 
-**Get Free API Keys:**
-- Groq: https://console.groq.com/
-- Deepgram: https://console.deepgram.com/
-- Cartesia: https://play.cartesia.ai/
-- LiveKit: https://cloud.livekit.io/
+**Get API Keys:**
+- **Groq (FREE - Recommended):** https://console.groq.com/
+- **OpenAI (PAID - Alternative):** https://platform.openai.com/api-keys
+- **Deepgram (FREE):** https://console.deepgram.com/
+- **Cartesia (FREE):** https://play.cartesia.ai/
+- **LiveKit (FREE):** https://cloud.livekit.io/
+
+> **Note:** The agent auto-detects which LLM to use based on available API keys. If both `GROQ_API_KEY` and `OPENAI_API_KEY` are present, Groq takes priority. To use OpenAI, simply remove or comment out the Groq key.
 
 ### 2. Install Dependencies
 
+**Option A: Using requirements.txt (Recommended)**
+```bash
+# Install all dependencies from examples/voice_agents/requirements.txt
+pip install -r examples/voice_agents/requirements.txt
+```
+
+**Option B: Manual installation**
 ```bash
 # Install the modified livekit-agents
 pip install -e livekit-agents
 
-# Install Groq plugin
-pip install -e livekit-plugins/livekit-plugins-groq
+# Install required plugins
+pip install -e livekit-plugins/livekit-plugins-groq    # For Groq LLM
+pip install -e livekit-plugins/livekit-plugins-openai  # For OpenAI (if using)
 ```
+
+> **Note:** The `requirements.txt` file is located at `examples/voice_agents/requirements.txt`, not in the root directory.
 
 ### 3. Run the Agent
 
@@ -258,19 +272,6 @@ pip install -e livekit-plugins/livekit-plugins-groq
 
 ### Requirements (1 file)
 - `examples/voice_agents/requirements.txt` - Added `groq` dependency
-
----
-
-## 🎬 Video Proof Requirements
-
-Your video should demonstrate (2-3 minutes):
-
-1. **Agent speaking + user says "yeah"** → Agent continues (no pause)
-2. **Agent speaking + user says "stop"** → Agent interrupts immediately
-3. **Agent speaking + user says "yeah okay but wait"** → Agent interrupts (semantic)
-4. **Agent silent + user says "yeah"** → Agent responds normally
-
-Show terminal logs side-by-side with browser for each scenario.
 
 ---
 
