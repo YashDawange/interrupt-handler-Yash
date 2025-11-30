@@ -44,10 +44,38 @@ load_dotenv()
 
 
 IGNORE_WORDS = {
-    "yeah", "ok", "okay", "hmm", "aha", "right", "uh-huh", "yep",
-    "sure", "cool", "yea", "uh", "um", "yes", "correct", "yup"
+    "yeah", "yea", "yep", "yup", "ya", "yah",
+    "ok", "okay", "k", "kk", "okey",
+    "hmm", "mm", "mhm", "uh", "uhh", "umm", "um",
+    "right", "sure", "cool", "fine",
+    "okayyy", "okk", "okayy",
+    "yes", "yess", "yesss",
+    "alright", "aight",
+    "gotcha", "gotchaa",
+    "true", "tru", "ture",
+    "huh", "aha",
 }
-IGNORE_PHRASES = {"got it", "i see", "okey dokey", "sounds good", "alright"}
+IGNORE_PHRASES = {
+    "yeah yeah",
+    "yeah ok",
+    "yeah okay",
+    "ok ok",
+    "ok okay",
+    "okay okay",
+    "yes yes",
+    "yea yea",
+    "yep yep",
+    "right right",
+    "mhm yeah",
+    "hmm yeah",
+    "okay right",
+    "alright alright",
+    "i see",
+    "sounds good",
+    "got it",
+    "makes sense",
+    "fair enough",
+}
 
 INTERRUPT_KEYWORDS = {
     "stop", "shut up", "no", "no stop", "wait", "hold on", "stop now", "pause",
