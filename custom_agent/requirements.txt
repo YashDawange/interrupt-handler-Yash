@@ -1,0 +1,6 @@
+livekit-agents
+livekit-plugins-silero
+livekit-plugins-openai
+livekit-plugins-deepgram
+livekit-plugins-turn-detector
+python-dotenv
