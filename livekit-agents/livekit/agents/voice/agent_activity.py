@@ -53,6 +53,7 @@ from .audio_recognition import (
     _EndOfTurnInfo,
     _PreemptiveGenerationInfo,
 )
+from .backchanneling import BackchannelingDetector
 from .events import (
     AgentFalseInterruptionEvent,
     ErrorEvent,
@@ -125,6 +126,16 @@ class AgentActivity(RecognitionHooks):
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
+
+        # for backchanneling detection
+        self._backchanneling_detector: BackchannelingDetector | None = None
+        if self._session.options.backchanneling_enabled:
+            self._backchanneling_detector = BackchannelingDetector(
+                filler_words=self._session.options.backchanneling_filler_words,
+                interruption_words=self._session.options.backchanneling_interruption_words,
+            )
+        # Track pending interruptions that need STT validation
+        self._pending_interruption_for_validation: bool = False
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
@@ -1166,7 +1177,7 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
-    def _interrupt_by_audio_activity(self) -> None:
+    def _interrupt_by_audio_activity(self, *, transcript: str | None = None) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1185,14 +1196,65 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
-
-        if (
+        # Check backchanneling if we have a transcript and detector is enabled
+        agent_is_speaking = (
             self._current_speech is not None
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
-        ):
+        )
+
+        # Check if this is a valid interruption (not backchanneling)
+        is_valid_interruption = False
+        if transcript and self._backchanneling_detector and agent_is_speaking:
+            # Validate if this interruption should be ignored
+            if self._backchanneling_detector.should_ignore_interruption(
+                transcript, agent_is_speaking=True
+            ):
+                # This is only filler words, ignore the interruption
+                # If we already paused, resume immediately
+                if self._paused_speech and use_pause and self._session.output.audio:
+                    if self._session.output.audio.can_pause:
+                        self._session.output.audio.resume()
+                        self._session._update_agent_state("speaking")
+                    self._paused_speech = None
+                    # Cancel any false interruption timer
+                    if self._false_interruption_timer:
+                        self._false_interruption_timer.cancel()
+                        self._false_interruption_timer = None
+                logger.debug(
+                    "ignored backchanneling interruption",
+                    extra={"transcript": transcript},
+                )
+                return
+            else:
+                # This is a valid interruption (contains interruption word)
+                is_valid_interruption = True
+
+        if self._rt_session is not None:
+            self._rt_session.start_user_activity()
+
+        if agent_is_speaking:
+            # If this is a valid interruption (not backchanneling), interrupt immediately
+            # Don't pause - fully interrupt the speech
+            if is_valid_interruption:
+                # Cancel any paused speech and false interruption timer
+                if self._paused_speech:
+                    self._paused_speech = None
+                if self._false_interruption_timer:
+                    self._false_interruption_timer.cancel()
+                    self._false_interruption_timer = None
+
+                # Fully interrupt the speech
+                if self._rt_session is not None:
+                    self._rt_session.interrupt()
+                self._current_speech.interrupt()
+                logger.debug(
+                    "interrupted by valid interruption word",
+                    extra={"transcript": transcript},
+                )
+                return
+
+            # Otherwise, handle as potential false interruption (pause, don't interrupt)
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1200,7 +1262,20 @@ class AgentActivity(RecognitionHooks):
                 self._false_interruption_timer.cancel()
                 self._false_interruption_timer = None
 
-            if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
+            # If we have backchanneling enabled but no transcript yet (VAD-only trigger),
+            # pause but don't interrupt yet - wait for STT validation
+            if (
+                self._backchanneling_detector
+                and transcript is None
+                and use_pause
+                and self._session.output.audio
+                and self._session.output.audio.can_pause
+            ):
+                # Pause and wait for STT to validate
+                self._session.output.audio.pause()
+                self._session._update_agent_state("listening")
+                self._pending_interruption_for_validation = True
+            elif use_pause and self._session.output.audio and self._session.output.audio.can_pause:
                 self._session.output.audio.pause()
                 self._session._update_agent_state("listening")
             else:
@@ -1248,20 +1323,24 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript,
                 is_final=False,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        if transcript and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Pass transcript for backchanneling validation
+            self._interrupt_by_audio_activity(transcript=transcript)
+            self._pending_interruption_for_validation = False
 
             if (
                 speaking is False
@@ -1276,10 +1355,12 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript,
                 is_final=True,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
@@ -1292,7 +1373,9 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Pass transcript for backchanneling validation
+            self._interrupt_by_audio_activity(transcript=transcript)
+            self._pending_interruption_for_validation = False
 
             if (
                 speaking is False
@@ -1364,6 +1447,28 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        # Check if this is backchanneling that should be ignored
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+        if (
+            info.new_transcript
+            and self._backchanneling_detector
+            and agent_is_speaking
+        ):
+            if self._backchanneling_detector.should_ignore_interruption(
+                info.new_transcript, agent_is_speaking=True
+            ):
+                # This is backchanneling - ignore the turn completely
+                self._cancel_preemptive_generation()
+                logger.debug(
+                    "ignored backchanneling user turn",
+                    extra={"transcript": info.new_transcript},
+                )
+                return False
 
         if (
             self.stt is not None

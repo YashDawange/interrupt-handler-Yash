@@ -1,0 +1,50 @@
+ Agents   Starting console mode 🚀
+              
+    17:45:10.859 DEBUG  asyncio          Using selector: EpollSelector  
+    17:45:10.862 INFO   livekit.agents   starting worker {"version": "1.3.5", "rtc-version": "1.0.19"}
+    17:45:10.863 INFO   livekit.agents   preloading plugins {"packages": ["livekit.plugins.deepgram", "livekit.plugins.openai",             
+                                                            "livekit.plugins.silero", "av"]}                                                
+    17:45:10.872 INFO   livekit.agents   initializing job runner {"tid": 20201}
+    17:45:10.874 DEBUG  asyncio          Using selector: EpollSelector  
+    17:45:10.876 INFO   livekit.agents   job runner initialized {"tid": 20201, "elapsed_time": 0.0}
+    17:45:10.977 DEBUG  livekit.agents   http_session(): creating a new httpclient ctx  
+    17:45:10.979 DEBUG  livekit.agents   using audio io: `Console` -> `AgentSession` -> `Console`  
+    17:45:10.980 WARNI… livekit.agents   resume_false_interruption is enabled but audio output does not support  {"audio_output": "Console"}
+                                         pause, it will be ignored                                                                          
+    17:45:10.981 DEBUG  livekit.agents   using transcript io: `AgentSession` -> (none)           
+    17:49:50.411 DEBUG  livekit.agents   received user transcript {"user_transcript": "Yeah. Hello?", "language": "en", "transcript_delay": 
+                                                                  0.8577046394348145}                                                       
+    17:49:56.951 DEBUG  livekit.agents   received user transcript {"user_transcript": "Me a brief", "language": "en", "transcript_delay":   
+                                                                  0.009467363357543945}                                                     
+    17:49:58.633 DEBUG  livekit.agents   received user transcript {"user_transcript": "history description on history.", "language": "en",  
+                                                                  "transcript_delay": 0.5272617340087891}                                   
+[interrupt_handler] backchannel ignored: 'okay'
+    17:50:07.367 DEBUG  livekit.agents   received user transcript {"user_transcript": "Okay.", "language": "en", "transcript_delay":        
+                                                                  0.524259090423584}                                                        
+[interrupt_handler] backchannel ignored: 'okay'
+    17:50:18.554 DEBUG  livekit.agents   received user transcript {"user_transcript": "Okay.", "language": "en", "transcript_delay":        
+                                                                  0.6122305393218994}                                                       
+[interrupt_handler] backchannel ignored: 'yeah'
+    17:50:23.972 DEBUG  livekit.agents   received user transcript {"user_transcript": "Yeah.", "language": "en", "transcript_delay":        
+                                                                  0.09131622314453125}                                                      
+    17:50:31.704 DEBUG  livekit.agents   received user transcript {"user_transcript": "Give me a brief one, Victorian Arab.", "language":   
+                                                                  "en"}                                                                     
+[interrupt_handler] backchannel ignored: 'okay'
+    17:50:42.940 DEBUG  livekit.agents   received user transcript {"user_transcript": "Okay.", "language": "en", "transcript_delay":        
+                                                                  0.6174113750457764}                                                       
+    17:51:00.901 DEBUG  livekit.agents   received user transcript {"user_transcript": "Yep.", "language": "en"}
+    17:51:03.103 DEBUG  livekit.agents   received user transcript {"user_transcript": "Give me the best specific of", "language": "en",     
+                                                                  "transcript_delay": 0.08730888366699219}                                  
+    17:51:03.944 DEBUG  livekit.agents   received user transcript {"user_transcript": "all of them.", "language": "en"}
+    17:51:20.127 DEBUG  livekit.agents   received user transcript {"user_transcript": "Victorian era", "language": "en", "transcript_delay":
+                                                                  0.92604660987854}                                                         
+    17:51:33.573 DEBUG  livekit.agents   received user transcript {"user_transcript": "Okay. Stop. Wait. Hold on.", "language": "en",       
+                                                                  "transcript_delay": 0.6224784851074219}                                   
+    17:51:34.812 DEBUG  livekit.agents   received user transcript {"user_transcript": "Hold on.", "language": "en", "transcript_delay":     
+                                                                  0.7393984794616699}                                                       
+    17:52:53.744 INFO   livekit.agents   shutting down worker {"id": "unregistered"}
+    17:52:53.749 DEBUG  livekit.agents   session closed {"reason": "user_initiated", "error": null}
+    17:52:53.761 DEBUG  livekit.agents   shutting down job task {"reason": "", "user_initiated": false}
+    17:52:53.764 DEBUG  livekit.agents   job exiting {"reason": "", "tid": 20201, "job_id": "fake-job-c4d6c668a550", "room_id":             
+                                                     "FAKE_RM_4dd9c6345839"}                                                                
+    17:52:53.765 DEBUG  livekit.agents   http_session(): closing the httpclient ctx 
