@@ -158,8 +158,10 @@ async def entrypoint(ctx: JobContext):
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
 
-        # 👇 prevents accidental VAD interruption — we interrupt manually
-        allow_interruptions=False,
+        # allow interruptions, but make auto-interrupts harder to trigger
+        allow_interruptions=True,
+        min_interruption_words=3,        # auto interrupt only if user says ≥ 3 words
+        min_interruption_duration=0.5,   # and speaks for at least 0.5s
     )
 
     # attach our interruption handler
