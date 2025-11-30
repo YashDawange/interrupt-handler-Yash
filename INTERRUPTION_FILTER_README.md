@@ -115,7 +115,7 @@ Integration approach:
 
 ### Demo Application
 
-**demo_interruption.py** demonstrates the filter with production-grade components:
+**demo_interruption.py** (`examples/demo_interruption.py`) demonstrates the filter with production-grade components:
 
 - **Language Model**: Groq LLM provides natural language understanding
 - **Speech Recognition**: Deepgram STT delivers fast, accurate transcription
@@ -123,6 +123,14 @@ Integration approach:
 - **Voice Activity**: Silero VAD detects speech boundaries
 
 The demo agent engages in natural conversation, making it straightforward to observe interruption handling behavior across various scenarios.
+
+**Running the Demo**:
+```bash
+cd examples
+python demo_interruption.py dev
+```
+
+The agent will register with LiveKit and wait for connections. Use the LiveKit Agents Playground to interact with the agent and test backchannel filtering in real-time.
 
 ## Setup and Deployment
 
@@ -327,67 +335,5 @@ agents-assignment/
 │   └── .env                             # API credentials
 ├── tests/
 │   └── test_interrupt_filter.py         # Automated test suite
-└── README_INTELLIGENT_INTERRUPTION.md   # Documentation
+└── INTERRUPTION_FILTER_README.md        # Documentation
 ```
-
-## Performance Characteristics
-
-**Latency Impact**
-The filter introduces minimal computational overhead. String operations and dictionary lookups complete within milliseconds, making the performance impact negligible relative to network and speech processing latencies.
-
-**Accuracy Metrics**
-- All unit test cases pass successfully
-- Live testing demonstrates correct behavior across diverse scenarios
-- False positive rate (unwanted interruptions) effectively eliminated for backchannel inputs
-- False negative rate (missed commands) remains zero through conservative classification
-
-**Resource Utilization**
-- Memory footprint limited to dictionary storage and recent event tracking
-- No continuous background processing required
-- Computational cost dominated by existing speech pipeline, not filter logic
-
-## Results and Outcomes
-
-### Functional Requirements Met
-
-**Backchannel Handling**
-- Agent maintains continuous speech when receiving passive feedback
-- No perceptible pause or disruption in audio output
-- Natural conversation flow preserved
-
-**Command Recognition**
-- Explicit interruption commands processed immediately
-- Agent stops speaking and attends to user input
-- User control over conversation maintained
-
-**Mixed Input Processing**
-- Inputs combining backchannels and commands trigger appropriate interruption
-- Conservative classification ensures user intent respected
-- System never ignores potential commands
-
-### Technical Validation
-
-**Unit Testing**
-- Comprehensive test suite covers all decision paths
-- All test cases pass successfully
-- Filter logic verified independently of integration
-
-**Integration Testing**
-- Live demonstration confirms end-to-end functionality
-- Multiple test scenarios validate behavior
-- Log analysis confirms correct decision flow
-
-**Edge Case Handling**
-- Empty transcripts processed appropriately
-- Transcription variations accommodated
-- State transitions handled correctly
-
-### User Experience Impact
-
-The implementation transforms voice agent interactions by eliminating a major source of conversational friction. Users can naturally provide listening feedback without disrupting agent responses, creating interactions that feel more human-like and less robotic.
-
-Observed improvements:
-- Reduced user frustration from unnecessary interruptions
-- More natural conversation pacing and rhythm
-- Increased user engagement through active listening signals
-- Maintained responsiveness to genuine user commands
