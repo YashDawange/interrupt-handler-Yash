@@ -1,5 +1,7 @@
 # Contextual Interruption Handler for Voice Agents
 
+**Demonstration Video:** [Watch the demo on Google Drive](https://drive.google.com/file/d/1-qW85KccKPxh-yKAx2J1o0_0Gjf27Bv3/view?usp=sharing)
+
 This project provides a context-aware speech manager for voice agents, enabling more natural, human-like conversations. It solves the common problem where a voice agent abruptly stops speaking when it detects simple listening cues from the user, such as "yeah," "okay," or "uh-huh."
 
 This handler acts as a gatekeeper for the agent's interruption system. It analyzes user input in real-time, considering both the agent's state (speaking or silent) and the content of the user's speech to decide whether to interrupt.
@@ -73,7 +75,7 @@ Follow these steps to run the agent.
 ### Testing in terminal
 
 ```shell
-python3 examples/voice_agents/user_backchanneling_handler_agent.py console
+uv run python3 examples/voice_agents/user_backchanneling_handler_agent.py console
 ```
 
 Runs your agent in terminal mode, enabling local audio input and output for testing.
@@ -82,7 +84,7 @@ This mode doesn't require external servers or dependencies and is useful for qui
 ### Developing with LiveKit clients
 
 ```shell
-python3 examples/voice_agents/user_backchanneling_handler_agent.py dev
+uv run python3 examples/voice_agents/user_backchanneling_handler_agent.py dev
 ```
 
 Starts the agent server and enables hot reloading when files change. This mode allows each process to host multiple concurrent agents efficiently.
@@ -98,7 +100,7 @@ To get started quickly, try the [Agents Playground](https://agents-playground.li
 ### Running for production
 
 ```shell
-python3 examples/voice_agents/user_backchanneling_handler_agent.py start
+uv run python3 examples/voice_agents/user_backchanneling_handler_agent.py start
 ```
 
 Runs the agent with production-ready optimizations.
