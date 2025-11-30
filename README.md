@@ -39,6 +39,40 @@ The intelligent interruption handler implements a logic layer that:
 4. **Handles mixed inputs**: If the user says something like "yeah okay but wait", the agent will interrupt because "wait" is a command word.
 
 ## Implementation Details
+### Embedding-Based Semantic Checking
+
+The interruption handler now supports **embedding-based semantic similarity checking** using OpenAI embeddings. This provides a more robust way to detect backchanneling by understanding the semantic meaning of user input, not just exact word matches.
+
+#### Benefits of Embedding-Based Checking
+
+- **Handles Variations**: Recognizes semantic equivalents like "gotcha", "I understand", "makes sense" as backchanneling
+- **More Robust**: Understands context and meaning, not just exact word matches
+- **Handles Paraphrases**: Catches variations like "that's right", "exactly", "absolutely" as backchanneling
+- **Hybrid Approach**: Falls back to word-based matching if embeddings fail or are unavailable
+
+#### How It Works
+
+1. When embeddings are enabled, the handler:
+   - Generates embeddings for the user's transcript using OpenAI's embedding API
+   - Compares it against cached embeddings of known backchanneling phrases
+   - Uses cosine similarity to determine if the transcript is semantically similar to backchanneling
+   - If similarity exceeds the threshold (default: 0.75), treats it as backchanneling
+
+2. **Caching**: 
+   - Backchanneling embeddings are initialized once and cached
+   - Transcript embeddings are cached for 1 hour to reduce API calls
+   - Significantly improves performance and reduces costs
+
+3. **Fallback**:
+   - If embeddings fail or are disabled, automatically falls back to word-based matching
+   - Ensures reliability even if the OpenAI API is unavailable
+
+#### Performance Considerations
+
+- **First Use**: Initial embedding generation for backchanneling phrases happens on first use (one-time cost)
+- **Subsequent Uses**: Transcript embeddings are cached, making subsequent checks fast
+- **API Costs**: Minimal - embeddings are cached and only generated once per unique transcript
+- **Latency**: Embedding checks add ~50-200ms latency on first use, then use cached results
 
 ### Core Components
 
@@ -93,46 +127,6 @@ LIVEKIT_AGENT_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-### Embedding-Based Semantic Checking
-
-The interruption handler now supports **embedding-based semantic similarity checking** using OpenAI embeddings. This provides a more robust way to detect backchanneling by understanding the semantic meaning of user input, not just exact word matches.
-
-#### Benefits of Embedding-Based Checking
-
-- **Handles Variations**: Recognizes semantic equivalents like "gotcha", "I understand", "makes sense" as backchanneling
-- **More Robust**: Understands context and meaning, not just exact word matches
-- **Handles Paraphrases**: Catches variations like "that's right", "exactly", "absolutely" as backchanneling
-- **Hybrid Approach**: Falls back to word-based matching if embeddings fail or are unavailable
-
-#### How It Works
-
-1. When embeddings are enabled, the handler:
-   - Generates embeddings for the user's transcript using OpenAI's embedding API
-   - Compares it against cached embeddings of known backchanneling phrases
-   - Uses cosine similarity to determine if the transcript is semantically similar to backchanneling
-   - If similarity exceeds the threshold (default: 0.75), treats it as backchanneling
-
-2. **Caching**: 
-   - Backchanneling embeddings are initialized once and cached
-   - Transcript embeddings are cached for 1 hour to reduce API calls
-   - Significantly improves performance and reduces costs
-
-3. **Fallback**:
-   - If embeddings fail or are disabled, automatically falls back to word-based matching
-   - Ensures reliability even if the OpenAI API is unavailable
-
-#### Performance Considerations
-
-- **First Use**: Initial embedding generation for backchanneling phrases happens on first use (one-time cost)
-- **Subsequent Uses**: Transcript embeddings are cached, making subsequent checks fast
-- **API Costs**: Minimal - embeddings are cached and only generated once per unique transcript
-- **Latency**: Embedding checks add ~50-200ms latency on first use, then use cached results
-
-#### When to Use Embeddings
-
-- **Recommended for**: Production environments where you want maximum accuracy
-- **Not needed for**: Simple use cases where word-based matching is sufficient
-- **Requires**: OpenAI API key and internet connection
 
 ### Programmatic Configuration
 
