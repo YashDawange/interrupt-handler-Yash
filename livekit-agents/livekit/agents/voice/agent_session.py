@@ -89,6 +89,9 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    backchanneling_enabled: bool
+    backchanneling_filler_words: Sequence[str] | None
+    backchanneling_interruption_words: Sequence[str] | None
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +162,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        backchanneling_enabled: bool = True,
+        backchanneling_filler_words: NotGivenOr[Sequence[str] | None] = NOT_GIVEN,
+        backchanneling_interruption_words: NotGivenOr[Sequence[str] | None] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +251,14 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            backchanneling_enabled (bool): Whether to enable backchanneling detection to filter
+                passive acknowledgements (e.g., "yeah", "ok", "hmm") when the agent is speaking.
+                When enabled, these words will not interrupt the agent. Default ``True``.
+            backchanneling_filler_words (Sequence[str] | None, optional): Custom list of filler
+                words to ignore when agent is speaking. If not provided, uses default list.
+            backchanneling_interruption_words (Sequence[str] | None, optional): Custom list of
+                interruption words that should always trigger interruption. If not provided,
+                uses default list.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -288,6 +302,15 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            backchanneling_enabled=backchanneling_enabled,
+            backchanneling_filler_words=(
+                backchanneling_filler_words if is_given(backchanneling_filler_words) else None
+            ),
+            backchanneling_interruption_words=(
+                backchanneling_interruption_words
+                if is_given(backchanneling_interruption_words)
+                else None
+            ),
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
