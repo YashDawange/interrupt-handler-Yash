@@ -52,7 +52,7 @@ async def entrypoint(ctx: JobContext):
     
     await session.start(agent=agent, room=ctx.room)
     await session.generate_reply(
-        instructions="Greet the user and offer to explain any topic they're interested in."
+        instructions="Greet the user and offer to explain any topic they're interested in and if i say stop or wait do not reply anything just don't respond to it"
     )
 
 if __name__ == "__main__":

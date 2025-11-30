@@ -1243,65 +1243,84 @@ class AgentActivity(RecognitionHooks):
         text_clean = text.lower().strip()
         words = [w.strip(string.punctuation) for w in text_clean.split()]
     
-        # ⭐ NEW: If more than 3 words, likely real speech - don't ignore
+        # ⭐ PRIORITY CHECK: Mixed backchannel + interrupt (e.g., "yes but wait")
+        has_interrupt_word = any(w in self.strong_interrupt for w in words)
+        has_backchannel_word = any(w in self.strong_backchannel for w in words)
+    
+        if has_interrupt_word and has_backchannel_word:
+            print(f"📝 MIXED INPUT: '{text}' -> 'interrupt' (contains interrupt word despite backchannel)")
+            return 'interrupt'
+    
+        # ⭐ NEW: If more than 4 words, likely real speech - don't ignore
         if len(words) > 4:
             print(f"📝 FAST: '{text}' -> 'interrupt' ({len(words)} words - too long to be backchannel)")
             return 'interrupt'
 
         # FAST PATH: Strong keywords (0ms)
-        strong_interrupt = {
+        self.strong_interrupt = {
             # Stop commands
             'stop', 'wait', 'no', 'hold', 'pause', 'halt',
             'hang', 'nope', 'nah', 'wrong', 'incorrect',
-    
+
             # Attention words
             'but', 'however', 'actually', 'excuse',
-    
+
             # Questions
             'what', 'huh', 'why', 'how', 'when', 'where',
-    
+
             # Disagreement
             'disagree', 'not', 'dont', "don't", 'never',
             'cant', "can't", 'wont', "won't",
+        
+            # ⭐ ADD: Common greetings that should interrupt
+            'hello', 'hi', 'hey',
         }
 
-        strong_backchannel = {
+        self.strong_backchannel = {
             # Acknowledgments
             'yeah', 'yes', 'yep', 'yup', 'okay', 'ok', 'okey',
             'sure', 'right', 'alright', 'cool', 'nice', 'great',
-    
+
             # Fillers
             'mhm', 'hmm', 'hmmm', 'mmm', 'mm-hmm', 'uh-huh',
             'ah', 'oh', 'aha', 'ooh',
-    
+
             # Agreement
             'gotcha', 'got', 'understood', 'exactly',
         }
 
         if len(words) <= 2:
             # Short phrases - check keywords first
-            if any(w in strong_interrupt for w in words):
+            if any(w in self.strong_interrupt for w in words):
                 print(f"📝 FAST: '{text}' -> 'interrupt' (keyword match)")
                 return 'interrupt'
-            if all(w in strong_backchannel for w in words):
+            if all(w in self.strong_backchannel for w in words):
                 print(f"📝 FAST: '{text}' -> 'ignore' (keyword match)")
                 return 'ignore'
     
-        # For 3-word utterances, check if ALL are backchannel
-        if len(words) == 3:
-            if all(w in strong_backchannel for w in words):
-                print(f"📝 FAST: '{text}' -> 'ignore' (all 3 words are backchannel)")
+        # For 3-4 word utterances
+        if 3 <= len(words) <= 4:
+            # Check if it contains ANY interrupt word
+            if has_interrupt_word:
+                print(f"📝 FAST: '{text}' -> 'interrupt' (contains interrupt keyword)")
+                return 'interrupt'
+        
+            # Check if ALL words are backchannel
+            if all(w in self.strong_backchannel for w in words):
+                print(f"📝 FAST: '{text}' -> 'ignore' (all {len(words)} words are backchannel)")
                 return 'ignore'
-            # If not all backchannel, treat as real speech
-            print(f"📝 FAST: '{text}' -> 'interrupt' (3 words, mixed content)")
+        
+            # Mixed content - treat as real speech
+            print(f"📝 FAST: '{text}' -> 'interrupt' ({len(words)} words, mixed content)")
             return 'interrupt'
 
         # SLOW PATH: Semantic for complex cases (30ms)
         # This should rarely be reached now
-        print(f"📝 Using SEMANTIC (edge case)")
+        print(f"📝 SEMANTIC: '{text}' (edge case, using AI classifier)")
         result = self._semantic_classifier.classify(text_clean)
-        return 'ignore' if result == 'backchannel' else 'interrupt'
-        
+        final_result = 'ignore' if result == 'backchannel' else 'interrupt'
+        print(f"   └─ Result: '{final_result}' (confidence: high)")
+        return final_result
         
 
     def should_interrupt(self, text: str) -> bool:
