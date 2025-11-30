@@ -202,47 +202,6 @@ The interruption handler is automatically integrated and will:
 - **User Action**: User says "Yeah okay but wait."
 - **Result**: Agent stops (because "but wait" contains interrupt words).
 
-## Technical Details
-
-### Detection Methods
-
-The interruption handler uses a **hybrid approach** with two detection methods:
-
-#### 1. Word-Based Matching (Default)
-- Fast and lightweight
-- Exact word matching with fuzzy variations (e.g., "mhmm" → "mhm")
-- No external dependencies
-- Works offline
-
-#### 2. Embedding-Based Semantic Similarity (Optional)
-
-- More robust and accurate
-- Understands semantic meaning, not just exact words
-- Handles variations and paraphrases
-- Requires OpenAI API key
-- Uses cosine similarity to compare embeddings
-- Falls back to word matching if unavailable
-
-The handler tries embedding-based checking first (if enabled), then falls back to word-based matching for reliability.
-
-### False Start Interruption Handling
-
-One challenge is that VAD (Voice Activity Detection) can trigger before STT (Speech-to-Text) confirms what the user said. The implementation handles this by:
-
-1. When VAD triggers but no transcript is available yet, the interruption is marked as "pending"
-2. A timer (800ms) is set to wait for STT confirmation
-3. When STT provides the transcript:
-   - If it's an ignorable word (via word matching or embeddings), the pending interruption is cancelled
-   - If it's a command word, the interruption proceeds
-   - If no transcript arrives within the timeout, the interruption proceeds (handles STT failures)
-
-### State Detection
-
-The agent determines if it's speaking by checking:
-- `_current_speech` is not None and not interrupted
-- `_current_speech.allow_interruptions` is True
-- `_session.agent_state == "speaking"`
-
 
 
 ## Files Modified
@@ -256,24 +215,4 @@ The agent determines if it's speaking by checking:
 2. `.env.example` - Example environment variables
 
 
-1. `livekit/agents/voice/interruption_handler.py` - New module for interruption logic
-2. `livekit/agents/voice/agent_activity.py` - Integrated interruption handler into agent activity
-
-## Files Added
-
-1. `examples/voice_agents/intelligent_interruption_agent.py` - Example agent demonstrating the functionality
-2. `.env.example` - Example environment variables
-
-
-
-
-## Notes
-
-- The interruption handler does not modify the low-level VAD kernel
-- It operates as a logic handling layer within the agent's event loop
-- The solution handles real-time constraints with minimal latency
-- Works with both streaming and non-streaming STT implementations
-- Embedding-based checking is optional and falls back to word matching if unavailable
-- Embeddings are cached to minimize API calls and improve performance
-- Requires `numpy` for optimal performance (falls back to manual cosine similarity if unavailable)
 
