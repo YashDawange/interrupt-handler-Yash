@@ -89,6 +89,8 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    ignore_interruption_words: set[str] | None
+    """Set of words to ignore when the agent is speaking (backchannel words like 'yeah', 'ok', 'hmm')"""
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +161,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        ignore_interruption_words: NotGivenOr[list[str] | None] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -208,7 +211,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 an interruption, only used if stt enabled. Default ``0``.
             min_endpointing_delay (float): Minimum time-in-seconds the agent
                 must wait after a potential end-of-utterance signal (from VAD
-                or an EOU model) before it declares the user’s turn complete.
+                or an EOU model) before it declares the user's turn complete.
                 Default ``0.5`` s.
             max_endpointing_delay (float): Maximum time-in-seconds the agent
                 will wait before terminating the turn. Default ``3.0`` s.
@@ -245,6 +248,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            ignore_interruption_words (list[str] | None, optional): List of backchannel words
+                (e.g., ['yeah', 'ok', 'hmm', 'right', 'uh-huh']) that should be ignored when
+                the agent is speaking. These words indicate the user is listening but should
+                not interrupt the agent. When NOT_GIVEN, defaults to common backchannel words.
+                Set to ``None`` to disable this feature.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -263,6 +271,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             video_sampler = VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.3)
 
         self._video_sampler = video_sampler
+
+        # Configure ignore_interruption_words with default backchannel words
+        ignore_words: set[str] | None = None
+        if not is_given(ignore_interruption_words):
+            ignore_words = {'yeah', 'ok', 'okay', 'hmm', 'right', 'uh-huh', 'mhmm', 'aha', 'yep', 'yup'}
+        elif ignore_interruption_words is not None:
+            ignore_words = {word.lower() for word in ignore_interruption_words}
 
         # This is the "global" chat_context, it holds the entire conversation history
         self._chat_ctx = ChatContext.empty()
@@ -288,6 +303,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            ignore_interruption_words=ignore_words,
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False

@@ -1109,14 +1109,127 @@ class AgentActivity(RecognitionHooks):
         if self.vad is None:
             self._session._update_user_state("speaking")
 
-        # self.interrupt() is going to raise when allow_interruptions is False, llm.InputSpeechStartedEvent is only fired by the server when the turn_detection is enabled.  # noqa: E501
-        # When using the server-side turn_detection, we don't allow allow_interruptions to be False.
+        # [Logic Change] Handle "False Start" Interruption [cite: 47]
+        if self._session.options.ignore_interruption_words:
+            return
+
         try:
-            self.interrupt()  # input_speech_started is also interrupting on the serverside realtime session  # noqa: E501
+            self.interrupt() 
         except RuntimeError:
             logger.exception(
-                "RealtimeAPI input_speech_started, but current speech is not interruptable, this should never happen!"  # noqa: E501
+                "RealtimeAPI input_speech_started, but current speech is not interruptable, this should never happen!" 
             )
+
+    # ... (Keep existing methods) ...
+
+    def _interrupt_by_audio_activity(self) -> None:
+        """
+        Intelligent interruption handler that distinguishes between:
+        1. Backchannel words (yeah, ok, hmm) when agent is speaking -> IGNORE
+        2. Command words (wait, stop) when agent is speaking -> INTERRUPT
+        3. Any words when agent is silent -> RESPOND (normal behavior)
+        """
+        opt = self._session.options
+        use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
+
+        # Skip interruption logic for RealtimeModel with server-side turn detection
+        if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
+            return
+
+        # Check if we have STT and need to validate words
+        if (
+            self.stt is not None
+            and opt.min_interruption_words > 0
+            and self._audio_recognition is not None
+        ):
+            text = self._audio_recognition.current_transcript
+
+            # --- INTELLIGENT INTERRUPTION LOGIC START ---
+            
+            # 1. DETERMINE AGENT STATE (Speaking vs Silent)
+            # The behavior matrix requires different handling based on whether the agent is speaking.
+            is_agent_speaking = (
+                self._current_speech is not None 
+                and not self._current_speech.done()
+            )
+
+            # 2. APPLY IGNORE FILTER ONLY IF AGENT IS SPEAKING
+            # When the agent is silent, all user input should be processed normally
+            if is_agent_speaking and opt.ignore_interruption_words:
+                import string
+                
+                # Clean the transcript: remove punctuation and convert to lowercase
+                # Example: "Yeah." -> "yeah", "Ok!" -> "ok"
+                words = [
+                    w.strip(string.punctuation).lower() 
+                    for w in text.split() 
+                    if w.strip()
+                ]
+
+                # 3. HANDLE VAD/STT TIMING GAP
+                # VAD triggers faster than STT. If VAD detected speech but STT hasn't
+                # returned any words yet, we must wait for the transcript before deciding.
+                # Otherwise, we might incorrectly interrupt on what turns out to be "yeah".
+                if not words:
+                    # No words yet from STT, but VAD triggered.
+                    # Don't interrupt - wait for STT to provide the transcript.
+                    return
+
+                # 4. CHECK IF INPUT IS STRICTLY BACKCHANNEL WORDS
+                # We check if ALL words in the user input are in the ignore list.
+                # 
+                # Examples:
+                #   - User: "yeah" -> ignored=True -> IGNORE (continue speaking)
+                #   - User: "yeah ok" -> ignored=True -> IGNORE (continue speaking)
+                #   - User: "yeah wait" -> ignored=False (because "wait" not in list) -> INTERRUPT
+                #   - User: "stop" -> ignored=False -> INTERRUPT
+                is_ignored = all(w in opt.ignore_interruption_words for w in words)
+                
+                if is_ignored:
+                    # SCENARIO 1: Backchannel words + Agent Speaking -> IGNORE
+                    # The agent continues speaking completely uninterrupted.
+                    # No pause, no stutter, no audio break.
+                    return 
+            
+            # SCENARIO 2: Command words + Agent Speaking -> INTERRUPT
+            # If we reach here while the agent is speaking, it means the user said
+            # something that's NOT purely backchannel words (e.g., "wait", "stop", 
+            # or mixed input like "yeah but wait"). We proceed to interrupt.
+
+            # SCENARIO 3 & 4: Any input + Agent Silent -> RESPOND
+            # If is_agent_speaking is False, we skipped the ignore block entirely.
+            # This allows the agent to process "yeah" as a valid answer when silent.
+            
+            # --- INTELLIGENT INTERRUPTION LOGIC END ---
+
+            # Standard minimum word count check (existing logic)
+            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                return
+
+        # Start user activity in realtime session if available
+        if self._rt_session is not None:
+            self._rt_session.start_user_activity()
+
+        # Proceed with interruption if conditions are met
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ):
+            self._paused_speech = self._current_speech
+
+            if self._false_interruption_timer:
+                self._false_interruption_timer.cancel()
+                self._false_interruption_timer = None
+
+            if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
+                self._session.output.audio.pause()
+                self._session._update_agent_state("listening")
+            else:
+                if self._rt_session is not None:
+                    self._rt_session.interrupt()
+
+                self._current_speech.interrupt()
 
     def _on_input_speech_stopped(self, ev: llm.InputSpeechStoppedEvent) -> None:
         if self.vad is None:
@@ -1171,7 +1284,6 @@ class AgentActivity(RecognitionHooks):
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
-            # ignore if realtime model has turn detection enabled
             return
 
         if (
@@ -1181,7 +1293,54 @@ class AgentActivity(RecognitionHooks):
         ):
             text = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
+            # --- INTELLIGENT INTERRUPTION LOGIC START ---
+            
+            # 1. DETERMINE AGENT STATE (Speaking vs Silent) 
+            # The matrix requires different behavior based on whether the agent is speaking.
+            is_agent_speaking = (
+                self._current_speech is not None 
+                and not self._current_speech.done()
+            )
+
+            # 2. CHECK FOR IGNORE LIST CONFIGURATION [cite: 37]
+            if is_agent_speaking and opt.ignore_interruption_words:
+                import string
+                
+                # Clean the text: Remove punctuation and convert to lowercase 
+                # to ensure "Yeah." matches "yeah"
+                words = [
+                    w.strip(string.punctuation).lower() 
+                    for w in text.split() 
+                    if w.strip()
+                ]
+
+                # 3. HANDLE VAD FALSE STARTS [cite: 47]
+                # If VAD triggered but STT hasn't returned words yet, do not interrupt.
+                # We need to wait for the text to validate against the ignore list.
+                if not words:
+                    return
+
+                # 4. CHECK IF INPUT IS STRICTLY "IGNORED WORDS"
+                # If the user says "Yeah wait", 'wait' is NOT in the ignore list.
+                # 'is_ignored' will be False, and we will proceed to interrupt[cite: 39, 66].
+                is_ignored = all(w in opt.ignore_interruption_words for w in words)
+                
+                if is_ignored:
+                    # SCENARIO 1: "Yeah/Ok" + Agent Speaking -> IGNORE [cite: 18, 20, 32]
+                    # The agent continues speaking without pausing or stopping.
+                    return 
+            
+            # SCENARIO 2: "Wait/Stop" + Agent Speaking -> INTERRUPT [cite: 21, 23, 33]
+            # If the code reaches here while speaking, it means the words were NOT fully ignored.
+            # The logic below will trigger the interruption.
+
+            # SCENARIO 3 & 4: Agent Silent -> RESPOND [cite: 24, 28, 34, 35]
+            # If is_agent_speaking is False, we skipped the ignore block above.
+            # The logic proceeds to process the user input as a standard turn.
+            
+            # --- INTELLIGENT INTERRUPTION LOGIC END ---
+
+            # Standard min word length check (existing logic)
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
@@ -1195,7 +1354,6 @@ class AgentActivity(RecognitionHooks):
         ):
             self._paused_speech = self._current_speech
 
-            # reset the false interruption timer
             if self._false_interruption_timer:
                 self._false_interruption_timer.cancel()
                 self._false_interruption_timer = None
