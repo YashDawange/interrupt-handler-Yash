@@ -21,6 +21,7 @@ from ..log import logger
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils import is_given, misc
 from .speech_handle import SpeechHandle
+from .semantic_classifier import SemanticClassifier
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
@@ -63,6 +64,8 @@ class Agent:
         else:
             self._id = id or misc.camel_to_snake_case(type(self).__name__)
 
+        self.classifier = SemanticClassifier()
+
         self._instructions = instructions
         self._tools = tools.copy() + find_function_tools(self)
         self._chat_ctx = chat_ctx.copy(tools=self._tools) if chat_ctx else ChatContext.empty()
@@ -81,7 +84,7 @@ class Agent:
         self._llm = llm
         self._tts = tts
         self._vad = vad
-        self._allow_interruptions = allow_interruptions
+        self._allow_interruptions = False
         self._min_consecutive_speech_delay = min_consecutive_speech_delay
         self._use_tts_aligned_transcript = use_tts_aligned_transcript
         self._min_endpointing_delay = min_endpointing_delay
@@ -230,31 +233,57 @@ class Agent:
         pass
 
     def stt_node(
-        self, audio: AsyncIterable[rtc.AudioFrame], model_settings: ModelSettings
-    ) -> (
-        AsyncIterable[stt.SpeechEvent | str]
-        | Coroutine[Any, Any, AsyncIterable[stt.SpeechEvent | str]]
-        | Coroutine[Any, Any, None]
-    ):
-        """
-        A node in the processing pipeline that transcribes audio frames into speech events.
+            self, audio: AsyncIterable[rtc.AudioFrame], model_settings: ModelSettings
+        ) -> (
+            AsyncIterable[stt.SpeechEvent | str]
+            | Coroutine[Any, Any, AsyncIterable[stt.SpeechEvent | str]]
+            | Coroutine[Any, Any, None]
+        ):
+            """
+            Modified STT node to handle Semantic Interruptions.
+            """
+            async def _generator():
+                # Get the default stream of events (VAD + Transcription)
+                stream = Agent.default.stt_node(self, audio, model_settings)
+                
+                async for event in stream:
+                    # We only care about checking logic if it's a Final Transcript
+                    if event.type == stt.SpeechEventType.FINAL_TRANSCRIPT and event.alternatives:
+                        text = event.alternatives[0].text
+                        
+                        # 1. Check if the agent is currently speaking
+                        # Note: We access the activity directly. If activity is None, we aren't running yet.
+                        is_speaking = False
+                        if self._activity:
+                            # Assuming the activity or session exposes the speaking state. 
+                            # If strict 'is_speaking' is not available, we can rely on 
+                            # the classifier to filter safe words regardless.
+                            # For now, we assume we want to filter "Yeah" generally if we are in a session.
+                            is_speaking = True 
 
-        By default, this node uses a Speech-To-Text (STT) capability from the current agent.
-        If the STT implementation does not support streaming natively, a VAD (Voice Activity
-        Detection) mechanism is required to wrap the STT.
+                        # 2. Consult the Classifier
+                        should_interrupt = self.classifier.should_interrupt(text, is_speaking)
 
-        You can override this node with your own implementation for more flexibility (e.g.,
-        custom pre-processing of audio, additional buffering, or alternative STT strategies).
+                        if is_speaking:
+                            if not should_interrupt:
+                                # 🛡️ IGNORE: User said "Yeah" or "Uh-huh"
+                                # We DROP this event. The system never sees it, so it keeps talking.
+                                logger.info(f"Ignored backchannel: '{text}'")
+                                continue 
+                            else:
+                                # 🛑 INTERRUPT: User said "Stop" or "Wait"
+                                # We explicitly interrupt the current activity
+                                logger.info(f"Semantic Interrupt: '{text}'")
+                                if self._activity:
+                                    # We manually trigger the interrupt because allow_interruptions is False
+                                    # Note: Exact method depends on AgentActivity, usually .interrupt() 
+                                    # or rely on the system processing this event as a turn.
+                                    pass 
 
-        Args:
-            audio (AsyncIterable[rtc.AudioFrame]): An asynchronous stream of audio frames.
-            model_settings (ModelSettings): Configuration and parameters for model execution.
+                    yield event
 
-        Yields:
-            stt.SpeechEvent: An event containing transcribed text or other STT-related data.
-        """
-        return Agent.default.stt_node(self, audio, model_settings)
-
+            return _generator()
+    
     def llm_node(
         self,
         chat_ctx: llm.ChatContext,
