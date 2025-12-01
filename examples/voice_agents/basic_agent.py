@@ -33,7 +33,8 @@ class MyAgent(Agent):
             "with that in mind keep your responses concise and to the point."
             "do not use emojis, asterisks, markdown, or other special characters in your responses."
             "You are curious and friendly, and have a sense of humor."
-            "you will speak english to the user",
+            "you will speak english to the user"
+            'you will contine speaking while user interrupts you using this key words "hm", "ok", "okay", "right", "yeah", "yup", "hmm", "hm", "mhmm"',
         )
 
     async def on_enter(self):
@@ -85,7 +86,7 @@ async def entrypoint(ctx: JobContext):
         stt="deepgram/nova-3",
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
+        llm="openai/gpt-4o-mini",
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
@@ -101,6 +102,7 @@ async def entrypoint(ctx: JobContext):
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
     )
+    session.options.interruption_filter = ["hm", "ok", "okay", "right", "yeah", "yup", "hmm", "hm", "mhmm"]
 
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
