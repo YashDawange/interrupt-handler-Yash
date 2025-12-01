@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import string
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -1174,6 +1175,38 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        if self.stt is not None and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+
+            if not text or not text.strip():
+                return
+
+            # Clean and Split:
+            cleaned_text = text.lower().translate(str.maketrans('', '', string.punctuation))
+            words = cleaned_text.split()
+
+            if not words:
+                return
+
+            # Check if EVERY word is an ignore word
+            if all(w in self._agent.passive_backchannel_words for w in words):
+                print(f"Ignoring reply to: '{cleaned_text}'")
+                return
+
+            # Only runs if all *previous* words were ignored.
+            # Example: "Yeah o" -> "Yeah" is ignored, "o" might be "ok" -> WAIT.
+            last_word = words[-1]
+            previous_words = words[:-1]
+
+            if all(w in self._agent.passive_backchannel_words for w in previous_words):
+                if len(last_word) <= 4:
+                    for ignore_word in self._agent.passive_backchannel_words:
+                        if ignore_word.startswith(last_word):
+                            return
+
+        if self._rt_session is not None:
+            self._rt_session.start_user_activity()
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
@@ -1184,9 +1217,6 @@ class AgentActivity(RecognitionHooks):
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
-
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
 
         if (
             self._current_speech is not None
@@ -1364,6 +1394,14 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        is_agent_speaking = self._current_speech is not None and not self._current_speech.done()
+        cleaned_final = info.new_transcript.lower().translate(str.maketrans('', '', string.punctuation))
+        final_words = cleaned_final.split()
+
+        if is_agent_speaking and final_words and all(w in self._agent.passive_backchannel_words for w in final_words):
+            print(f"Ignore reply to: '{info.new_transcript}'")
+            return False
 
         if (
             self.stt is not None
