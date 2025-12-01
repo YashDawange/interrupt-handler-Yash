@@ -1,4 +1,19 @@
+
 from __future__ import annotations
+
+# Passive backchannel words - these are short acknowledgments that don't interrupt the agent
+PASSIVE_BACKCHANNEL_WORDS = [
+    "yeah", "ok", "hmm", "mhmm", "aha", "right", "uh-huh",
+    "i see", "got it", "sure", "alright", "uh", "ah", "mm", 
+    "mhm", "okay", "yes"
+]
+
+# Active interrupt words - these words always trigger immediate interruption
+ACTIVE_INTERRUPT_WORDS = [
+    "stop", "wait", "hold on", "hold up", "hang on", "pause",
+    "nevermind", "never mind", "cancel", "shut up", "be quiet",
+    "enough", "shush", "silence", "quiet", "stop talking"
+]
 
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterable, Coroutine, Generator
@@ -15,12 +30,15 @@ from ..llm import (
     RealtimeModel,
     find_function_tools,
 )
+
 from ..llm.chat_context import _ReadOnlyChatContext
 from ..llm.tool_context import is_function_tool, is_raw_function_tool
 from ..log import logger
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils import is_given, misc
 from .speech_handle import SpeechHandle
+
+
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
@@ -63,8 +81,11 @@ class Agent:
         else:
             self._id = id or misc.camel_to_snake_case(type(self).__name__)
 
+        self._allow_interruptions = allow_interruptions
         self._instructions = instructions
         self._tools = tools.copy() + find_function_tools(self)
+        self._passive_backchannel_words = PASSIVE_BACKCHANNEL_WORDS.copy()
+        self._active_interrupt_words = ACTIVE_INTERRUPT_WORDS.copy()
         self._chat_ctx = chat_ctx.copy(tools=self._tools) if chat_ctx else ChatContext.empty()
         self._turn_detection = turn_detection
 
@@ -100,6 +121,15 @@ class Agent:
     @property
     def label(self) -> str:
         return self.id
+
+    
+    @property
+    def passive_backchannel_words(self) -> list[str]:
+        return self._passive_backchannel_words
+
+    @property
+    def active_interrupt_words(self) -> list[str]:
+        return self._active_interrupt_words
 
     @property
     def instructions(self) -> str:
@@ -489,7 +519,7 @@ class Agent:
         Retrieves the turn detection mode for identifying conversational turns.
 
         If this property was not set at Agent creation, but an ``AgentSession`` provides a turn detection,
-        the session's turn detection mode will be used at runtime instead.
+        the session's turn detecignoringtion mode will be used at runtime instead.
 
         Returns:
             NotGivenOr[TurnDetectionMode | None]: An optional turn detection mode for managing conversation flow.

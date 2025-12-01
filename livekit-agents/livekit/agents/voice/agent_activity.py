@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import string
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -1174,6 +1175,67 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Check if agent is currently speaking
+        is_agent_speaking = self._current_speech is not None and not self._current_speech.done()
+
+        if self.stt is not None and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+
+            if not text or not text.strip():
+                return
+
+            # Clean and split text for analysis
+            cleaned_text = text.lower().translate(str.maketrans('', '', string.punctuation))
+            words = cleaned_text.split()
+
+            if not words:
+                return
+
+            # SEMANTIC INTERRUPTION LOGIC
+            # Check if ANY word is an active interrupt word (mixed sentence detection)
+            has_active_interrupt = any(w in self._agent.active_interrupt_words for w in words)
+            
+            # Check if ALL words are passive backchannel words
+            all_passive = all(w in self._agent.passive_backchannel_words for w in words)
+
+            # LOGIC MATRIX IMPLEMENTATION:
+            if is_agent_speaking:
+                # Agent is Speaking
+                if all_passive and not has_active_interrupt:
+                    # Case 1: "Yeah / Ok / Hmm" while agent speaking → IGNORE
+                    print(f"[IGNORE] Agent speaking, passive backchannel detected: '{cleaned_text}'")
+                    return
+                elif has_active_interrupt:
+                    # Case 2: "Wait / Stop / No" or mixed "Yeah wait" → INTERRUPT
+                    print(f"[INTERRUPT] Active interrupt word detected: '{cleaned_text}'")
+                    # Continue to allow interruption below
+                else:
+                    # Case: Other words while speaking → INTERRUPT
+                    print(f"[INTERRUPT] Non-backchannel speech detected: '{cleaned_text}'")
+                    # Continue to allow interruption below
+            else:
+                # Agent is Silent - all inputs should be treated as valid conversation
+                # No need to ignore anything when agent is not speaking
+                print(f"[RESPOND] Agent silent, treating as valid input: '{cleaned_text}'")
+
+            # Handle partial word completion (e.g., "yeah o" might become "yeah ok")
+            # Only apply when agent is speaking and we're dealing with potential passive words
+            if is_agent_speaking and all_passive and not has_active_interrupt:
+                last_word = words[-1]
+                previous_words = words[:-1]
+
+                # If all previous words are passive and last word is short (incomplete)
+                if all(w in self._agent.passive_backchannel_words for w in previous_words):
+                    if len(last_word) <= 4:
+                        # Check if last word might complete to a passive backchannel word
+                        for passive_word in self._agent.passive_backchannel_words:
+                            if passive_word.startswith(last_word):
+                                print(f"[WAIT] Potential incomplete passive word: '{last_word}' (might be '{passive_word}')")
+                                return
+
+        if self._rt_session is not None:
+            self._rt_session.start_user_activity()
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
@@ -1184,9 +1246,6 @@ class AgentActivity(RecognitionHooks):
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
-
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
 
         if (
             self._current_speech is not None
@@ -1364,6 +1423,23 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        is_agent_speaking = self._current_speech is not None and not self._current_speech.done()
+        cleaned_final = info.new_transcript.lower().translate(str.maketrans('', '', string.punctuation))
+        final_words = cleaned_final.split()
+
+        # Semantic interruption logic for end of turn
+        if final_words:
+            has_active_interrupt = any(w in self._agent.active_interrupt_words for w in final_words)
+            all_passive = all(w in self._agent.passive_backchannel_words for w in final_words)
+
+            # If agent is speaking and user says ONLY passive words (no active interrupts)
+            if is_agent_speaking and all_passive and not has_active_interrupt:
+                print(f"[IGNORE - EOT] Agent speaking, pure passive backchannel: '{info.new_transcript}'")
+                return False  # Don't process this as a new turn
+            elif is_agent_speaking and has_active_interrupt:
+                print(f"[INTERRUPT - EOT] Active interrupt in final transcript: '{info.new_transcript}'")
+                # Continue to process as interruption (return True below)
 
         if (
             self.stt is not None
