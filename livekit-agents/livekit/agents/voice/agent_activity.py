@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import string
 import heapq
 import json
 import time
@@ -1166,48 +1167,163 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
-    def _interrupt_by_audio_activity(self) -> None:
-        opt = self._session.options
-        use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
+    import logging
+    import string
 
-        if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
-            # ignore if realtime model has turn detection enabled
+    logger = logging.getLogger(__name__)
+
+    def _interrupt_by_audio_activity(self) -> None:
+        """
+        Decision logic for interrupting the agent audio.
+        Must be called:
+        - when VAD signals start-of-speech (to mark possible user activity)
+        - AND/OR when STT produces/transmits an updated transcript (important)
+        """
+        opt = getattr(self._session, "options", None)
+        if opt is None:
+            logger.debug("No session options; skipping interruption logic.")
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
-            text = self._audio_recognition.current_transcript
+        use_pause = (
+            getattr(opt, "resume_false_interruption", False)
+            and getattr(opt, "false_interruption_timeout", None) is not None
+        )
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+        # Read transcript (may be partial early)
+        text = ""
+        if getattr(self, "_audio_recognition", None):
+            text = getattr(self._audio_recognition, "current_transcript", "") or ""
+
+        normalized_text = text.lower().strip()
+        # trim punctuation at both ends, but keep internal punctuation (e.g. "wait, stop")
+        normalized_text = normalized_text.strip(string.punctuation)
+
+        logger.debug("interrupt_check - transcript=%r", normalized_text)
+
+        # Trigger lists
+        HARD_INTERRUPTION = ["stop", "wait", "hold on", "no"]
+        SOFT_IGNORE = [w.lower().strip().strip(string.punctuation) for w in (getattr(opt, "interruption_filter", []) or [])]
+
+        # Detect hard interruption anywhere in transcript
+        urgent_detected = any(trigger in normalized_text for trigger in HARD_INTERRUPTION)
+
+        # If STT text available and contains hard trigger -> interrupt immediately
+        if normalized_text and urgent_detected:
+            logger.info("Hard interruption detected in transcript: %r", normalized_text)
+            self._force_interrupt(use_pause)
+            return
+
+        # If agent is speaking, treat soft words as ignored only when transcript words are entirely soft tokens
+        if self._is_agent_speaking():
+            if normalized_text:
+                # split into tokens and check if all tokens belong to soft ignore list
+                spoken_tokens = [tok.strip(string.punctuation) for tok in normalized_text.split()]
+                if spoken_tokens and all(tok in SOFT_IGNORE for tok in spoken_tokens):
+                    logger.debug("Soft-only backchannel detected while speaking -> IGNORE: %r", spoken_tokens)
+                    return
+            # If no transcript yet, WAIT: don't interrupt until STT arrives
+            if not normalized_text:
+                logger.debug("Agent speaking but no transcript yet -> waiting for STT")
+                return
+            # otherwise proceed to below checks (mixed input will be handled there)
+
+        # If agent is silent, we only act when transcript exists
+        if not normalized_text:
+            logger.debug("No transcript to act on -> returning")
+            return
+
+        # Minimum word-count enforcement (if configured)
+        if (
+            getattr(self, "stt", None) is not None
+            and getattr(opt, "min_interruption_words", 0) > 0
+            and getattr(self, "_audio_recognition", None) is not None
+        ):
+            if len(split_words(normalized_text, split_character=True)) < opt.min_interruption_words:
+                logger.debug("Transcript below min_interruption_words -> ignore")
                 return
 
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
+        # Otherwise treat as user interruption
+        logger.info("Treating transcript as interruption: %r", normalized_text)
+        self._force_interrupt(use_pause)
+
+
+    def _is_agent_speaking(self) -> bool:
+        return (
+            getattr(self, "_current_speech", None) is not None
+            and not getattr(self._current_speech, "interrupted", False)
+            and getattr(self._current_speech, "playing", True)  # optional: check playing flag if present
+        )
+
+
+    def _force_interrupt(self, use_pause: bool):
+        logger.debug("Forcing interrupt (use_pause=%s)", use_pause)
+        # Mark user activity
+        if getattr(self, "_rt_session", None) is not None:
+            try:
+                self._rt_session.start_user_activity()
+            except Exception:
+                logger.exception("Failed to start user activity on rt_session")
 
         if (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
+            getattr(self, "_current_speech", None) is not None
+            and not getattr(self._current_speech, "interrupted", False)
+            and getattr(self._current_speech, "allow_interruptions", True)
         ):
             self._paused_speech = self._current_speech
 
-            # reset the false interruption timer
-            if self._false_interruption_timer:
-                self._false_interruption_timer.cancel()
+            # Reset false interruption timer
+            if getattr(self, "_false_interruption_timer", None):
+                try:
+                    self._false_interruption_timer.cancel()
+                except Exception:
+                    logger.exception("Error cancelling false interruption timer")
                 self._false_interruption_timer = None
 
-            if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
-                self._session.output.audio.pause()
-                self._session._update_agent_state("listening")
-            else:
-                if self._rt_session is not None:
-                    self._rt_session.interrupt()
+            # Try to pause audio if available and allowed
+            try:
+                if (
+                    use_pause
+                    and getattr(self._session, "output", None)
+                    and getattr(self._session.output, "audio", None)
+                    and getattr(self._session.output.audio, "can_pause", False)
+                ):
+                    self._session.output.audio.pause()
+                    self._session._update_agent_state("listening")
+                    logger.debug("Paused session audio")
+                    return
+            except Exception:
+                logger.exception("Pause failed, falling back to interrupt")
 
+            # Otherwise force interrupt
+            try:
+                if getattr(self, "_rt_session", None) is not None:
+                    self._rt_session.interrupt()
+            except Exception:
+                logger.exception("rt_session.interrupt() failed")
+            try:
                 self._current_speech.interrupt()
+            except Exception:
+                logger.exception("current_speech.interrupt() failed")
+
+
+    def on_transcription(self, text: str):
+        """
+        Must be called by the STT system when a new transcription arrives.
+        Update the current transcript and re-run interruption logic.
+        """
+        logger.debug("on_transcription called: %r", text)
+        if getattr(self, "_audio_recognition", None) is None:
+            # lazy-create or log error
+            logger.warning("on_transcription: no _audio_recognition object present")
+        else:
+            # store full text (STT may give partial/updated transcripts)
+            self._audio_recognition.current_transcript = text or ""
+
+        # Re-run interruption logic when actual words arrive
+        try:
+            self._interrupt_by_audio_activity()
+        except Exception:
+            logger.exception("Error during interrupt check from on_transcription")
 
     # region recognition hooks
 
@@ -1364,6 +1480,35 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+        
+        if (
+        self.stt is not None
+        and self._turn_detection != "manual"
+        and self._current_speech is not None
+        and self._current_speech.allow_interruptions
+        and not self._current_speech.interrupted
+        and self._session.options.interruption_filter
+    ):
+
+
+        # Normalize transcript for comparison
+            raw = info.new_transcript.lower().strip().strip(string.punctuation)
+            spoken_tokens = [w.strip(string.punctuation) for w in raw.split()]
+
+        # Build normalized filter list
+        filter_tokens = {
+            w.lower().strip().strip(string.punctuation)
+            for w in self._session.options.interruption_filter
+        }
+
+        # If every spoken token is in the allowed-ignore list, suppress interruption
+        if spoken_tokens and all(tok in filter_tokens for tok in spoken_tokens):
+            self._cancel_preemptive_generation()
+            if self._audio_recognition:
+                self._audio_recognition.discard_user_turn()
+            return False
+
+
 
         if (
             self.stt is not None
@@ -1527,6 +1672,28 @@ class AgentActivity(RecognitionHooks):
         if speech_handle is None:
             # Ensure the new message is passed to generate_reply
             # This preserves the original message_id, making it easier for users to track responses
+            normalized = (
+            user_message.text_content.lower()
+            .strip()
+            .strip(string.punctuation)
+        )
+
+        critical_terms = ["wait", "stop", "hold on"]
+        urgent_triggered = (
+            any(tok in normalized.split() for tok in critical_terms)
+            or "wait a sec" in normalized
+        )
+
+        if urgent_triggered:
+            logger.info(
+                "Reply suppressed because an urgent interrupt phrase was detected.",
+                extra={"user_input": user_message.text_content},
+            )
+
+            # Since we are bypassing the normal reply path, manually push this into the chat log
+            self._agent._chat_ctx.items.append(user_message)
+            self._session._conversation_item_added(user_message)
+            return
             speech_handle = self._generate_reply(
                 user_message=user_message,
                 chat_ctx=temp_mutable_chat_ctx,

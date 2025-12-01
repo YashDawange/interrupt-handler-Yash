@@ -244,6 +244,23 @@ class AudioRecognition:
         stt = self._stt
         self.update_stt(None)
         self.update_stt(stt)
+    def discard_user_turn(self) -> None:
+    # Clear all transcript-related buffers
+        self._audio_transcript = ""
+        self._audio_interim_transcript = ""
+        self._audio_preflight_transcript = ""
+        self._final_transcript_confidence = []
+
+    # Reset state flags and timestamps associated with the previous turn
+        self._user_turn_committed = False
+        self._last_speaking_time = None
+        self._last_final_transcript_time = None
+        self._speech_start_time = None
+
+    # Force-reset STT to flush any residual audio or partial transcripts
+        current_stt = self._stt
+        self.update_stt(None)
+        self.update_stt(current_stt)
 
     def commit_user_turn(
         self,
