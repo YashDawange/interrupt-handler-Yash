@@ -21,6 +21,27 @@ from ..log import logger
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils import is_given, misc
 from .speech_handle import SpeechHandle
+# When this module is executed as a script (e.g. `python agent.py`) the interpreter
+# doesn't set a package context, which makes relative imports like `from .. import ...`
+# fail with "attempted relative import with no known parent package". Prefer running
+# this module with the package flag from the repository root:
+#   python -m livekit.agents.voice.agent
+#
+# For convenience, if the file is run directly we attempt to set up a minimal package
+# context so the relative imports work. This is a small compatibility shim and
+# doesn't change normal package imports when the module is imported.
+if __name__ == "__main__" and __package__ is None:
+    import sys
+    from pathlib import Path
+
+    # Add the project root (two levels up from this file: <repo>/livekit-agents/livekit)
+    # to sys.path so the top-level `livekit` package can be imported.
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
+
+    # Pretend we're the package module so relative imports like `from .. import foo`
+    # resolve correctly.
+    __package__ = "livekit.agents.voice"
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
