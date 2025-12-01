@@ -1,3 +1,6 @@
+
+from __future__ import annotations
+
 # Passive backchannel words - these are short acknowledgments that don't interrupt the agent
 PASSIVE_BACKCHANNEL_WORDS = [
     "yeah", "ok", "hmm", "mhmm", "aha", "right", "uh-huh",
@@ -11,9 +14,6 @@ ACTIVE_INTERRUPT_WORDS = [
     "nevermind", "never mind", "cancel", "shut up", "be quiet",
     "enough", "shush", "silence", "quiet", "stop talking"
 ]
-
-
-from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterable, Coroutine, Generator

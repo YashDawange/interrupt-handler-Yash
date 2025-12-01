@@ -47,7 +47,7 @@ This file contains the core event loop and logic layer where the interruption de
   - **Final Transcript Check**: Applied the same semantic logic to the final transcript event.
   - **Turn Suppression**: If the final transcript consists solely of passive backchannels while the agent is speaking, the method returns `False`, effectively suppressing the turn and allowing the agent to continue without interruption.
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 All tests and manual scenarios have passed:
 - **Backchannels (e.g., "uh-huh")**: Agent continues speaking seamlessly with zero stutter.
