@@ -469,6 +469,21 @@ class AudioRecognition:
 
     async def _on_vad_event(self, ev: vad.VADEvent) -> None:
         if ev.type == vad.VADEventType.START_OF_SPEECH:
+            # --- INTERRUPT HANDLER HOOK ---
+            try:
+                res = await self._session.interrupt_handler.on_vad_start(self._session.id)
+            except Exception:
+                res = {"action": "deferred"}
+
+            if res.get("action") == "treat_as_user_turn":
+                # User started talking while agent was silent → stop TTS
+                try:
+                    await self._session.player.stop()
+                except Exception:
+                    pass
+                return
+            # else: res == deferred → do nothing and continue normally
+            # -----------------------------------------
             with trace.use_span(self._ensure_user_turn_span()):
                 self._hooks.on_start_of_speech(ev)
 

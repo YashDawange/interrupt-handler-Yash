@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from .interrupt_handler import InterruptHandler
 import asyncio
 import copy
 import time
@@ -357,6 +357,57 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # ivr activity
         self._ivr_activity: IVRActivity | None = None
+
+        # ADDED CODE
+        self.interrupt_handler = InterruptHandler(
+            get_agent_state_callable=lambda: self.player.is_playing()
+        )
+
+        # Attach callback for actual interruption
+        self.interrupt_handler._do_interrupt = (
+            lambda sid, transcript="", reason="": asyncio.create_task(
+                self._on_interrupt(transcript, reason)
+            )
+        )
+
+    # HELPER FUNCTION ADDED
+    async def _on_interrupt(self, transcript: str, reason: str):
+        """Called when the interrupt_handler decides an interruption must occur."""
+
+        # 1. Stop TTS
+        try:
+            await self.player.stop()
+        except Exception:
+            pass
+
+        # 2. Cancel LLM generation
+        try:
+            if self._activity and self._activity._llm_task:
+                self._activity._llm_task.cancel()
+        except Exception:
+            pass
+
+        # 3. Emit interruption event  ← ADD THIS BLOCK
+        self.emit(
+            "agent_interrupted",
+            AgentInterruptedEvent(
+                transcript=transcript,
+                reason=reason
+            )
+        )
+        # -------------------------------------------------------
+
+        # 4. Update agent state
+        old_state = self._agent_state
+        self._agent_state = "listening"
+        self.emit(
+            "agent_state_changed",
+            AgentStateChangedEvent(old_state=old_state, new_state="listening")
+        )
+
+        # 5. Forward user transcript if available
+        if transcript:
+            await self._handle_user_input_text(transcript)
 
     def emit(self, event: EventTypes, arg: AgentEvent) -> None:  # type: ignore
         self._recorded_events.append(arg)

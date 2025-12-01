@@ -327,6 +327,27 @@ class RoomIO:
     @utils.log_exceptions(logger=logger)
     async def _forward_user_transcript(self) -> None:
         async for ev in self._user_transcript_ch:
+
+            # --- INTERRUPT HANDLER: STT-based interruptions ---
+            transcript = ev.transcript
+            is_final = ev.is_final
+
+            # Call the interrupt handler
+            res = await self._agent_session.interrupt_handler.on_transcript(
+                self._agent_session.id,
+                transcript,
+                is_final=is_final
+            )
+
+            # Ignore backchannels ("yeah", "uh huh", etc.)
+            if res.get("action") == "ignore":
+                continue
+
+            # Interrupt detected: TTS is already stopped by handler, skip forwarding text
+            if res.get("action") == "interrupt":
+                continue
+            # ---------------------------------------------------  
+                      
             if self._user_tr_output is None:
                 continue
 
