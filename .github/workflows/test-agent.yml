@@ -1,0 +1,20 @@
+name: Test Interrupt Agent
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"
+      - name: Run agent console test script (dry-run)
+        run: |
+          python -m intelligent_interrupt.myagent console --dry-run
