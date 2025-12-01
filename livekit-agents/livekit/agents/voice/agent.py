@@ -1,3 +1,18 @@
+# Passive backchannel words - these are short acknowledgments that don't interrupt the agent
+PASSIVE_BACKCHANNEL_WORDS = [
+    "yeah", "ok", "hmm", "mhmm", "aha", "right", "uh-huh",
+    "i see", "got it", "sure", "alright", "uh", "ah", "mm", 
+    "mhm", "okay", "yes"
+]
+
+# Active interrupt words - these words always trigger immediate interruption
+ACTIVE_INTERRUPT_WORDS = [
+    "stop", "wait", "hold on", "hold up", "hang on", "pause",
+    "nevermind", "never mind", "cancel", "shut up", "be quiet",
+    "enough", "shush", "silence", "quiet", "stop talking"
+]
+
+
 from __future__ import annotations
 
 import asyncio
@@ -23,19 +38,7 @@ from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils import is_given, misc
 from .speech_handle import SpeechHandle
 
-# Passive backchannel words - these are short acknowledgments that don't interrupt the agent
-PASSIVE_BACKCHANNEL_WORDS = [
-    "yeah", "ok", "hmm", "mhmm", "aha", "right", "uh-huh",
-    "i see", "got it", "sure", "alright", "uh", "ah", "mm", 
-    "mhm", "okay", "yes"
-]
 
-# Active interrupt words - these words always trigger immediate interruption
-ACTIVE_INTERRUPT_WORDS = [
-    "stop", "wait", "hold on", "hold up", "hang on", "pause",
-    "nevermind", "never mind", "cancel", "shut up", "be quiet",
-    "enough", "shush", "silence", "quiet", "stop talking"
-]
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
