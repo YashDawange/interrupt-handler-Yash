@@ -97,6 +97,13 @@ EventTypes = Literal[
 UserState = Literal["speaking", "listening", "away"]
 AgentState = Literal["initializing", "idle", "listening", "thinking", "speaking"]
 
+# ADDED NEW
+class AgentInterruptedEvent(BaseModel):
+    type: Literal["agent_interrupted"] = "agent_interrupted"
+    transcript: str | None
+    reason: str
+    created_at: float = Field(default_factory=time.time)
+
 
 class UserStateChangedEvent(BaseModel):
     type: Literal["user_state_changed"] = "user_state_changed"
@@ -227,6 +234,7 @@ class CloseEvent(BaseModel):
 
 AgentEvent = Annotated[
     Union[
+        AgentInterruptedEvent,
         UserInputTranscribedEvent,
         UserStateChangedEvent,
         AgentStateChangedEvent,
