@@ -1,6 +1,7 @@
 from . import io, run_result
 from .agent import Agent, AgentTask, ModelSettings
 from .agent_session import AgentSession, VoiceActivityVideoSampler
+from .interruption_filter import InterruptionFilter
 from .events import (
     AgentEvent,
     AgentFalseInterruptionEvent,
@@ -32,6 +33,7 @@ __all__ = [
     "AgentTask",
     "SpeechHandle",
     "RunContext",
+    "InterruptionFilter",
     "UserInputTranscribedEvent",
     "AgentEvent",
     "MetricsCollectedEvent",
