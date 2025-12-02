@@ -9,9 +9,21 @@ Tests cover:
 - Mixed utterance interrupts
 - Edge cases (empty transcripts, multiple soft words, etc.)
 """
+import sys
 import time
+import importlib.util
+from pathlib import Path
+
+# Import interrupt_handler module directly to avoid package initialization dependencies
+project_root = Path(__file__).parent.parent
+interrupt_handler_path = project_root / "livekit-agents" / "livekit" / "agents" / "voice" / "interrupt_handler.py"
+
+spec = importlib.util.spec_from_file_location("interrupt_handler", interrupt_handler_path)
+interrupt_handler_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(interrupt_handler_module)
+InterruptHandler = interrupt_handler_module.InterruptHandler
+
 import pytest
-from livekit.agents.voice.interrupt_handler import InterruptHandler
 
 
 class MockAudio:

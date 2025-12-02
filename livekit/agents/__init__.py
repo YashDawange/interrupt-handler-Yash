@@ -1,2 +1,0 @@
-"""LiveKit agents module."""
-

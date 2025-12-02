@@ -214,3 +214,4 @@ class InterruptHandler:
             if tok not in self.cfg["soft_words"]:
                 return False
         return True
+

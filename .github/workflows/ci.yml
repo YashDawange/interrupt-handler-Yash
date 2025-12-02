@@ -26,14 +26,14 @@ jobs:
       with:
         version: "latest"
     
-    - name: Install dependencies
+    - name: Install the project
       run: |
-        uv pip install --system pytest pytest-asyncio
+        uv sync --all-extras --dev
     
     - name: Run interrupt handler tests
       run: |
-        pytest tests/test_interrupt_handler.py -v
+        uv run pytest tests/test_interrupt_handler.py -v
     
     - name: Run all tests
       run: |
-        pytest -q
+        uv run pytest -q
