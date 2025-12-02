@@ -467,37 +467,70 @@ class AudioRecognition:
             if self._end_of_turn_task is not None:
                 self._end_of_turn_task.cancel()
 
-    async def _on_vad_event(self, ev: vad.VADEvent) -> None:
-        if ev.type == vad.VADEventType.START_OF_SPEECH:
-            with trace.use_span(self._ensure_user_turn_span()):
-                self._hooks.on_start_of_speech(ev)
+async def _on_vad_event(self, ev: vad.VADEvent) -> None:
+if ev.type == vad.VADEventType.START_OF_SPEECH:
+        with trace.use_span(self._ensure_user_turn_span()):
+            self._hooks.on_start_of_speech(ev)
 
-            self._speaking = True
+            # Ask the session-level interrupt handler what to do when VAD fires.
+            session = (
+                getattr(self._hooks, "session", None)
+                or getattr(self._hooks, "agent_session", None)
+                or getattr(self._hooks, "_session", None)
+            )
 
-            if self._end_of_turn_task is not None:
-                self._end_of_turn_task.cancel()
+            if session is not None and getattr(session, "interrupt_handler", None) is not None:
+                try:
+                    agent_is_speaking = getattr(session, "is_speaking", False)
+                    action = await session.interrupt_handler.decide(
+                        agent_is_speaking=agent_is_speaking
+                    )
+                except Exception:
+                    action = None
 
-        elif ev.type == vad.VADEventType.INFERENCE_DONE:
-            self._hooks.on_vad_inference_done(ev)
+                if action == "ignore":
+                    # e.g. only backchannel words were detected while agent was speaking — do nothing
+                    return
 
-            # for metrics, get the "earliest" signal of speech as possible
-            if ev.raw_accumulated_speech > 0.0:
-                self._last_speaking_time = time.time()
+                if action == "interrupt":
+                    # stop TTS / cancel LLM etc. AgentSession._on_interrupt should implement this.
+                    if getattr(session, "_on_interrupt", None) is not None:
+                        await session._on_interrupt(reason="semantic_interrupt")
+                    else:
+                        # best-effort fallback: try to stop player / generation if attributes exist
+                        if getattr(session, "_player", None) is not None:
+                            try:
+                                session._player.clear_buffer()
+                            except Exception:
+                                pass
+                        if getattr(session, "_llm_task", None) is not None:
+                            try:
+                                session._llm_task.cancel()
+                            except Exception:
+                                pass
+                    # we handled the interruption — stop further VAD handling
+                    return
+    elif ev.type == vad.VADEventType.INFERENCE_DONE:
+        self._hooks.on_vad_inference_done(ev)
 
-                if self._speech_start_time is None:
-                    self._speech_start_time = time.time()
+        # for metrics, get the "earliest" signal of speech as possible
+        if ev.raw_accumulated_speech > 0.0:
+            self._last_speaking_time = time.time()
 
-        elif ev.type == vad.VADEventType.END_OF_SPEECH:
-            with trace.use_span(self._ensure_user_turn_span()):
-                self._hooks.on_end_of_speech(ev)
+            if self._speech_start_time is None:
+                self._speech_start_time = time.time()
 
-            self._speaking = False
+    elif ev.type == vad.VADEventType.END_OF_SPEECH:
+        with trace.use_span(self._ensure_user_turn_span()):
+            self._hooks.on_end_of_speech(ev)
 
-            if self._vad_base_turn_detection or (
-                self._turn_detection_mode == "stt" and self._user_turn_committed
-            ):
-                chat_ctx = self._hooks.retrieve_chat_ctx().copy()
-                self._run_eou_detection(chat_ctx)
+        self._speaking = False
+
+        if self._vad_base_turn_detection or (
+            self._turn_detection_mode == "stt" and self._user_turn_committed
+        ):
+            chat_ctx = self._hooks.retrieve_chat_ctx().copy()
+            self._run_eou_detection(chat_ctx)
 
     def _run_eou_detection(self, chat_ctx: llm.ChatContext) -> None:
         if self._stt and not self._audio_transcript and self._turn_detection_mode != "manual":
