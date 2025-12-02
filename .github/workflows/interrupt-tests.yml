@@ -1,0 +1,32 @@
+name: CI - Interrupt Handler (assignment)
+
+on:
+  push:
+    branches: [ 'feature/**', 'main' ]
+  pull_request:
+    branches: [ 'main' ]
+
+jobs:
+  interrupt-handler-tests:
+    name: Interrupt Handler tests (py311)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r .github/workflows/test-requirements.txt
+
+      - name: Run interrupt-handler tests only
+        env:
+          PYTHONPATH: ${{ github.workspace }}/livekit-agents:${{ github.workspace }}
+          PYTHONUNBUFFERED: 1
+        run: |
+          pytest tests/test_interrupt_handler.py -v

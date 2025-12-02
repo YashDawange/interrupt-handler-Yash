@@ -2,8 +2,5 @@ pytest
 pytest-asyncio
 numpy
 typer
-click
-rich
 anyio
 typing-extensions
-
