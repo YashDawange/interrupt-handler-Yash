@@ -1,48 +1,54 @@
 # interrupt_handler.py
 
-class InterruptionType:
-    NONE = "none"             # Normal input → send to LLM
-    PASSIVE_ACK = "passive_ack"   # Backchannel while agent speaking → ignore
-    ACTIVE_INTERRUPT = "active_interrupt"   # "stop/wait/no" while speaking → interrupt
+from enum import Enum, auto
+import re
+from typing import Iterable
+
+
+class InterruptionType(Enum):
+    NONE = auto()
+    PASSIVE_ACK = auto()
+    ACTIVE_INTERRUPT = auto()
 
 
 class InterruptHandler:
-    def __init__(self, ignore_words, command_words):
-        # normalize words to lowercase for easy matching
-        self.ignore_words = set(w.lower() for w in ignore_words)
-        self.command_words = set(w.lower() for w in command_words)
+    def __init__(
+        self,
+        passive_ack_words: Iterable[str],
+        interrupt_words: Iterable[str],
+    ) -> None:
+        # normalize to lowercase sets
+        self.passive_ack_words = {w.lower() for w in passive_ack_words}
+        self.interrupt_words = {w.lower() for w in interrupt_words}
 
-        # these will be controlled from the agent side
-        self.agent_is_speaking = False      # True while TTS is playing
-        self.pending_interruption = False   # True when VAD hears user during TTS
+    def _tokenize(self, text: str) -> list[str]:
+        # simple word tokenizer: split on non-letters/numbers
+        return [t for t in re.split(r"\W+", text.lower()) if t]
 
-    def classify(self, text: str) -> str:
+    def classify(self, text: str, agent_is_speaking: bool) -> InterruptionType:
         """
-        Decide how to treat this user utterance.
-
-        Returns one of:
-            - InterruptionType.NONE
-            - InterruptionType.PASSIVE_ACK
-            - InterruptionType.ACTIVE_INTERRUPT
+        Decide whether this utterance is:
+        - PASSIVE_ACK (yeah/ok/hmm etc.)
+        - ACTIVE_INTERRUPT (stop/wait/no etc.)
+        - NONE (normal content)
         """
+        text = (text or "").strip().lower()
         if not text:
             return InterruptionType.NONE
 
-        normalized = text.lower().strip()
-        if not normalized:
-            return InterruptionType.NONE
+        tokens = self._tokenize(text)
 
-        tokens = normalized.split()
-
-        # 1) If it contains any command word ("stop", "wait", "no", ...)
-        #    → treat as active interruption.
-        if any(tok in self.command_words for tok in tokens):
+        # 1) If any interrupt word appears anywhere -> ACTIVE_INTERRUPT
+        #    e.g. "yeah wait a second" -> ACTIVE_INTERRUPT
+        if any(tok in self.interrupt_words for tok in tokens):
             return InterruptionType.ACTIVE_INTERRUPT
 
-        # 2) If agent is speaking & ALL tokens are backchannel / filler
-        #    → passive ack, we will ignore this while speaking.
-        if self.agent_is_speaking and all(tok in self.ignore_words for tok in tokens):
-            return InterruptionType.PASSIVE_ACK
+        # 2) If agent is speaking AND all words are passive ack words -> PASSIVE_ACK
+        #    e.g. "yeah", "ok ok", "uh huh yeah"
+        if agent_is_speaking:
+            # ignore tokens that aren't in either list (like "the") to be strict
+            if all(tok in self.passive_ack_words for tok in tokens):
+                return InterruptionType.PASSIVE_ACK
 
-        # 3) Otherwise it's normal user input.
+        # 3) Otherwise, treat as normal content
         return InterruptionType.NONE
