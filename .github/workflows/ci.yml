@@ -18,9 +18,10 @@ jobs:
       with:
         python-version: "3.11"
     
-    - name: Install dependencies
+    - name: Install minimal test deps
       run: |
-        pip install pytest pytest-asyncio numpy
+        python -m pip install --upgrade pip
+        pip install -r .github/workflows/test-requirements.txt
     
     - name: Run interrupt handler tests
       env:
