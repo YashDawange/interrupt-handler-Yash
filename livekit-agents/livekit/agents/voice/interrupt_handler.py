@@ -91,18 +91,22 @@ class InterruptHandler:
         If agent is silent, immediately routes to on_immediate_user_speech.
         If agent is speaking, starts a confirmation window to collect STT partials.
         """
+        # If a confirmation window is already active, ignore duplicate VADs.
+        # This prevents the handler from treating the pause (from starting the
+        # confirmation window) as a new user turn.
+        if self._pending_timer is not None:
+            LOG.debug("Confirmation window already active, ignoring VAD")
+            return
+
         if not self.audio_player.is_playing():
             if self.on_immediate_user_speech:
                 LOG.debug("Agent silent, routing immediate user speech")
                 self.on_immediate_user_speech()
             return
 
-        if self._pending_timer is not None:
-            LOG.debug("Confirmation window already active, ignoring VAD")
-            return
-
         LOG.debug("Agent speaking, starting confirmation window")
         self._start_confirmation_window()
+
 
     def on_stt_partial(self, text: str, confidence: float = 0.0):
         """

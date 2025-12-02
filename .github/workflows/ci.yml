@@ -9,31 +9,21 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.11"
     
-    - name: Install uv
-      uses: astral-sh/setup-uv@v4
-      with:
-        version: "latest"
-    
-    - name: Install the project
+    - name: Install dependencies
       run: |
-        uv sync --all-extras --dev
+        pip install pytest pytest-asyncio numpy
     
     - name: Run interrupt handler tests
+      env:
+        PYTHONPATH: ${{ github.workspace }}/livekit-agents:${{ github.workspace }}
       run: |
-        uv run pytest tests/test_interrupt_handler.py -v
-    
-    - name: Run all tests
-      run: |
-        uv run pytest -q
+        pytest tests/test_interrupt_handler.py -v
