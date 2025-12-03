@@ -17,6 +17,102 @@ from ..types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, APIConnectOptions, N
 from ..utils import is_given
 from ._utils import create_access_token
 
+# near module imports, global
+from playback_manager import PlaybackManager
+playback_manager = PlaybackManager()
+
+
+# ---- paste START ----
+# Local fallback TTS using pyttsx3 with clamped rate to avoid too-fast speech.
+import os
+import threading
+try:
+    import pyttsx3
+except Exception:
+    pyttsx3 = None
+
+def speak_with_local_tts(text: str, rate: int = 50, voice_index: int | None = None, block: bool = False) -> None:
+    """
+    Local TTS fallback that clamps the speaking rate so it doesn't speak too fast.
+    - text: text to speak
+    - rate: requested WPM (will be clamped)
+    - voice_index: optional voice index
+    - block: if True, call blocks until speech finishes
+    """
+    # if pyttsx3 not installed, bail (caller should have fallback)
+    if pyttsx3 is None:
+        try:
+            print("speak_with_local_tts: pyttsx3 not available. Text:", text)
+        except Exception:
+            pass
+        return
+
+    # allow overriding desired rate with env var LIVEKIT_TTS_RATE
+    env_rate = os.environ.get("LIVEKIT_TTS_RATE")
+    if env_rate:
+        try:
+            rate = int(env_rate)
+        except Exception:
+            pass
+
+    # clamp to readable range (adjust min/max if you prefer slower/faster)
+    MIN_RATE = 50
+    MAX_RATE = 80
+    try:
+        rate = max(MIN_RATE, min(int(rate), MAX_RATE))
+    except Exception:
+        rate = 50
+
+    def _do_speak():
+        try:
+            engine = pyttsx3.init()
+            # Set rate & volume
+            try:
+                engine.setProperty('rate', int(rate))
+            except Exception:
+                pass
+            try:
+                engine.setProperty('volume', 1.0)
+            except Exception:
+                pass
+
+            # select voice if requested
+            try:
+                if voice_index is not None:
+                    voices = engine.getProperty('voices')
+                    if 0 <= int(voice_index) < len(voices):
+                        engine.setProperty('voice', voices[int(voice_index)].id)
+            except Exception:
+                pass
+
+            # optionally log small message (safe)
+            try:
+                print(f"speak_with_local_tts: speaking (rate={rate})")
+            except Exception:
+                pass
+
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            try:
+                print("speak_with_local_tts error:", e)
+            except Exception:
+                pass
+
+    if block:
+        _do_speak()
+    else:
+        t = threading.Thread(target=_do_speak, daemon=True)
+        t.start()
+# ---- paste END ----
+
+print("tts.py: speak_with_local_tts defined and module loaded")
+
+
+
+
+
+
 CartesiaModels = Literal[
     "cartesia",
     "cartesia/sonic",
@@ -231,6 +327,30 @@ class TTS(tts.TTS):
             raise ValueError(
                 "api_secret is required, either as argument or set LIVEKIT_API_SECRET environmental variable"
             )
+        
+
+
+
+        # Start with any extra kwargs passed in
+        extra_kwargs_dict: dict[str, Any] = (
+            dict(extra_kwargs) if is_given(extra_kwargs) else {}
+        )
+
+        # Read TTS rate from env var (LIVEKIT_TTS_RATE)
+        # lower than 1.0 = slower, greater than 1.0 = faster
+        try:
+            tts_rate = float(os.environ.get("LIVEKIT_TTS_RATE", "1.0"))
+        except Exception:
+            tts_rate = 1.0
+
+        if tts_rate != 1.0:
+            # Many TTS backends accept "rate" or "speed"
+            extra_kwargs_dict.setdefault("rate", tts_rate)
+            extra_kwargs_dict.setdefault("speed", tts_rate)
+
+
+
+
 
         self._opts = _TTSOptions(
             model=model,
@@ -485,3 +605,197 @@ class SynthesizeStream(tts.SynthesizeStream):
 
         except Exception as e:
             raise APIConnectionError() from e
+
+
+
+
+
+
+
+
+# ---------------- synth -> WAV bytes (numpy fallback, resample to 48000 Hz mono PCM16) ----------------
+import tempfile
+import os
+import wave
+
+# numpy will be required (the project already has it). If not installed, install via pip.
+import numpy as np
+
+def _synthesize_to_wav_bytes(text: str, rate: int = 110, voice_index: int | None = None, target_samplerate: int = 48000) -> bytes:
+    """Synthesize text with pyttsx3, then ensure WAV is mono PCM16 at target_samplerate and return bytes.
+       Uses numpy-based fallback (no audioop required).
+    """
+    try:
+        if pyttsx3 is None:
+            raise RuntimeError("pyttsx3 missing")
+
+        # clamp rate
+        try:
+            rate = max(40, min(int(rate), 220))
+        except Exception:
+            rate = 110
+
+        engine = pyttsx3.init()
+        try:
+            engine.setProperty("rate", int(rate))
+        except Exception:
+            pass
+        try:
+            engine.setProperty("volume", 1.0)
+        except Exception:
+            pass
+        try:
+            if voice_index is not None:
+                voices = engine.getProperty("voices")
+                if 0 <= int(voice_index) < len(voices):
+                    engine.setProperty("voice", voices[int(voice_index)].id)
+        except Exception:
+            pass
+
+        # write a temp WAV from pyttsx3
+        tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmpname = tf.name
+        tf.close()
+
+        engine.save_to_file(text, tmpname)
+        engine.runAndWait()
+
+        # read generated WAV
+        with wave.open(tmpname, "rb") as wf:
+            nchannels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+            nframes = wf.getnframes()
+            frames = wf.readframes(nframes)
+
+        # convert raw frames -> numpy array
+        try:
+            if sampwidth == 1:
+                # 8-bit unsigned PCM
+                arr = np.frombuffer(frames, dtype=np.uint8).astype(np.int32) - 128
+                arr = (arr.astype(np.int16) << 8)  # scale to 16-bit range
+            elif sampwidth == 2:
+                arr = np.frombuffer(frames, dtype=np.int16).astype(np.int32)
+            elif sampwidth == 3:
+                # 24-bit packed -> convert to int32
+                a = np.frombuffer(frames, dtype=np.uint8)
+                a = a.reshape((-1, 3))
+                # little-endian to int32
+                arr = (a[:,0].astype(np.int32) | (a[:,1].astype(np.int32) << 8) | (a[:,2].astype(np.int32) << 16))
+                # sign correction
+                mask = arr & 0x800000
+                arr = arr - (mask << 1)
+                arr = (arr >> 8).astype(np.int32)  # downscale to 16-bit-ish
+            else:
+                # generic path: convert via int32 then scale
+                dtype = np.uint8 if sampwidth == 1 else np.int16
+                arr = np.frombuffer(frames, dtype=dtype).astype(np.int32)
+        except Exception:
+            # last-resort: return original bytes (so caller can detect failure)
+            with open(tmpname, "rb") as f:
+                data = f.read()
+            try:
+                os.unlink(tmpname)
+            except Exception:
+                pass
+            return data
+
+        # if stereo (or multi), reshape and convert to mono by averaging channels
+        if nchannels > 1:
+            arr = arr.reshape((-1, nchannels)).astype(np.int32)
+            arr = arr.mean(axis=1).astype(np.int32)
+
+        # now arr is int32-ish, convert to int16 range
+        # normalize/clamp to int16
+        arr = np.clip(arr, -32768, 32767).astype(np.int16)
+
+        # resample if framerate != target_samplerate
+        if framerate != target_samplerate:
+            try:
+                # simple linear interpolation resample (pure numpy)
+                old_len = arr.shape[0]
+                new_len = int(round(old_len * (target_samplerate / float(framerate))))
+                if new_len <= 0:
+                    new_len = 1
+                old_idx = np.linspace(0, 1, old_len)
+                new_idx = np.linspace(0, 1, new_len)
+                arr = np.interp(new_idx, old_idx, arr).astype(np.int16)
+                framerate = target_samplerate
+            except Exception:
+                pass
+
+        out_tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        outname = out_tf.name
+        out_tf.close()
+        with wave.open(outname, "wb") as out_wf:
+            # WRITE STEREO here (duplicate mono channel)
+            out_wf.setnchannels(2)            # <- changed to 2 channels
+            out_wf.setsampwidth(2)
+            out_wf.setframerate(target_samplerate)
+            # duplicate mono samples to L+R
+            stereo_bytes = np.repeat(arr, 2).tobytes()
+            out_wf.writeframes(stereo_bytes)
+        with open(outname, "rb") as f:
+            data = f.read()
+
+        # cleanup
+        try:
+            os.unlink(tmpname)
+        except Exception:
+            pass
+        try:
+            os.unlink(outname)
+        except Exception:
+            pass
+
+        try:
+            print(f"SYNTH_LOCAL_WAV: produced {len(data)} bytes (rate={rate}, out_sr={target_samplerate})")
+        except Exception:
+            pass
+
+        return data
+    except Exception as e:
+        try:
+            print("SYNTH_LOCAL_WAV error:", e)
+        except Exception:
+            pass
+        return b""
+# -------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+# Monkeypatch any common synth methods on module/class to use local WAV bytes
+def _force_synthesize_audio_return(text: str, rate: int | None = None, voice_index: int | None = None, *a, **k):
+    try:
+        # prefer explicit rate -> env -> default
+        if rate is None:
+            rate = int(os.environ.get("LIVEKIT_TTS_RATE") or 110)
+    except Exception:
+        rate = 110
+    return _synthesize_to_wav_bytes(text, rate=rate, voice_index=voice_index)
+
+# If module defines a synth function, override it
+for nm in ("synthesize_audio", "synthesize", "synthesize_to_bytes", "synthesize_wav"):
+    if nm in globals():
+        globals()[nm] = _force_synthesize_audio_return
+
+# If a TTS class exists, override instance synth methods
+TTS_cls = globals().get("TTS") or globals().get("TTSModels") or globals().get("TTSClient")
+if isinstance(TTS_cls, type):
+    for mname in ("synthesize_audio", "synthesize", "synthesize_to_bytes", "synthesize_wav", "synthesize_audio_bytes"):
+        if hasattr(TTS_cls, mname):
+            def _wrap(mname):
+                def _method(self, text, *a, **k):
+                    rate = k.get("rate") or k.get("speed") or None
+                    voice_index = k.get("voice_index") or None
+                    return _force_synthesize_audio_return(text, rate=rate, voice_index=voice_index)
+                return _method
+            setattr(TTS_cls, mname, _wrap(mname))
+
+print("tts.py: FORCE_LOCAL_SYNTH active (pyttsx3 -> WAV bytes).")
+# -------------------------------------------------------------------------------------------
+
