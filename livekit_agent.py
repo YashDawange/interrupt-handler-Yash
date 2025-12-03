@@ -32,10 +32,10 @@ class LiveKitAgent:
                 continue
             if action == "interrupt":
                 print(f"[FILTER] INTERRUPT triggered by: '{text}'")
-                # Stop the agent speaking if it was speaking
+                
                 if self.agent_state == "speaking":
                     await self.on_agent_stop_speaking()
-                # handle the user's command (for demo, TTS echo)
+                
                 self.tts.speak(f"Heard interrupt: {text}")
                 continue
             if action == "respond":

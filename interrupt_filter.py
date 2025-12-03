@@ -15,10 +15,7 @@ class InterruptionFilter:
         return False
 
     def is_only_soft(self, text):
-        """
-        Returns True if the text is exactly (or effectively) a soft backchannel.
-        For multi-word inputs we check if all words are in ignore_list or filler punctuation.
-        """
+       
         t = text.lower().strip()
         if t in self.ignore_list:
             return True
@@ -29,7 +26,7 @@ class InterruptionFilter:
         for w in words:
             if w == "" or w in self.ignore_list:
                 continue
-            # if any word is not in ignore list, it's not only soft
+            
             return False
         return True
 
@@ -45,13 +42,13 @@ class InterruptionFilter:
         if self.contains_interrupt(text):
             return "interrupt"
 
-        # If it's only a soft filler
+        
         if self.is_only_soft(text):
             return "ignore" if agent_state=="speaking" else "respond"
 
         # Otherwise:
-        # - If agent was speaking and user spoke non-soft content -> treat as interrupt
-        # - If agent silent -> normal respond
+        # - If agent was speaking and user spoke non-soft content treat as interrupt
+        # - If agent silent  normal respond
         if agent_state == "speaking":
             return "interrupt"
         else:
