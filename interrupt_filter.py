@@ -1,0 +1,58 @@
+class InterruptionFilter:
+    def __init__(self, ignore_list=None, interrupt_list=None):
+        self.ignore_list = set(ignore_list or [
+            "yeah","yea","ok","okay","hmm","uh-huh","right","mhm","mm"
+        ])
+        self.interrupt_list = set(interrupt_list or [
+            "stop","wait","no","hold on","pause","stop that"
+        ])
+
+    def contains_interrupt(self, text):
+        t = text.lower()
+        for w in self.interrupt_list:
+            if w in t:
+                return True
+        return False
+
+    def is_only_soft(self, text):
+        """
+        Returns True if the text is exactly (or effectively) a soft backchannel.
+        For multi-word inputs we check if all words are in ignore_list or filler punctuation.
+        """
+        t = text.lower().strip()
+        if t in self.ignore_list:
+            return True
+        # Split words and check if every word is a filler
+        words = [w.strip(".,!?") for w in t.split()]
+        if len(words) == 0:
+            return False
+        for w in words:
+            if w == "" or w in self.ignore_list:
+                continue
+            # if any word is not in ignore list, it's not only soft
+            return False
+        return True
+
+    def process_transcript(self, text: str, agent_state: str):
+        """
+        agent_state: "speaking" or "silent"
+        Returns one of: "ignore", "interrupt", "respond"
+        """
+        if not text or text.strip()=="":
+            return "ignore" if agent_state=="speaking" else "respond"
+
+        # If contains a hard interrupt keyword anywhere, interrupt
+        if self.contains_interrupt(text):
+            return "interrupt"
+
+        # If it's only a soft filler
+        if self.is_only_soft(text):
+            return "ignore" if agent_state=="speaking" else "respond"
+
+        # Otherwise:
+        # - If agent was speaking and user spoke non-soft content -> treat as interrupt
+        # - If agent silent -> normal respond
+        if agent_state == "speaking":
+            return "interrupt"
+        else:
+            return "respond"

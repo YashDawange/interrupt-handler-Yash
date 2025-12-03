@@ -1,0 +1,10 @@
+# core
+python-dotenv
+pyttsx3
+pydub
+
+# optional / best-effort
+livekit
+openai
+sounddevice
+numpy
