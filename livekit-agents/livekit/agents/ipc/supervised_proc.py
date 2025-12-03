@@ -25,25 +25,56 @@ from . import channel, proto
 from .log_queue import LogQueueListener
 
 
+# @contextlib.contextmanager
+# def _mask_ctrl_c() -> Generator[None, None, None]:
+#     """
+#     POSIX: block SIGINT on this thread (defer delivery).
+#     Windows/others: temporarily ignore SIGINT (best available), then restore.
+#     Keep the critical section *tiny* (just around Process.start()).
+#     """
+#     if hasattr(signal, "pthread_sigmask"):  # POSIX
+#         signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGINT])
+#         try:
+#             yield
+#         finally:
+#             signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGINT])
+#     else:
+#         old = signal.signal(signal.SIGINT, signal.SIG_IGN)
+#         try:
+#             yield
+#         finally:
+#             signal.signal(signal.SIGINT, old)
+
+
+import threading
+import signal
+import contextlib
+
 @contextlib.contextmanager
-def _mask_ctrl_c() -> Generator[None, None, None]:
+def _mask_ctrl_c():
     """
-    POSIX: block SIGINT on this thread (defer delivery).
-    Windows/others: temporarily ignore SIGINT (best available), then restore.
-    Keep the critical section *tiny* (just around Process.start()).
+    Temporarily ignore SIGINT while running child processes.
+    On Windows, signal.signal may only be used in the main thread;
+    guard against that to avoid ValueError when called from worker threads.
     """
-    if hasattr(signal, "pthread_sigmask"):  # POSIX
-        signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGINT])
+    can_set_signal = threading.current_thread() is threading.main_thread()
+    old_handler = None
+
+    if can_set_signal:
         try:
-            yield
-        finally:
-            signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGINT])
-    else:
-        old = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        try:
-            yield
-        finally:
-            signal.signal(signal.SIGINT, old)
+            old_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        except Exception:
+            old_handler = None
+
+    try:
+        yield
+    finally:
+        if can_set_signal and old_handler is not None:
+            try:
+                signal.signal(signal.SIGINT, old_handler)
+            except Exception:
+                pass
+
 
 
 @dataclass

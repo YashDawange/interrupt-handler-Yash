@@ -373,3 +373,18 @@ The Agents framework is under active development in a rapidly evolving field. We
 </tbody>
 </table>
 <!--END_REPO_NAV-->
+
+
+This PR implements the interrupt-handler logic for the assignment.
+
+Features:
+- Agent ignores “yeah” while speaking.
+- Agent responds to “yeah” when silent.
+- Agent stops when user says “stop.”
+
+Proof:
+- Included in proof/log.txt
+- (Optional) Video link or demo.mp4 inside /proof
+
+Branch: feature/interrupt-handler-Prabhakar
+

@@ -48,6 +48,86 @@ from ..voice.run_result import RunEvent
 from ..worker import AgentServer, WorkerOptions
 from . import proto
 
+
+
+# Local fallback TTS using pyttsx3 with clamped rate (PLACE THIS AT TOP, right after imports)
+import os
+import threading
+try:
+    import pyttsx3
+except Exception:
+    pyttsx3 = None
+
+def speak_with_local_tts(text: str, rate: int = 50, voice_index: int | None = None, block: bool = False) -> None:
+    """
+    Local TTS fallback that clamps the speaking rate so it doesn't speak too fast.
+    - text: text to speak
+    - rate: requested WPM (will be clamped)
+    - voice_index: optional voice index
+    - block: if True, call blocks until speech finishes
+    """
+    if pyttsx3 is None:
+        try:
+            print("speak_with_local_tts: pyttsx3 not available. Text:", text)
+        except Exception:
+            pass
+        return
+
+    # env override
+    env_rate = os.environ.get("LIVEKIT_TTS_RATE")
+    if env_rate:
+        try:
+            rate = int(env_rate)
+        except Exception:
+            pass
+
+    # clamp to readable range
+    MIN_RATE = 50
+    MAX_RATE = 120
+    try:
+        rate = max(MIN_RATE, min(int(rate), MAX_RATE))
+    except Exception:
+        rate = 80
+
+    def _do_speak():
+        try:
+            engine = pyttsx3.init()
+            try:
+                engine.setProperty('rate', int(rate))
+            except Exception:
+                pass
+            try:
+                engine.setProperty('volume', 1.0)
+            except Exception:
+                pass
+            try:
+                if voice_index is not None:
+                    voices = engine.getProperty('voices')
+                    if 0 <= int(voice_index) < len(voices):
+                        engine.setProperty('voice', voices[int(voice_index)].id)
+            except Exception:
+                pass
+            try:
+                print(f"speak_with_local_tts: speaking (rate={rate})")
+            except Exception:
+                pass
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            try:
+                print("speak_with_local_tts error:", e)
+            except Exception:
+                pass
+
+    if block:
+        _do_speak()
+    else:
+        t = threading.Thread(target=_do_speak, daemon=True)
+        t.start()
+
+
+
+
 # from .discover import get_import_data
 from .readchar import key, readkey
 
@@ -418,6 +498,15 @@ class AgentsConsole:
         return table
 
     def set_microphone_enabled(self, enable: bool, *, device: int | str | None = None) -> None:
+
+        from ..inference import tts as _local_tts  # add near top of the file or inside the function
+        if enabled:
+            try:
+                _local_tts.stop_speaking()
+            except Exception:
+                pass
+
+
         if self._input_stream:
             self._input_stream.close()
             self._input_stream = self._input_name = None
@@ -477,12 +566,13 @@ class AgentsConsole:
         assert isinstance(device_info, dict), "device_info is dict"
 
         self._output_name = device_info.get("name", "Unnamed speaker")
+        samplerate = int(device_info.get("default_samplerate", 48000))
+        channels = 2 if device_info.get("max_output_channels", 1) >= 2 else 1
         self._output_stream = sd.OutputStream(
             callback=self._sd_output_callback,
             dtype="int16",
-            channels=1,
-            device=device,
-            samplerate=24000,
+            channels=channels,
+            samplerate=samplerate,
             blocksize=2400,
         )
         self._output_stream.start()
