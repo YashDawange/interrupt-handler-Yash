@@ -16,6 +16,9 @@
 
 ---
 
+## Demo Video Link
+[Backchannel Detection Demo](https://drive.google.com/file/d/17hmaL4WLOETBw_RZleu8lfcHdcPmoRML/view?usp=drive_link)
+
 ## Introduction
 
 ### What are Backchannels?
@@ -1241,3 +1244,220 @@ The modular design allows:
     "let's start over", "restart",
 }
 ```
+
+---
+
+## Running the Agent
+
+This section provides step-by-step instructions for setting up and running a voice agent with backchannel detection using LiveKit Cloud.
+
+### Prerequisites
+
+Before running the agent, ensure you have:
+
+1. **Python 3.10+** installed
+2. **LiveKit Cloud Account** - Sign up at [cloud.livekit.io](https://cloud.livekit.io)
+3. **API Keys** for your chosen providers:
+   - LiveKit API Key and Secret (from LiveKit Cloud dashboard)
+   - STT provider key (e.g., Deepgram)
+   - LLM provider key (e.g., OpenAI)
+   - TTS provider key (e.g., OpenAI, ElevenLabs)
+
+### Step 1: Clone and Install Dependencies
+
+```bash
+# Clone the repository
+git clone https://github.com/Abdiitb/agents-assignment.git
+cd agents-assignment
+
+# Install uv (Python package manager) if not already installed
+pip install uv
+
+# Sync dependencies using uv (this creates .venv and installs all packages)
+uv sync
+
+# Activate the virtual environment
+# On Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+
+# On Windows (CMD):
+.\.venv\Scripts\activate.bat
+
+# On Linux/macOS:
+source .venv/bin/activate
+```
+
+### Step 2: Configure Environment Variables
+
+Create a `.env` file in the project root directory:
+
+```bash
+# Create the .env file
+touch .env  # Linux/macOS
+# Or on Windows PowerShell:
+New-Item -Path .env -ItemType File
+```
+
+Add the following contents to your `.env` file:
+
+```env
+# LiveKit Cloud Credentials
+# Get these from https://cloud.livekit.io -> Settings -> Keys
+LIVEKIT_URL=wss://your-project-name.livekit.cloud
+LIVEKIT_API_KEY=APIxxxxxxxxxx
+LIVEKIT_API_SECRET=your-api-secret-here
+
+# OpenAI API Key (for LLM and TTS)
+# Get from https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-your-openai-key-here
+
+# Deepgram API Key (for STT)
+# Get from https://console.deepgram.com/
+DEEPGRAM_API_KEY=your-deepgram-key-here
+
+# Optional: ElevenLabs API Key (alternative TTS)
+# ELEVENLABS_API_KEY=your-elevenlabs-key-here
+
+# Optional: Anthropic API Key (alternative LLM)
+# ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+### Step 3: Run the Example Agent
+
+Start the voice agent with backchannel detection:
+
+```bash
+# Run the example agent
+uv run examples/voice_agents/voice_agent_with_backchannels.py start
+```
+
+### Step 4: Connect via LiveKit Playground
+
+1. Open your browser and go to [LiveKit Agents Playground](https://agents-playground.livekit.io/)
+2. Click on **"Connect"** in the top right
+3. Select your LiveKit Cloud project from the dropdown
+4. Click **"Connect"** to join the room
+5. Allow microphone access when prompted
+6. Start talking to test the agent!
+
+### Step 5: Test Backchannel Detection
+
+While the agent is speaking, try these phrases:
+
+| Say This | Expected Behavior |
+|----------|-------------------|
+| "yeah" | Agent **continues** speaking |
+| "mm-hmm" | Agent **continues** speaking |
+| "okay" | Agent **continues** speaking |
+| "uh-huh" | Agent **continues** speaking |
+| "stop" | Agent **stops** speaking |
+| "wait" | Agent **stops** speaking |
+| "hold on" | Agent **stops** speaking |
+
+### Troubleshooting
+
+#### Error: "LIVEKIT_URL not set"
+
+Make sure your `.env` file is in the correct directory and contains:
+```env
+LIVEKIT_URL=wss://your-project.livekit.cloud
+```
+
+#### Error: "API key not valid"
+
+Check that your API keys are correct:
+```bash
+# PowerShell - Check if keys are loaded
+echo $env:OPENAI_API_KEY
+echo $env:DEEPGRAM_API_KEY
+```
+
+#### Error: "Rate limit exceeded (429)"
+
+You've hit API rate limits. Wait a few minutes and try again, or check your plan limits.
+
+#### Backchannels Not Working
+
+1. Enable debug logging: `$env:LIVEKIT_LOG_LEVEL = "DEBUG"`
+2. Look for logs containing "backchannel analysis result"
+3. Check the transcript and matched_words to see what STT returned
+4. Add missing word variations to the handler if needed
+
+#### No Audio Input
+
+- Check microphone permissions in your browser
+- Ensure the correct microphone is selected
+- Try the console mode to test with local audio
+
+### Example: Custom Backchannel Handler
+
+```python
+# Create a custom handler with additional words
+custom_handler = InterruptHandler(
+    min_interrupt_duration=200,  # ms
+    min_interruption_words=1,
+)
+
+# Add custom backchannel words
+custom_handler.add_backchannel_word("roger")
+custom_handler.add_backchannel_word("copy")
+custom_handler.add_backchannel_word("affirmative")
+
+# Add custom command words
+custom_handler.add_command_word("abort")
+custom_handler.add_command_word("halt")
+
+# Use in session
+session = AgentSession(
+    stt=deepgram.STT(),
+    llm=openai.LLM(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+    interrupt_handler=custom_handler,
+)
+```
+
+### Example: Disable Backchannel Detection
+
+```python
+# Disable backchannel detection entirely
+session = AgentSession(
+    stt=deepgram.STT(),
+    llm=openai.LLM(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+    interrupt_handler=None,  # Backchannels will interrupt
+)
+```
+
+### Verifying Backchannel Detection is Working
+
+Add this event listener to see real-time analysis:
+
+```python
+@session.on("backchannel_detected")
+def on_backchannel(ev):
+    print("=" * 50)
+    print(f"Transcript: '{ev.transcript}'")
+    print(f"Action: {ev.action}")
+    print(f"Is Backchannel Only: {ev.is_backchannel_only}")
+    print(f"Has Command Words: {ev.has_command_words}")
+    print(f"Matched Words: {ev.matched_words}")
+    print(f"Confidence: {ev.confidence:.2f}")
+    print("=" * 50)
+```
+
+When you say "yeah" while the agent is speaking, you should see:
+
+```
+==================================================
+Transcript: 'Yeah.'
+Action: ignore
+Is Backchannel Only: True
+Has Command Words: False
+Matched Words: ['yeah']
+Confidence: 1.00
+==================================================
+```
+
+And the agent will continue speaking uninterrupted!
