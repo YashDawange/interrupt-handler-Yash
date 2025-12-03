@@ -5,6 +5,7 @@ import contextvars
 import heapq
 import json
 import time
+import re  
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
@@ -1173,6 +1174,37 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
             return
+
+        # --- ASSIGNMENT LOGIC START ---
+        
+        # 1. Get the current transcript
+        transcript = ""
+        if self._audio_recognition:
+            transcript = self._audio_recognition.current_transcript
+        
+        # 2. Clean the text (lowercase, remove punctuation)
+        clean_transcript = re.sub(r'[^\w\s]', '', transcript).lower().strip()
+
+        # 3. State-Based Filtering: Only apply if Agent is SPEAKING
+        if self._session.agent_state == "speaking":
+            
+            # Retrieve the ignore words we set in basic_agent.py
+            ignore_words = set()
+            if self._session.userdata and isinstance(self._session.userdata, dict):
+                ignore_words = self._session.userdata.get("ignore_words", set())
+
+            # 4. Handle "False Start" (VAD triggered but no text yet)
+            # If we interrupt now, we might cut off a "Yeah". Wait for text.
+            if not clean_transcript:
+                return
+
+            # 5. Check Ignore List
+            # If the user said EXACTLY one of the ignore words, DO NOT interrupt.
+            if clean_transcript in ignore_words:
+                logger.info(f"Ignoring passive acknowledgement: '{clean_transcript}'")
+                return
+
+        # --- ASSIGNMENT LOGIC END ---
 
         if (
             self.stt is not None

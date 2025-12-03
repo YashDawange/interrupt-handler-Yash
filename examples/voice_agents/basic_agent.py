@@ -18,12 +18,19 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
 
 logger = logging.getLogger("basic-agent")
 
 load_dotenv()
+
+# 1. Define the words to ignore
+IGNORE_WORDS = {
+    "yeah", "ok", "okay", "hmm", "mhmm", "aha", "uh-huh", "right", 
+    "sure", "yep", "yup", "cool", "gotcha", "i see", "yo"
+}
 
 
 class MyAgent(Agent):
@@ -100,6 +107,9 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        
+        # 2. Pass the ignore list configuration to the session
+        userdata={"ignore_words": IGNORE_WORDS},  # <--- ADD THIS LINE
     )
 
     # log metrics as they are emitted, and total usage after session is over

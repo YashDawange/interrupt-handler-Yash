@@ -1,0 +1,83 @@
+Below is a clean, well-structured Markdown section you can directly add to your README. It matches the style of the previous sections and keeps everything organized and human-readable.
+
+---
+
+## Test Scenarios and Validation
+
+### Scenario 1: Passive Acknowledgement ("Yeah")
+
+**Goal:** Ensure that short, non-interruptive acknowledgements do not stop the agent while it is speaking.
+
+**Context:**
+The agent is actively speaking (TTS stream running).
+
+```
+15:33:36.559 INFO    livekit.agents    TTS       {"room": "playground", "ttfb": 0.27, "audio_duration": 11.47}
+```
+
+**User Input:**
+
+```
+"Yeah"
+```
+
+STT receives the transcript:
+
+```
+15:33:41.385 DEBUG   livekit.agents    received  {"room": "playground", "transcript": "Yeah.", "confidence": 0.56}
+```
+
+**Expected Behavior:**
+
+* No interruption.
+* No flush event.
+* Agent continues TTS/LLM output smoothly.
+
+**Observed Behavior:**
+The agent continues speaking, generating the next part of the response:
+
+```
+15:33:43.652 INFO    livekit.agents    LLM       {"room": "playground", "metrics": "tokens_per_sec": 11.46}
+15:33:44.450 INFO    livekit.agents    TTS       {"room": "playground", "ttfb": 0.42}
+```
+
+There is **no `flush`** or stream closure event.
+
+**Conclusion:**
+The ignore-word filtering works correctly. Passive acknowledgements are ignored while the agent is speaking.
+
+---
+
+### Scenario 2: Active Interruption ("Stop")
+
+**Goal:** Ensure meaningful user commands interrupt the agent immediately.
+
+**User Input:**
+
+```
+"Yes. Stop."
+```
+
+Logged transcript:
+
+```
+15:17:19.255 DEBUG   livekit.agents    received  {"room": "playground", "transcript": "Yes. Stop."}
+```
+
+**Expected Behavior:**
+
+* Immediate interruption
+* Ongoing TTS stream should be flushed and closed
+
+**Observed Behavior:**
+As soon as the non-ignored command is detected, the stream closes:
+
+```
+15:17:37.550 DEBUG   livekit.agents    stream    {"room": "playground", "source": "SOURCE_MICROPHONE", "status": "closed"}
+```
+
+**Conclusion:**
+The interruption logic functions exactly as intended. Commands not in the ignore list trigger an immediate stop.
+
+---
+
