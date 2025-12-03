@@ -18,6 +18,9 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+# Custom Interrupt Logic
+from interrupt_handler.interrupt_logic import setup_interrupt_logic
+
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
 
@@ -128,6 +131,16 @@ async def entrypoint(ctx: JobContext):
         ),
     )
 
+    # --- INJECTION POINT ---
+    # We need to access the activity. Since session.start() initializes it,
+    # we can access it via the agent instance.
+    if session._activity:
+         setup_interrupt_logic(session._activity)
+    elif session._agent._activity:
+         setup_interrupt_logic(session._agent._activity)
+    # -----------------------
+
+    await session.generate_reply()
 
 if __name__ == "__main__":
     cli.run_app(server)
