@@ -1,3 +1,6 @@
+import os
+import pytest
+
 from livekit.agents.llm import AgentHandoff, FunctionCall, FunctionCallOutput, utils
 from livekit.plugins import openai
 
@@ -50,6 +53,10 @@ def test_dict():
     print(ChatContext.from_dict(chat_ctx.to_dict()).items)
 
 
+@pytest.mark.skipif(
+    not os.environ.get("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set, skipping test that requires API access"
+)
 async def test_summarize():
     from livekit.agents import ChatContext
 

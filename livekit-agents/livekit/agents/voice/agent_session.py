@@ -40,6 +40,7 @@ from ._utils import _set_participant_attributes
 from .agent import Agent
 from .agent_activity import AgentActivity
 from .audio_recognition import TurnDetectionMode
+from .interrupt_handler import InterruptHandler
 from .events import (
     AgentEvent,
     AgentState,
@@ -357,6 +358,72 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # ivr activity
         self._ivr_activity: IVRActivity | None = None
+
+        # interrupt handler - initialized after audio_output is set up
+        self._interrupt_handler: InterruptHandler | None = None
+        self._init_interrupt_handler()
+
+    def _init_interrupt_handler(self) -> None:
+        """Initialize the interrupt handler with audio output wrapper."""
+        if self.output.audio is None:
+            return
+
+        # Create audio player wrapper for interrupt handler
+        class AudioPlayerWrapper:
+            def __init__(self, session: "AgentSession"):
+                self._session = session
+                self._audio_output = session.output.audio
+
+            def is_playing(self) -> bool:
+                # Check if agent is currently speaking (has active, non-interrupted speech)
+                if self._session._activity and self._session._activity._current_speech:
+                    return not self._session._activity._current_speech.interrupted
+                return False
+
+            def pause(self) -> None:
+                if self._audio_output and self._audio_output.can_pause:
+                    self._audio_output.pause()
+
+            def resume(self) -> None:
+                if self._audio_output and self._audio_output.can_pause:
+                    self._audio_output.resume()
+
+            def stop(self) -> None:
+                if self._audio_output:
+                    self._audio_output.clear_buffer()
+
+        # Create wrapper and handler
+        audio_wrapper = AudioPlayerWrapper(self)
+        self._interrupt_handler = InterruptHandler(audio_wrapper)
+
+        # Set up interrupt callback - stops audio and routes transcript to user message handler
+        def on_interrupt(transcript: str) -> None:
+            if self._activity:
+                # Stop current speech
+                if self._activity._current_speech and not self._activity._current_speech.interrupted:
+                    self._activity._current_speech.interrupt()
+                # Clear audio buffer
+                if self.output.audio:
+                    self.output.audio.clear_buffer()
+                # Route transcript to user input handler
+                if transcript:
+                    self._user_input_transcribed(
+                        UserInputTranscribedEvent(
+                            language=None,
+                            transcript=transcript,
+                            is_final=True,
+                            speaker_id=None,
+                        )
+                    )
+
+        # Set up immediate user speech callback - triggers normal listening mode
+        def on_immediate_user_speech() -> None:
+            # This is normal user speech when agent is silent - no special action needed
+            # The existing VAD/STT pipeline will handle it
+            pass
+
+        self._interrupt_handler.on_interrupt = on_interrupt
+        self._interrupt_handler.on_immediate_user_speech = on_immediate_user_speech
 
     def emit(self, event: EventTypes, arg: AgentEvent) -> None:  # type: ignore
         self._recorded_events.append(arg)
@@ -1280,6 +1347,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 "resume_false_interruption is enabled, but the audio output does not support pause, ignored",
                 extra={"audio_output": audio_output.label},
             )
+        # Reinitialize interrupt handler when audio output changes
+        self._init_interrupt_handler()
 
     def _on_text_output_changed(self) -> None:
         pass

@@ -1,0 +1,6 @@
+pytest
+pytest-asyncio
+numpy
+typer
+anyio
+typing-extensions

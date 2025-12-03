@@ -1219,6 +1219,17 @@ class AgentActivity(RecognitionHooks):
             self._false_interruption_timer.cancel()
             self._false_interruption_timer = None
 
+        # Route VAD event through interrupt handler if available
+        if self._session._interrupt_handler is not None:
+            self._session._interrupt_handler.on_vad()
+            # If handler processed it, don't call _interrupt_by_audio_activity directly
+            # The handler will call on_interrupt callback if needed
+            return
+
+        # Fallback to original behavior if interrupt handler not available
+        if ev and ev.speech_duration >= self._session.options.min_interruption_duration:
+            self._interrupt_by_audio_activity()
+
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
         speech_end_time = time.time()
         if ev:
@@ -1248,6 +1259,13 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        # Forward to interrupt handler if available
+        if self._session._interrupt_handler is not None:
+            text = ev.alternatives[0].text
+            confidence = ev.alternatives[0].confidence or 0.0
+            self._session._interrupt_handler.on_stt_partial(text, confidence)
+            # Continue with normal processing - handler will decide on interrupt
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
@@ -1261,7 +1279,10 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Only call _interrupt_by_audio_activity if interrupt handler didn't handle it
+            # (handler will call on_interrupt callback if interrupt is needed)
+            if self._session._interrupt_handler is None:
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False
@@ -1275,6 +1296,13 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
+
+        # Forward to interrupt handler if available
+        if self._session._interrupt_handler is not None:
+            text = ev.alternatives[0].text
+            confidence = ev.alternatives[0].confidence or 1.0
+            self._session._interrupt_handler.on_stt_final(text, confidence)
+            # Continue with normal processing - handler will decide on interrupt
 
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
@@ -1292,7 +1320,10 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Only call _interrupt_by_audio_activity if interrupt handler didn't handle it
+            # (handler will call on_interrupt callback if interrupt is needed)
+            if self._session._interrupt_handler is None:
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False
