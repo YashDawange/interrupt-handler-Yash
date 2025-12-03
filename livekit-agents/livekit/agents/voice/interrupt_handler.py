@@ -1,152 +1,202 @@
-import os
+# livekit-agents/voice/interrupt_handler.py
+from __future__ import annotations
+
 import asyncio
+import os
 import re
-from typing import Iterable
+import time
+from typing import Iterable, Optional
 
-# Config (can be overridden by env var or passed in)
-DEFAULT_IGNORE_LIST = ['yeah', 'ok', 'hmm', 'right', 'uh-huh', 'okay', 'yep']
-DEFAULT_HARD_LIST = ['wait', 'stop', 'no', 'pause', 'hold', 'sorry', 'listen']
+# Default lists (tweak as needed)
+DEFAULT_SOFT_IGNORE = ["yeah", "ok", "okay", "hmm", "uh-huh", "yep", "right"]
+DEFAULT_HARD = ["wait", "stop", "no", "pause", "hold", "listen", "actually", "hang", "cancel"]
 
-# Simple normalization
-def normalize_text(s: str) -> str:
-    s = s.lower().strip()
-    s = re.sub(r"[^\w\s'-]", '', s)
-    return s
+# Small helper to normalize transcripts
+def _normalize(text: str) -> str:
+    t = (text or "").lower().strip()
+    # remove punctuation except mid-word apostrophes/hyphens
+    t = re.sub(r"[^\w\s'-]", "", t)
+    return t
+
 
 class InterruptHandler:
-    def __init__(self, agent, stt, *,
-                 ignore_list: Iterable[str] = None,
-                 hard_list: Iterable[str] = None,
-                 partial_timeout: float = 0.28):
-        """
-        agent: object controlling agent playback and state (must implement is_speaking(), stop_and_listen(), handle_user_text())
-        stt: object providing quick transcription (must implement quick_transcribe(audio_buffer, timeout))
-        partial_timeout: how long to wait (seconds) for a quick transcript before deciding to ignore
-        """
-        self.agent = agent
-        self.stt = stt
-        self.ignore_list = set([x.lower() for x in (ignore_list or DEFAULT_IGNORE_LIST)])
-        self.hard_list = set([x.lower() for x in (hard_list or DEFAULT_HARD_LIST)])
-        self.partial_timeout = partial_timeout
+    """
+    Integrates with AudioRecognition / AgentSession.
 
-        # Track pending tasks per user (to avoid double-work)
-        self._pending = {}  # user_id -> asyncio.Task
+    Usage:
+      - Construct with (session, *, ignore_list=None, hard_list=None, timeout=0.28)
+      - Call .on_vad_start(ev) from the VAD START_OF_SPEECH branch.
+      - Call .on_stt_partial(text) from the STT PREFLIGHT/INTERIM branch.
+      - Call .on_stt_final(text) from the STT FINAL branch (optional).
+    """
 
-        # Optionally expose config via environment
-        env_ignore = os.getenv('SOFT_IGNORE_LIST')
-        if env_ignore:
-            self.ignore_list = set([t.strip().lower() for t in env_ignore.split(',') if t.strip()])
+    def __init__(
+        self,
+        session,
+        *,
+        ignore_list: Optional[Iterable[str]] = None,
+        hard_list: Optional[Iterable[str]] = None,
+        partial_timeout: float | None = None,
+    ):
+        self._session = session
+        self._ignore = set([t.lower() for t in (ignore_list or DEFAULT_SOFT_IGNORE)])
+        self._hard = set([t.lower() for t in (hard_list or DEFAULT_HARD)])
+        # partial timeout fallback: use session option false_interruption_timeout if provided
+        if partial_timeout is None:
+            partial_timeout = getattr(session.options, "false_interruption_timeout", 0.28) or 0.28
+        self._timeout = float(partial_timeout)
 
-        env_hard = os.getenv('HARD_COMMAND_LIST')
+        # load from env if provided (comma-separated)
+        env_soft = os.getenv("SOFT_IGNORE_LIST")
+        if env_soft:
+            self._ignore = set([t.strip().lower() for t in env_soft.split(",") if t.strip()])
+
+        env_hard = os.getenv("HARD_COMMAND_LIST")
         if env_hard:
-            self.hard_list = set([t.strip().lower() for t in env_hard.split(',') if t.strip()])
+            self._hard = set([t.strip().lower() for t in env_hard.split(",") if t.strip()])
 
-    async def on_vad_start(self, user_id: str, audio_buffer):
+        # pending structure keyed by user (can be extended to multi-user)
+        # value: dict with keys { "since":float, "timer":asyncio.Task|None, "last_text": str|None }
+        self._pending: dict[str, dict] = {}
+
+        # small lock to avoid races
+        self._lock = asyncio.Lock()
+
+    async def on_vad_start(self, ev) -> None:
         """
-        Called by the VAD event handler when user audio starts / VAD flagged voice.
-        audio_buffer: a reference or raw bytes chunk containing the recent user audio (last N ms).
+        Called when VAD emits START_OF_SPEECH.
+        ev is the VADEvent object (we only need speaker id if available).
         """
-        # If agent silent -> accept immediately (normal conversational flow)
-        if not self.agent.is_speaking():
-            # Nothing to block: treat as normal user speech
-            # Forward to normal handler immediately (agent should switch to listening)
-            await self._handle_user_when_agent_silent(user_id, audio_buffer)
+        # determine speaker id if present; fallback to single-global key
+        user_id = getattr(ev, "speaker_id", "default")
+        # If agent not speaking -> we should not ignore. Let the normal AudioRecognition pipeline handle it.
+        if not self._session or self._session.agent_state != "speaking":
+            # No special handling required while agent is silent
             return
 
-        # Agent is speaking -> we must NOT stop immediately.
-        # If we already have a pending evaluation, skip starting another.
-        if user_id in self._pending:
+        # If already pending, we don't start another timer
+        async with self._lock:
+            if user_id in self._pending:
+                return
+
+            # create pending entry and start a timeout task
+            entry = {"since": time.time(), "last_text": None, "timer": None}
+            self._pending[user_id] = entry
+
+            # start a timer that will clear the pending if no partial arrives
+            entry["timer"] = asyncio.create_task(self._pending_timeout(user_id))
+
+    async def _pending_timeout(self, user_id: str) -> None:
+        # wait for short timeout, if no transcript -> treat as soft/ignore (do nothing)
+        try:
+            await asyncio.sleep(self._timeout)
+        except asyncio.CancelledError:
+            return
+        async with self._lock:
+            # if still pending and no text, clear and ignore (do nothing)
+            if user_id in self._pending:
+                self._pending.pop(user_id, None)
+
+    async def on_stt_partial(self, ev_text: str, *, speaker_id: Optional[str] = None) -> None:
+        """
+        Called for PREFLIGHT or INTERIM transcripts (fast partials).
+        ev_text: partial transcript text.
+        If the agent was speaking and we have a pending VAD event for this speaker,
+        we decide whether to interrupt or ignore based on tokens.
+        """
+        if not ev_text:
+            return
+        user_id = speaker_id or "default"
+        text = _normalize(ev_text)
+
+        # Fast path: if agent not speaking -> nothing to special-handle here.
+        if self._session.agent_state != "speaking":
             return
 
-        # create a task to evaluate this transient VAD event
-        task = asyncio.create_task(self._evaluate_while_speaking(user_id, audio_buffer))
-        self._pending[user_id] = task
-
-        def _cleanup(t):
-            self._pending.pop(user_id, None)
-        task.add_done_callback(_cleanup)
-
-    async def _handle_user_when_agent_silent(self, user_id, audio_buffer):
-        # Here the agent is silent; we should quickly transcribe and then pass to
-        # the normal processing pipeline (no ignoring)
-        try:
-            transcript = await asyncio.wait_for(
-                self.stt.quick_transcribe(audio_buffer),
-                timeout=self.partial_timeout
-            )
-        except asyncio.TimeoutError:
-            transcript = None
-
-        # If no transcript available, let the agent still attempt to handle (some systems use direct wake)
-        if transcript:
-            transcript = normalize_text(transcript)
-            # deliver to agent's normal flow
-            await self.agent.handle_user_text(user_id, transcript)
-        else:
-            # fallback: tell agent to listen (no text)
-            await self.agent.start_listening_for_user(user_id)
-
-    async def _evaluate_while_speaking(self, user_id, audio_buffer):
-        """
-        While the agent is speaking, we wait a tiny amount of time for a quick STT.
-        Decision rules:
-          - If transcript contains any *hard* word -> interrupt immediately.
-          - Else if transcript contains non-empty tokens not in ignore_list -> interrupt.
-          - Else (empty or only soft tokens) -> ignore and do nothing.
-        """
-        try:
-            # get quick transcript (STT should be tuned for low-latency partials)
-            try:
-                transcript = await asyncio.wait_for(self.stt.quick_transcribe(audio_buffer), timeout=self.partial_timeout)
-            except asyncio.TimeoutError:
-                transcript = None
-
-            # If STT not available within timeout -> treat as soft / ignore
-            if not transcript:
-                # No reliable text -> continue speaking (do nothing)
+        async with self._lock:
+            if user_id not in self._pending:
+                # no VAD transient pending -> nothing to do
                 return
 
-            text = normalize_text(transcript)
-            if not text:
-                return
+            # cancel the pending timeout (we received a partial)
+            timer = self._pending[user_id].get("timer")
+            if timer and not timer.done():
+                timer.cancel()
 
-            # Tokenize simply on whitespace
+            self._pending[user_id]["last_text"] = text
+
+            # Decide: if text contains any hard token -> interrupt
             tokens = [t for t in text.split() if t]
-
-            # Check for any hard commands first (interrupt)
-            for tok in tokens:
-                if tok in self.hard_list:
-                    # interrupt immediately
-                    await self._do_interrupt(user_id, text)
+            if any(tok in self._hard for tok in tokens):
+                # interrupt
+                # We call session.interrupt() (it returns a future)
+                try:
+                    # call interrupt; schedule it to avoid blocking the STT handler for long
+                    fut = self._session.interrupt()
+                    # feed transcript into normal handle: commit or dispatch the transcript if desired
+                    # Some sessions expect STT events later; but it's fine to attempt to pass the text
+                    # to the session so it knows what caused interrupt.
+                    if hasattr(self._session, "_activity") and self._session._activity:
+                        # if the Activity exposes a handler for incoming user text, call it
+                        handle_text = getattr(self._session._activity, "handle_incoming_user_text", None)
+                        if callable(handle_text):
+                            # schedule async call but don't await if not necessary
+                            asyncio.create_task(handle_text(text))
+                    # make sure interrupt future is awaited (not required here)
                     return
+                finally:
+                    self._pending.pop(user_id, None)
 
-            # If tokens contain anything that's not in ignore_list, treat as interruption.
-            # This catches "yeah but wait" (but/wait not in ignore list -> interrupt).
-            non_soft = [tok for tok in tokens if tok not in self.ignore_list]
+            # If there exists any token that's not in soft-ignore -> interrupt
+            non_soft = [tok for tok in tokens if tok not in self._ignore]
             if non_soft:
-                await self._do_interrupt(user_id, text)
+                # mixed phrase "yeah wait" -> trigger interrupt
+                try:
+                    fut = self._session.interrupt()
+                    # optionally deliver the partial text to activity as above
+                    if hasattr(self._session, "_activity") and self._session._activity:
+                        handle_text = getattr(self._session._activity, "handle_incoming_user_text", None)
+                        if callable(handle_text):
+                            asyncio.create_task(handle_text(text))
+                    return
+                finally:
+                    self._pending.pop(user_id, None)
+
+            # Otherwise: all tokens are soft -> do nothing (ignore)
+            self._pending.pop(user_id, None)
+            return
+
+    async def on_stt_final(self, ev_text: str, *, speaker_id: Optional[str] = None) -> None:
+        """
+        Called for FINAL transcripts. If a VAD pending existed we evaluate the same logic again
+        just in case final text adds command tokens.
+        """
+        if not ev_text:
+            return
+        user_id = speaker_id or "default"
+        text = _normalize(ev_text)
+
+        # If agent not speaking just return; final is processed normally elsewhere
+        if self._session.agent_state != "speaking":
+            return
+
+        async with self._lock:
+            if user_id not in self._pending:
                 return
 
-            # Otherwise: all tokens are soft -> ignore and do nothing (agent continues)
-            return
+            # same decision rules as partial
+            tokens = [t for t in text.split() if t]
+            if any(tok in self._hard for tok in tokens) or any(tok not in self._ignore for tok in tokens):
+                # interrupt
+                try:
+                    fut = self._session.interrupt()
+                    if hasattr(self._session, "_activity") and self._session._activity:
+                        handle_text = getattr(self._session._activity, "handle_incoming_user_text", None)
+                        if callable(handle_text):
+                            asyncio.create_task(handle_text(text))
+                    return
+                finally:
+                    self._pending.pop(user_id, None)
 
-        except Exception as e:
-            # safe default: do not interrupt on handler failure
-            # but log the error via agent logger if available
-            try:
-                self.agent.logger.exception("InterruptHandler error: %s", e)
-            except Exception:
-                pass
-            return
-
-    async def _do_interrupt(self, user_id, transcript_text):
-        """
-        Called when we decide to interrupt: stop agent speech and route transcript into normal processing.
-        """
-        # Immediately stop playback and hand off to listening/processing
-        # IMPORTANT: stop_and_listen should be synchronous/fast, or at least not block for long.
-        await self.agent.stop_and_listen(user_id)
-
-        # If we have transcript text, feed it into agent's pipeline (optional)
-        if transcript_text:
-            await self.agent.handle_user_text(user_id, transcript_text)
+            # otherwise ignore
+            self._pending.pop(user_id, None)
