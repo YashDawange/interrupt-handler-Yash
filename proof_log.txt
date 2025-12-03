@@ -1,14 +1,21 @@
 Running in SIMULATION mode. No LiveKit connection.
 [Agent] START speaking (state -> speaking)
 TTS (fallback): I will now give a long explanation. Listen carefully.
+[STT] Transcript arrived: 'okay'
+[FILTER] Ignored while speaking: 'okay'
 [STT] Transcript arrived: 'yeah'
 [FILTER] Ignored while speaking: 'yeah'
-[STT] Transcript arrived: 'stop'
-[FILTER] INTERRUPT triggered by: 'stop'
+[STT] Transcript arrived: 'uh-huh'
+[FILTER] Ignored while speaking: 'uh-huh'
+[STT] Transcript arrived: 'no stop'
+[FILTER] INTERRUPT triggered by: 'no stop'
 [Agent] STOP speaking (state -> silent)
-TTS (fallback): Heard interrupt: stop
+TTS (fallback): Heard interrupt: no stop
 [STT] Transcript arrived: 'yeah'
 [FILTER] Responding to: 'yeah'
 TTS (fallback): Response to: yeah
+[STT] Transcript arrived: 'yeah okay but wait'
+[FILTER] INTERRUPT triggered by: 'yeah okay but wait'
+TTS (fallback): Heard interrupt: yeah okay but wait
 [Agent] STOP speaking (state -> silent)
 Simulation finished.

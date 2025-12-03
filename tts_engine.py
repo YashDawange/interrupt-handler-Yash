@@ -17,5 +17,5 @@ class TTSEngine:
             self.engine.say(text)
             self.engine.runAndWait()
         else:
-            # fallback: print text so user can read
+            
             print("TTS (fallback):", text)

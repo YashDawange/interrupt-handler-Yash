@@ -19,7 +19,7 @@ class InterruptionFilter:
         t = text.lower().strip()
         if t in self.ignore_list:
             return True
-        # Split words and check if every word is a filler
+        
         words = [w.strip(".,!?") for w in t.split()]
         if len(words) == 0:
             return False
@@ -38,7 +38,7 @@ class InterruptionFilter:
         if not text or text.strip()=="":
             return "ignore" if agent_state=="speaking" else "respond"
 
-        # If contains a hard interrupt keyword anywhere, interrupt
+   
         if self.contains_interrupt(text):
             return "interrupt"
 
@@ -46,9 +46,7 @@ class InterruptionFilter:
         if self.is_only_soft(text):
             return "ignore" if agent_state=="speaking" else "respond"
 
-        # Otherwise:
-        # - If agent was speaking and user spoke non-soft content treat as interrupt
-        # - If agent silent  normal respond
+    
         if agent_state == "speaking":
             return "interrupt"
         else:

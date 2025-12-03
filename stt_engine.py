@@ -9,12 +9,17 @@ except Exception:
     OPENAI_AVAILABLE = False
 
 class SimulatedSTT:
-    """Simulates STT by returning canned transcripts after a short delay."""
     async def transcribe_stream(self, audio_stream):
-        # audio_stream is ignored in simulation
         await asyncio.sleep(0.05)
-        # yield a sequence of sample texts to simulate user speaking
-        for text in ["yeah", "stop", "yeah"]:
+        transcripts = [
+            "okay",
+            "yeah",
+            "uh-huh",
+            "no stop",
+            "yeah",
+            "yeah okay but wait"
+        ]
+        for text in transcripts:
             yield text
             await asyncio.sleep(0.1)
 
@@ -26,8 +31,6 @@ class OpenAIWhisperSTT:
         openai.api_key = self.api_key
 
     async def transcribe_stream(self, audio_stream):
-        # Placeholder: in a real system you'd stream chunks to the OpenAI speech endpoint.
-        # Here we just raise NotImplementedError to indicate where to integrate.
         raise NotImplementedError("Streaming OpenAI STT integration goes here")
 
 def get_stt(allow_sim=True):
