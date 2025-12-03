@@ -1,0 +1,32 @@
+AGENT	agent_initial_greeting	Initial greeting queued
+AGENT	agent_started	<agent started speaking>
+AGENT	agent_stopped	<agent stopped speaking>
+USER	normal_utterance	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='Give me a long paragraph about history.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	Give me a long paragraph about history.
+AGENT	agent_started	<agent started speaking>
+
+USER	normal_utterance	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='Yeah.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	Yeah.
+
+USER	interrupt_requested	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='Yeah, OK, but wait.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	Yeah, OK, but wait.
+AGENT	agent_stopped	<agent stopped speaking>
+
+USER	normal_utterance	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='continue with the countdown.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	continue with the countdown.
+AGENT	agent_started	<agent started speaking>
+
+USER	normal_utterance	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='Continue.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	Continue.
+AGENT	agent_started	<agent started speaking>
+
+USER	normal_utterance	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='Stop.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	Stop.
+AGENT	agent_stopped	<agent stopped speaking>
+
+USER	normal_utterance	SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='start on a count of three.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	start on a count of three.
+AGENT	agent_started	<agent started speaking>
+SpeechEvent(type=<SpeechEventType.FINAL_TRANSCRIPT: 'final_transcript'>, request_id='', alternatives=[SpeechData(language='english', text='No, stop.', start_time=0.0, end_time=0.0, confidence=0.0, speaker_id=None, is_primary_speaker=None)], recognition_usage=None)
+USER	final_transcript_event	No, stop.
+AGENT	agent_stopped	<agent stopped speaking>
