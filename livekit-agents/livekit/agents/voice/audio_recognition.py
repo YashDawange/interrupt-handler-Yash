@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .interrupt_handler import InterruptHandler  # new local module
+
 import asyncio
 import json
 import math
@@ -142,7 +144,15 @@ class AudioRecognition:
 
         self._user_turn_span: trace.Span | None = None
         self._closing = asyncio.Event()
-
+        # Interrupt handler — evaluates short VAD hits while agent is speaking
+        # Uses session.options.false_interruption_timeout (fallback inside handler)
+        self._interrupt_handler = InterruptHandler(
+            session=self._session,
+            partial_timeout=self._session.options.false_interruption_timeout,
+            # Optional: override lists here:
+            # ignore_list=["yeah","ok","hmm"],
+            # hard_list=["wait","stop","no"],
+        )
     def update_options(
         self,
         *,
@@ -355,6 +365,12 @@ class AudioRecognition:
 
             if not transcript:
                 return
+                
+            # inform interrupt handler about final transcript in case it needs to interrupt
+            try:
+                asyncio.create_task(self._interrupt_handler.on_stt_final(transcript))
+            except Exception:
+                logger.exception("interrupt_handler on_stt_final error")
 
             self._hooks.on_final_transcript(
                 ev,
@@ -419,6 +435,12 @@ class AudioRecognition:
                 "received user preflight transcript",
                 extra={"user_transcript": transcript, "language": self._last_language},
             )
+            # notify interrupt handler about this fast preflight partial (non-blocking)
+            try:
+                asyncio.create_task(self._interrupt_handler.on_stt_partial(transcript))
+            except Exception:
+                logger.exception("interrupt_handler on_stt_partial error")
+
 
             # still need to increment it as it's used for turn detection,
             self._last_final_transcript_time = time.time()
@@ -443,6 +465,13 @@ class AudioRecognition:
         elif ev.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
             self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
             self._audio_interim_transcript = ev.alternatives[0].text
+            
+            # lightweight notify to interrupt handler for interim partial
+            try:
+                transcript = ev.alternatives[0].text
+                asyncio.create_task(self._interrupt_handler.on_stt_partial(transcript))
+            except Exception:
+                logger.exception("interrupt_handler on_stt_partial error")
 
         elif ev.type == stt.SpeechEventType.END_OF_SPEECH and self._turn_detection_mode == "stt":
             with trace.use_span(self._ensure_user_turn_span()):
@@ -473,7 +502,15 @@ class AudioRecognition:
                 self._hooks.on_start_of_speech(ev)
 
             self._speaking = True
+            # let interrupt handler know about this VAD start when agent is speaking
+            # schedule asynchronously so we never block the VAD loop
+            try:
+                asyncio.create_task(self._interrupt_handler.on_vad_start(ev))
+            except Exception:
+                logger.exception("interrupt_handler on_vad_start error")
 
+            # This ensures the handler is informed immediately whenever VAD detects start-of-speech.
+            
             if self._end_of_turn_task is not None:
                 self._end_of_turn_task.cancel()
 
