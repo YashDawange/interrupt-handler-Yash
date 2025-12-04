@@ -1,10 +1,10 @@
 # LiveKit Intelligent Interruption Handling - Implementation
 
-## 📋 Challenge Overview
+## Challenge Overview
 
 This implementation solves the LiveKit intelligent interruption handling challenge by creating a context-aware system that distinguishes between **passive acknowledgements** (backchanneling like "yeah", "ok", "hmm") and **active interruptions** (commands like "wait", "stop").
 
-## 🎯 Problem Statement
+## Problem Statement
 
 **The Problem:**
 LiveKit's default Voice Activity Detection (VAD) is too sensitive to user feedback. When the AI agent is speaking and a user says "yeah" or "hmm" to indicate they're listening, the agent interprets this as an interruption and stops abruptly.
@@ -15,7 +15,7 @@ A context-aware logic layer that distinguishes passive acknowledgements from act
 2. The actual content of what the user said (transcript analysis)
 3. Configurable lists of "filler words" vs "interruption keywords"
 
-## ✅ Core Logic Implementation
+## Core Logic Implementation
 
 ### Decision Matrix
 
@@ -27,7 +27,7 @@ A context-aware logic layer that distinguishes passive acknowledgements from act
 | "Start / Hello" | Agent is Silent | **RESPOND**: Normal conversation |
 | "Yeah but wait" | Agent is Speaking | **INTERRUPT**: Contains command keyword |
 
-## 🏗️ Architecture Design
+## Architecture Design
 
 ### Components
 
@@ -101,7 +101,7 @@ This is more practical than trying to delay the pause, as it:
 - Adds minimal complexity
 - Provides seamless user experience
 
-## 🔧 Technical Implementation Details
+## Technical Implementation Details
 
 ### State Tracking
 
@@ -173,7 +173,7 @@ async def _force_resume(self):
     if audio_output and audio_output.can_pause:
         self.session._update_agent_state("speaking")
         audio_output.resume()
-        logger.info("✅ Resumed agent speech successfully")
+        logger.info("Resumed agent speech successfully")
 ```
 
 ### Session Configuration
@@ -199,7 +199,7 @@ session = AgentSession(
 )
 ```
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 
@@ -255,7 +255,7 @@ OPENAI_API_KEY=your_openai_key
 CARTESIA_API_KEY=your_cartesia_key
 ```
 
-## 📱 Running the Agent
+## Running the Agent
 
 ### Development Mode (with LiveKit server)
 
@@ -279,121 +279,6 @@ This runs the agent in terminal mode with local audio for quick testing.
 ```bash
 python intelligent_interruption_agent.py start
 ```
-
-## 🧪 Test Scenarios
-
-### Scenario 1: Long Explanation (PASS ✅)
-
-**Test:**
-- Agent is reading a long paragraph
-- User says "Okay... yeah... uh-huh" multiple times
-
-**Expected Result:**
-- Agent continues speaking without interruption
-- Audio does not break or stutter
-
-**Implementation:**
-```python
-# Filler words detected while agent speaking → force resume
-if agent_was_speaking and is_only_filler_words(text):
-    force_resume()  # Immediate resume
-```
-
-### Scenario 2: Passive Affirmation (PASS ✅)
-
-**Test:**
-- Agent asks "Are you ready?" and goes silent
-- User says "Yeah"
-
-**Expected Result:**
-- Agent processes "Yeah" as valid answer
-- Agent proceeds with conversation
-
-**Implementation:**
-```python
-# Agent not speaking → all inputs are valid
-if not agent_was_speaking:
-    process_normally()  # Agent responds
-```
-
-### Scenario 3: Active Correction (PASS ✅)
-
-**Test:**
-- Agent is counting "One, two, three..."
-- User says "No stop"
-
-**Expected Result:**
-- Agent stops immediately
-
-**Implementation:**
-```python
-# Interruption keyword detected → allow interruption
-if contains_interruption_keyword(text):
-    allow_interruption()  # Agent stops
-```
-
-### Scenario 4: Mixed Input (PASS ✅)
-
-**Test:**
-- Agent is speaking
-- User says "Yeah okay but wait"
-
-**Expected Result:**
-- Agent stops (because "but" and "wait" are interruption keywords)
-
-**Implementation:**
-```python
-# "but" and "wait" are in INTERRUPTION_KEYWORDS
-# Even though "yeah okay" are filler words, the presence of
-# interruption keywords triggers the interruption
-if contains_interruption_keyword("yeah okay but wait"):
-    return True  # Allow interruption
-```
-
-## 📊 Implementation Quality
-
-### ✅ Strict Functionality (70%)
-
-- **Agent continues speaking over "yeah/ok":** ✅ IMPLEMENTED
-  - Force resume with 50ms delay
-  - No stuttering or pausing perceived by user
-
-- **State-aware behavior:** ✅ IMPLEMENTED
-  - Tracks agent speaking state via events
-  - Different behavior when speaking vs silent
-
-- **Interruption keyword detection:** ✅ IMPLEMENTED
-  - Configurable keyword list
-  - Handles mixed inputs correctly
-
-### ✅ State Awareness (10%)
-
-- **Responds to "yeah" when not speaking:** ✅ IMPLEMENTED
-  - Agent processes filler words as valid input when silent
-  - Normal conversational flow maintained
-
-### ✅ Code Quality (10%)
-
-- **Modular design:** ✅ IMPLEMENTED
-  - `IntelligentInterruptionHandler` class is self-contained
-  - Easy to integrate with any LiveKit agent
-
-- **Configurable word lists:** ✅ IMPLEMENTED
-  - `DEFAULT_FILLER_WORDS` set (32 words)
-  - `INTERRUPTION_KEYWORDS` set (17 keywords)
-  - Both can be customized via constructor
-
-- **Clean separation of concerns:** ✅ IMPLEMENTED
-  - Handler class is independent from agent logic
-  - Event-driven architecture
-  - No modifications to core LiveKit framework
-
-### ✅ Documentation (10%)
-
-- **Clear README:** ✅ THIS DOCUMENT
-- **Code comments:** ✅ IMPLEMENTED
-- **Architecture explanation:** ✅ DOCUMENTED
-- **Setup instructions:** ✅ PROVIDED
 
 ## 🔍 How to Customize
 
@@ -433,29 +318,6 @@ import os
 filler_words = set(os.getenv("FILLER_WORDS", "yeah,ok,hmm").split(","))
 interruption_keywords = set(os.getenv("INTERRUPTION_KEYWORDS", "wait,stop,no").split(","))
 ```
-
-## 🐛 Debugging
-
-### Enable Debug Logging
-
-```python
-import logging
-logging.getLogger("intelligent-interruption-agent").setLevel(logging.DEBUG)
-```
-
-Debug output includes:
-- Transcript analysis: `"Found non-filler word: 'wait'"`
-- State tracking: `"Agent state changed: listening → speaking"`
-- Resume actions: `"✅ Resumed agent speech successfully"`
-- Interruption decisions: `"🛑 ALLOWING interruption"` or `"🔇 IGNORING interruption"`
-
-## 📝 Key Implementation Files
-
-| File | Purpose | Lines of Code |
-|------|---------|---------------|
-| `examples/voice_agents/intelligent_interruption_agent.py` | Main implementation | ~400 |
-| `.env.example` | Environment template | ~20 |
-| `README_INTERRUPTION_CHALLENGE.md` | This documentation | ~600 |
 
 ## 🎓 Learning Points
 
@@ -497,7 +359,7 @@ Debug output includes:
    - Easier to integrate
    - Follows LiveKit patterns
 
-## 🚀 Future Enhancements
+## Future Enhancements
 
 Potential improvements for production use:
 
@@ -521,18 +383,12 @@ Potential improvements for production use:
    - Allow tuning the 50ms delay
    - Different delays for different contexts
 
-## 📞 Support & Contact
+## Support & Contact
 
 For questions or issues:
 - GitHub: [@sharathkumar-md](https://github.com/sharathkumar-md)
 - Repository: [agents-assignment](https://github.com/sharathkumar-md/agents-assignment)
 
-## 📄 License
+## License
 
 This implementation follows the LiveKit Agents framework license (Apache 2.0).
-
----
-
-**Implementation by:** Sharath Kumar MD
-**Date:** December 2024
-**Challenge:** LiveKit Intelligent Interruption Handling

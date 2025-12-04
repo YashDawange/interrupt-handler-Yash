@@ -40,6 +40,29 @@ from livekit.plugins import silero
 logger = logging.getLogger("intelligent-interruption-agent")
 logger.setLevel(logging.INFO)
 
+# Add file handler to automatically save ALL logs (including LiveKit framework logs)
+log_file_path = os.path.join(os.path.dirname(__file__), "../../PROOF_LOGS.log")
+file_handler = logging.FileHandler(log_file_path, mode='a', encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)-7s %(name)-25s %(message)s',
+                                   datefmt='%H:%M:%S')
+file_handler.setFormatter(file_formatter)
+
+# Add to our custom logger
+logger.addHandler(file_handler)
+
+# Also add console handler for terminal output
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s',
+                                      datefmt='%H:%M:%S')
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
+
+# Add file handler to root logger to capture ALL logs (LiveKit, asyncio, etc.)
+root_logger = logging.getLogger()
+root_logger.addHandler(file_handler)
+
 load_dotenv()
 
 
