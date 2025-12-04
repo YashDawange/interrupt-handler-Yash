@@ -1,4 +1,6 @@
 import logging
+logging.basicConfig(level=logging.DEBUG)
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -18,16 +20,10 @@ from livekit.agents import (
 )
 from livekit.agents.job import get_job_context
 from livekit.agents.llm import function_tool
-from livekit.agents.voice import MetricsCollectedEvent
-from livekit.plugins import deepgram, openai, silero
-
-# uncomment to enable Krisp BVC noise cancellation, currently supported on Linux and MacOS
-# from livekit.plugins import noise_cancellation
-
-## The storyteller agent is a multi-agent that can handoff the session to another agent.
-## This example demonstrates more complex workflows with multiple agents.
-## Each agent could have its own instructions, as well as different STT, LLM, TTS,
-## or realtime models.
+from livekit.agents.voice import MetricsCollectedEvent, UserInputTranscribedEvent
+from livekit.plugins import deepgram
+from livekit.plugins import google
+from livekit.plugins import silero
 
 logger = logging.getLogger("multi-agent")
 
@@ -41,9 +37,6 @@ common_instructions = (
 
 @dataclass
 class StoryData:
-    # Shared data that's used by the storyteller agent.
-    # This structure is passed as a parameter to function calls.
-
     name: Optional[str] = None
     location: Optional[str] = None
 
@@ -58,8 +51,6 @@ class IntroAgent(Agent):
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
-        # according to its instructions
         self.session.generate_reply()
 
     @function_tool
@@ -81,9 +72,6 @@ class IntroAgent(Agent):
         context.userdata.location = location
 
         story_agent = StoryAgent(name, location)
-        # by default, StoryAgent will start with a new context, to carry through the current
-        # chat history, pass in the chat_ctx
-        # story_agent = StoryAgent(name, location, chat_ctx=self.chat_ctx)
 
         logger.info(
             "switching to the story agent with the provided user data: %s", context.userdata
@@ -95,33 +83,26 @@ class StoryAgent(Agent):
     def __init__(self, name: str, location: str, *, chat_ctx: Optional[ChatContext] = None) -> None:
         super().__init__(
             instructions=f"{common_instructions}. You should use the user's information in "
-            "order to make the story personalized."
+            "order to make the story personalized. "
             "create the entire story, weaving in elements of their information, and make it "
-            "interactive, occasionally interating with the user."
-            "do not end on a statement, where the user is not expected to respond."
-            "when interrupted, ask if the user would like to continue or end."
+            "interactive, occasionally interacting with the user. "
+            "do not end on a statement, where the user is not expected to respond. "
+            "when interrupted, ask if the user would like to continue or end. "
             f"The user's name is {name}, from {location}.",
-            # each agent could override any of the model services, including mixing
-            # realtime and non-realtime models
-            llm=openai.realtime.RealtimeModel(voice="echo"),
-            tts=None,
+            llm=google.LLM(model="gemini-2.0-flash"),
+            tts=deepgram.TTS(model="aura-asteria-en"),
             chat_ctx=chat_ctx,
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, we'll initiate the conversation by
-        # using the LLM to generate a reply
         self.session.generate_reply()
 
     @function_tool
     async def story_finished(self, context: RunContext[StoryData]):
-        """When you are fininshed telling the story (and the user confirms they don't
+        """When you are finished telling the story (and the user confirms they don't
         want anymore), call this function to end the conversation."""
-        # interrupt any existing generation
         self.session.interrupt()
 
-        # generate a goodbye message and hang up
-        # awaiting it will ensure the message is played out before returning
         await self.session.generate_reply(
             instructions=f"say goodbye to {context.userdata.name}", allow_interruptions=False
         )
@@ -142,16 +123,33 @@ server.setup_fnc = prewarm
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
+    soft_inputs = {"yeah", "yah", "ya", "ok", "okay", "hmm", "right", "uh", "uhh", "uhhuh", "uh-huh"}
+    command_keywords = {"stop", "wait", "hold", "halt", "pause", "cancel", "quit"}
+    resume_keywords = {"continue", "resume", "start", "go"}
+    awaiting_resume = False
+
+    def normalize(text: str) -> list[str]:
+        cleaned = re.sub(r"[^a-z\s]", " ", text.lower())
+        return [w for w in cleaned.split() if w]
+
+    def is_interrupt_command(tokens: list[str]) -> bool:
+        text = " ".join(tokens)
+        if "hold on" in text or "hang on" in text:
+            return True
+        return any(tok in command_keywords for tok in tokens)
+
+    def is_soft_only(tokens: list[str]) -> bool:
+        return bool(tokens) and all(tok in soft_inputs for tok in tokens)
+
     session = AgentSession[StoryData](
         vad=ctx.proc.userdata["vad"],
-        # any combination of STT, LLM, TTS, or realtime API can be used
-        llm=openai.LLM(model="gpt-4o-mini"),
+        llm=google.LLM(model="gemini-2.0-flash"),
         stt=deepgram.STT(model="nova-3"),
-        tts=openai.TTS(voice="echo"),
+        tts=deepgram.TTS(model="aura-asteria-en"),
         userdata=StoryData(),
+        min_interruption_words=10,
     )
 
-    # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
@@ -165,11 +163,52 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(log_usage)
 
+    @session.on("user_input_transcribed")
+    def _filter_during_playback(ev: UserInputTranscribedEvent):
+        nonlocal awaiting_resume
+        if session.agent_state != "speaking":
+            return
+
+        tokens = normalize(ev.transcript)
+        if not tokens:
+            return
+
+        if is_interrupt_command(tokens):
+            logger.info(
+                "interrupt keyword detected during playback", extra={"transcript": ev.transcript}
+            )
+            awaiting_resume = True
+            session.interrupt(force=True)
+            return
+
+        if is_soft_only(tokens):
+            logger.debug(
+                "ignoring filler utterance during playback", extra={"transcript": ev.transcript}
+            )
+            session.clear_user_turn()
+            return
+
+    @session.on("user_input_transcribed")
+    def _resume_if_requested(ev: UserInputTranscribedEvent):
+        nonlocal awaiting_resume
+
+        if session.agent_state == "speaking":
+            return
+
+        tokens = normalize(ev.transcript)
+        if not tokens:
+            return
+
+        if awaiting_resume and any(tok in resume_keywords for tok in tokens):
+            logger.info("resume keyword detected after stop", extra={"transcript": ev.transcript})
+            awaiting_resume = False
+            session.clear_user_turn()
+            session.generate_reply()
+
     await session.start(
         agent=IntroAgent(),
         room=ctx.room,
     )
-
 
 if __name__ == "__main__":
     cli.run_app(server)
