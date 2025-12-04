@@ -206,8 +206,8 @@ class IntelligentInterruptionHandler:
 
         Note: This must be a synchronous callback. We use asyncio.create_task for async operations.
         """
-        text = event.alternatives[0].text if event.alternatives else ""
-        is_final = event.is_final
+        text = event.transcript if hasattr(event, 'transcript') else ""
+        is_final = event.is_final if hasattr(event, 'is_final') else False
 
         logger.debug(
             f"User transcript ({'final' if is_final else 'interim'}): '{text}' "
