@@ -1,0 +1,5 @@
+[2025-12-04T17:54:18.979588Z] Scenario 1 - Long explanation | utterance='Okay... yeah... uh-huh' | speaking=True | class=ignore | decision=IGNORE (continue speaking)
+[2025-12-04T17:54:18.980599Z] Scenario 2 - Passive affirmation (silent) | utterance='Yeah' | speaking=False | class=ignore | decision=RESPOND (treat as user input)
+[2025-12-04T17:54:18.980599Z] Scenario 3 - Correction | utterance='No stop' | speaking=True | class=interrupt | decision=INTERRUPT (stop speaking)
+[2025-12-04T17:54:18.980599Z] Scenario 4 - Mixed input | utterance='Yeah okay but wait' | speaking=True | class=interrupt | decision=INTERRUPT (stop speaking)
+self._logger.debug("INTERRUPT invoked: current_speech=%s, paused_speech=%s", self._current_speech is not None, self._paused_speech is not None)
