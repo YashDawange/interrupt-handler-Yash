@@ -1,17 +1,14 @@
 """
-LiveKit Intelligent Interruption Handling Agent
+Intelligent Interruption Handler for LiveKit Agents
 
-This agent implements context-aware interruption filtering that distinguishes between
-passive acknowledgements (backchanneling) and active interruptions based on:
-1. Agent's current speaking state
-2. Transcript content analysis
-3. Configurable filler word detection
+Makes the agent ignore filler words like "yeah", "ok", "hmm" when it's speaking,
+but still respond to real interruptions like "wait" or "stop".
 
-Key Features:
-- Ignores filler words (yeah, ok, hmm) when agent is speaking
-- Responds to filler words when agent is silent
-- Handles mixed inputs (e.g., "yeah but wait" triggers interruption)
-- Real-time, imperceptible latency
+How it works:
+- Tracks when agent is speaking vs silent
+- Checks if user input is only filler words
+- Ignores filler words during speech, allows everything else
+- Force resumes speech if it was just backchanneling
 """
 
 import asyncio

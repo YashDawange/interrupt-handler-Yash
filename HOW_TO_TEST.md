@@ -1,150 +1,89 @@
-# How to Test the Intelligent Interruption Agent
+# How to Test
 
-Due to Windows console encoding issues, the recommended way to test is using **dev mode** with LiveKit Playground.
+Testing with LiveKit Playground is the easiest way since Windows console has encoding issues with emojis.
 
-## ✅ Recommended: Test with LiveKit Playground
+## Quick Start
 
-### Step 1: Start the Agent in Dev Mode
+### 1. Start the Agent
 
 ```bash
 cd agents-assignment/examples/voice_agents
 ../../venv/Scripts/python.exe intelligent_interruption_agent.py dev
 ```
 
-You should see:
-```
-INFO: Starting development server...
-INFO: Agent is ready and waiting for connections
-```
+You should see logs saying the agent is ready and registered with LiveKit.
 
-**Note:** All logs are automatically saved to `PROOF_LOGS.log` in the root directory for submission purposes.
+**Note:** All logs automatically save to `PROOF_LOGS.log` in the root directory.
 
-### Step 2: Connect via LiveKit Playground
+### 2. Connect via LiveKit Playground
 
-1. Open your browser and go to: **https://agents-playground.livekit.io/**
-2. You'll see a connection interface
-3. The agent will automatically connect when you join
+Open https://agents-playground.livekit.io/ in your browser and connect to the agent.
 
-### Step 3: Test Scenarios
+### 3. Test Scenarios
 
-**Test 1: Agent Ignores "Yeah" While Speaking**
-1. Ask: "Tell me about artificial intelligence"
-2. While agent is speaking, say: "yeah" or "okay" or "hmm"
-3. **Expected**: Agent continues without stopping
+**Test 1: Agent Ignores Fillers**
+- Ask agent: "Tell me about artificial intelligence"
+- While agent is speaking, say: "yeah" or "okay" or "hmm"
+- Expected: Agent continues speaking without stopping
 
-**Test 2: Agent Responds to "Yeah" When Silent**
-1. Wait for agent to finish speaking and go silent
-2. Say: "yeah"
-3. **Expected**: Agent responds (e.g., "Great! What else would you like to know?")
+**Test 2: Agent Responds to Fillers When Silent**
+- Wait for agent to finish speaking
+- Say: "yeah"
+- Expected: Agent responds to you
 
-**Test 3: Agent Stops for "Stop"**
-1. Ask: "Count to 20"
-2. While agent is counting, say: "stop"
-3. **Expected**: Agent stops immediately
+**Test 3: Agent Stops for Real Interruptions**
+- Ask agent: "Count to 20"
+- While counting, say: "stop"
+- Expected: Agent stops immediately
 
 **Test 4: Mixed Input**
-1. Ask agent a question
-2. While agent is speaking, say: "yeah but wait"
-3. **Expected**: Agent stops (because "but" and "wait" are interruption keywords)
+- Ask agent a question
+- While agent is speaking, say: "yeah but wait"
+- Expected: Agent stops (because "but" and "wait" are interruption keywords)
 
-### Step 4: Check Logs
+### 4. Check the Logs
 
-The agent will output logs in the terminal showing:
+Look at the terminal output or `PROOF_LOGS.log` file. You'll see:
 - `🔇 IGNORING interruption` - when filler words are ignored
 - `🛑 ALLOWING interruption` - when real interruptions occur
-- State transitions and decisions
+- Agent state changes
+- Transcript events with timing
 
----
+## What You Should See
 
-## 📝 Alternative: Create Demonstration Logs
-
-If you don't have LiveKit Cloud set up yet, you can create a demonstration document showing how the system works based on the code logic.
-
-### What to Include in Submission:
-
-1. **Code Walkthrough Video/Document** showing:
-   - The `IntelligentInterruptionHandler` class
-   - The decision logic in `_should_ignore_interruption()`
-   - The filler words list
-   - The interruption keywords list
-   - The force resume mechanism
-
-2. **Architecture Explanation**:
-   - How the system tracks agent state
-   - How it analyzes transcripts
-   - How it decides to ignore vs allow interruptions
-
-3. **Test Scenario Documentation**:
-   - Expected behavior for each scenario
-   - Code paths that would be executed
-   - Log outputs that would be generated
-
----
-
-## 🚀 Quick Start (No API Keys Needed)
-
-If you want to demonstrate the implementation without running it:
-
-### Option 1: Code Review Video
-
-Record a screen video walking through:
-1. Open `intelligent_interruption_agent.py`
-2. Explain the `IntelligentInterruptionHandler` class
-3. Show the decision logic
-4. Explain how it solves each test scenario
-
-### Option 2: Simulated Log Transcript
-
-Create a document showing what the logs would look like:
+When working correctly, the logs will show something like:
 
 ```
-[USER] "Tell me about AI"
-[AGENT] "Artificial intelligence is..."
-[USER] "yeah" (while agent speaking)
-[LOG] User transcript: 'yeah' (agent_was_speaking: True)
-[LOG] Text contains only filler words: 'yeah'
-[LOG] 🔇 IGNORING interruption - agent continues
-[LOG] ✅ Resumed agent speech successfully
-[AGENT] Continues speaking without interruption
+📝 User transcript: 'Yeah.' (agent_was_speaking: True)
+🔍 Evaluating: agent_was_speaking=True, text='Yeah.'
+✅ Agent WAS speaking → checking transcript content
+🔇 Only filler words → IGNORING interruption
+🔇 IGNORING interruption - agent continues speaking
+✅ Resumed agent speech successfully
 ```
 
----
+## Alternative Testing Methods
 
-## 📤 What to Submit
+If you can't use LiveKit Playground right now, you can:
 
-For the pull request, include **ONE** of the following as proof:
+1. **Code Walkthrough** - Record a video explaining how the code works
+2. **Simulated Logs** - Show what the logs would look like for each scenario
+3. **Code Review** - Walk through the decision logic step by step
 
-### Option A: LiveKit Playground Test (Preferred)
-- Screenshot or video of testing with LiveKit Playground
-- Terminal logs showing the intelligent interruption handling
-- Clear demonstration of all 4 test scenarios
+But LiveKit Playground testing is preferred because it shows real behavior.
 
-### Option B: Code Demonstration
-- Video walkthrough of the code explaining how it works
-- Step-through of the decision logic
-- Explanation of how each scenario is handled
+## Troubleshooting
 
-### Option C: Simulated Logs
-- Detailed log transcript showing expected behavior
-- Explanation of code paths for each scenario
-- Clear mapping between user input and system response
+**Agent not connecting?**
+- Check your .env file has all required API keys
+- Make sure LiveKit URL and credentials are correct
 
----
+**Emojis showing as ?**
+- This is a Windows console encoding issue
+- Use dev mode instead of console mode
+- Check PROOF_LOGS.log file for complete logs
 
-## 💡 Recommended Approach
-
-**For fastest results**: Use Option B (Code Demonstration) since you already have the complete working code. You can:
-
-1. Record a 3-5 minute video showing:
-   - The implementation in `intelligent_interruption_agent.py`
-   - The decision logic walkthrough
-   - How each test scenario would execute
-
-2. Upload to YouTube/Drive as unlisted
-3. Include the link in your pull request description
-
-This demonstrates deep understanding of the implementation and fulfills the proof requirement without needing to set up all API keys immediately.
-
----
-
-**Next Step**: Choose which proof option works best for you and let me know how you'd like to proceed!
+**Agent not ignoring fillers?**
+- Make sure you say the filler word WHILE agent is actively speaking
+- Check the logs to see if agent_was_speaking was True
+- Timing matters - say it during speech, not after
