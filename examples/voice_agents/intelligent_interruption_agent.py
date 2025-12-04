@@ -166,35 +166,41 @@ class IntelligentInterruptionHandler:
         - Agent speaking + contains interruption keywords → ALLOW (return False)
         - Agent silent + any input → ALLOW (return False)
         """
+        logger.info(f"🔍 Evaluating: agent_was_speaking={agent_was_speaking}, text='{text}'")
+
         # If agent was not speaking, process all inputs normally
         if not agent_was_speaking:
-            logger.debug("Agent was not speaking, allowing interruption")
+            logger.info("❌ Agent was NOT speaking → allowing interruption")
             return False
 
         # Agent was speaking - check transcript content
+        logger.info("✅ Agent WAS speaking → checking transcript content")
+
         if self._contains_interruption_keyword(text):
-            logger.info(f"Agent was speaking but user said interruption keyword: '{text}'")
+            logger.info(f"🛑 Contains interruption keyword → allowing interruption")
             return False
 
         if self._is_only_filler_words(text):
-            logger.info(f"Agent was speaking and user said only filler words: '{text}' - IGNORING")
+            logger.info(f"🔇 Only filler words → IGNORING interruption")
             return True
 
         # If text has meaningful words but no interruption keywords, still allow
         # (conservative approach - user might be trying to say something)
-        logger.info(f"Agent was speaking, user said: '{text}' - allowing interruption")
+        logger.info(f"⚠️ Has meaningful words (not just fillers) → allowing interruption")
         return False
 
     def _on_agent_state_changed(self, event):
         """Track when agent starts/stops speaking."""
-        logger.debug(f"Agent state changed: {event.old_state} → {event.new_state}")
+        logger.info(f"🔄 Agent state changed: {event.old_state} → {event.new_state}")
 
         # When agent transitions TO speaking, record it
         if event.new_state == "speaking":
             self._agent_was_speaking_on_interrupt = True
+            logger.info(f"✅ Agent started speaking - will ignore filler words")
         # When agent transitions FROM speaking, clear the flag
         elif event.old_state == "speaking":
             self._agent_was_speaking_on_interrupt = False
+            logger.info(f"⏸️ Agent stopped speaking - will process all inputs")
 
     def _on_user_input_transcribed(self, event):
         """
@@ -209,8 +215,8 @@ class IntelligentInterruptionHandler:
         text = event.transcript if hasattr(event, 'transcript') else ""
         is_final = event.is_final if hasattr(event, 'is_final') else False
 
-        logger.debug(
-            f"User transcript ({'final' if is_final else 'interim'}): '{text}' "
+        logger.info(
+            f"📝 User transcript ({'final' if is_final else 'interim'}): '{text}' "
             f"(agent_was_speaking: {self._agent_was_speaking_on_interrupt})"
         )
 
