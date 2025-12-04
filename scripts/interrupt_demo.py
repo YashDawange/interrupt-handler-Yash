@@ -6,7 +6,7 @@ code to demonstrate the four required scenarios.
 import os
 import re
 
-IGNORE_WORDS = [w.strip().lower() for w in os.getenv("AGENT_IGNORE_WORDS", "yeah,ok,hmm,right,uh-huh,uh,mmhmm,mhm").split(",")]
+IGNORE_WORDS = [w.strip().lower() for w in os.getenv("AGENT_IGNORE_WORDS", "yeah,ok,okay,hmm,right,uh-huh,uh,mmhmm,mhm").split(",")]
 INTERRUPT_WORDS = [w.strip().lower() for w in os.getenv("AGENT_INTERRUPT_WORDS", "wait,stop,no").split(",")]
 
 

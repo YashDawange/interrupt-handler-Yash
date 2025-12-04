@@ -173,7 +173,10 @@ class AgentActivity(RecognitionHooks):
 
 # Configurable lists - can be overridden with env vars (comma separated)
 _DEFAULT_IGNORE_WORDS = (
-    os.getenv("AGENT_IGNORE_WORDS", "yeah,ok,hmm,right,uh-huh,uh,mmhmm,mhm")
+    os.getenv(
+        "AGENT_IGNORE_WORDS",
+        "yeah,ok,okay,hmm,right,uh-huh,uh,mmhmm,mhm",
+    )
     .split(",")
 )
 _DEFAULT_INTERRUPT_WORDS = os.getenv("AGENT_INTERRUPT_WORDS", "wait,stop,no").split(",")
