@@ -1,0 +1,435 @@
+===================================================================================
+INTELLIGENT INTERRUPTION AGENT - TEST LOGS
+===================================================================================
+Agent: intelligent_interruption_agent.py
+Purpose: Demonstrate context-aware interruption handling
+Date: December 2025
+Candidate: Sharath Kumar MD
+
+This file automatically captures all logs when running the agent in dev mode.
+To generate test logs, run: ../../venv/Scripts/python.exe intelligent_interruption_agent.py dev
+
+Test Scenarios:
+1. Say "yeah" / "ok" / "hmm" WHILE agent is speaking → Agent should continue
+2. Say "wait" / "stop" WHILE agent is speaking → Agent should stop immediately
+3. Say "yeah" AFTER agent finishes → Agent should respond normally
+4. Say "yeah but wait" WHILE agent is speaking → Agent should stop (mixed input)
+
+===================================================================================
+LOGS START BELOW
+===================================================================================
+
+01:25:13.617 DEV     livekit.agents            Watching C:\Users\Sharath Kumar MD\VSCodE\GitHub\SalescodeAI\agents-assignment\examples\voice_agents
+01:25:13.619 DEV     livekit.agents            Watching C:\Users\Sharath Kumar MD\VSCodE\GitHub\SalescodeAI\agents-assignment\livekit-agents
+01:25:13.620 DEV     livekit.agents            Watching C:\Users\Sharath Kumar MD\VSCodE\GitHub\SalescodeAI\agents-assignment\livekit-plugins\livekit-plugins-silero
+01:25:15.884 INFO    livekit.agents            starting worker
+01:25:15.968 INFO    livekit.agents            registered worker
+01:26:50.457 DEV     livekit.agents            Watching C:\Users\Sharath Kumar MD\VSCodE\GitHub\SalescodeAI\agents-assignment\examples\voice_agents
+01:26:52.718 INFO    livekit.agents            starting worker
+01:26:52.722 INFO    livekit.agents            HTTP server listening on :53183
+01:26:52.778 INFO    livekit.agents            registered worker
+01:27:40.962 INFO    livekit.agents            received job request
+01:27:40.977 INFO    livekit.agents            initializing job runner
+01:27:41.113 INFO    livekit.agents            job runner initialized
+01:27:41.121 INFO    intelligent-interruption-agent Starting intelligent interruption agent in room: playground-BMsr-9Ley
+01:27:41.121 INFO    intelligent-interruption-agent Starting intelligent interruption agent in room: playground-BMsr-9Ley
+01:27:41.197 INFO    intelligent-interruption-agent Initialized IntelligentInterruptionHandler with 32 filler words and 16 interruption keywords
+01:27:41.197 INFO    intelligent-interruption-agent Initialized IntelligentInterruptionHandler with 32 filler words and 16 interruption keywords
+01:27:41.677 INFO    intelligent-interruption-agent 🔄 Agent state changed: initializing → thinking
+01:27:41.677 INFO    intelligent-interruption-agent 🔄 Agent state changed: initializing → thinking
+01:27:41.683 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → listening
+01:27:41.683 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → listening
+01:27:41.698 INFO    intelligent-interruption-agent Intelligent interruption agent session started successfully
+01:27:41.698 INFO    intelligent-interruption-agent Intelligent interruption agent session started successfully
+01:27:43.664 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:43.664 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:43.666 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:43.666 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:47.445 INFO    livekit.agents            STT metrics
+01:27:47.987 INFO    livekit.agents            LLM metrics
+01:27:48.293 INFO    livekit.agents            STT metrics
+01:27:48.829 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:27:48.829 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:27:48.832 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:27:48.832 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:27:49.381 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:49.381 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:49.385 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:49.385 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:49.692 INFO    livekit.agents            STT metrics
+01:27:50.438 INFO    livekit.agents            STT metrics
+01:27:52.159 INFO    livekit.agents            TTS metrics
+01:27:52.984 INFO    livekit.agents            STT metrics
+01:27:53.091 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:27:53.091 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:27:53.094 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:27:53.094 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:27:56.239 INFO    livekit.agents            STT metrics
+01:27:56.475 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:56.475 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:56.478 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:56.478 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:57.504 INFO    livekit.agents            STT metrics
+01:27:58.631 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:27:58.631 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:27:58.633 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:27:58.633 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:27:59.176 INFO    livekit.agents            STT metrics
+01:27:59.422 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:59.422 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:27:59.424 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:27:59.424 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:00.201 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:00.201 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:00.203 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:00.203 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:01.232 INFO    livekit.agents            STT metrics
+01:28:01.272 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:28:01.272 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:28:01.274 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:01.274 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:06.035 INFO    livekit.agents            STT metrics
+01:28:09.292 INFO    livekit.agents            STT metrics
+01:28:11.735 INFO    livekit.agents            STT metrics
+01:28:13.275 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:13.275 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:13.277 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:13.277 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:13.748 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'I'm really' (agent_was_speaking: False)
+01:28:13.748 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'I'm really' (agent_was_speaking: False)
+01:28:13.751 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='I'm really'
+01:28:13.751 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='I'm really'
+01:28:13.753 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:28:13.753 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:28:13.755 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'I'm really'
+01:28:13.755 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'I'm really'
+01:28:14.066 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:28:14.066 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:28:14.067 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:14.067 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:14.070 INFO    livekit.agents            STT metrics
+01:28:14.075 INFO    intelligent-interruption-agent 📝 User transcript (final): 'I mean,' (agent_was_speaking: True)
+01:28:14.075 INFO    intelligent-interruption-agent 📝 User transcript (final): 'I mean,' (agent_was_speaking: True)
+01:28:14.077 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=True, text='I mean,'
+01:28:14.077 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=True, text='I mean,'
+01:28:14.079 INFO    intelligent-interruption-agent ✅ Agent WAS speaking → checking transcript content
+01:28:14.079 INFO    intelligent-interruption-agent ✅ Agent WAS speaking → checking transcript content
+01:28:14.081 INFO    intelligent-interruption-agent ⚠️ Has meaningful words (not just fillers) → allowing interruption
+01:28:14.081 INFO    intelligent-interruption-agent ⚠️ Has meaningful words (not just fillers) → allowing interruption
+01:28:14.084 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'I mean,'
+01:28:14.084 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'I mean,'
+01:28:14.087 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:14.087 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:14.090 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:14.090 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:14.102 WARNING livekit.agents            _SegmentSynchronizerImpl.resume called after close
+01:28:14.106 INFO    livekit.agents            EOU metrics
+01:28:14.119 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:28:14.119 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:28:15.816 INFO    livekit.agents            STT metrics
+01:28:16.369 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → speaking
+01:28:16.369 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → speaking
+01:28:16.373 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:16.373 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:16.393 INFO    livekit.agents            LLM metrics
+01:28:18.721 INFO    livekit.agents            TTS metrics
+01:28:19.190 INFO    livekit.agents            STT metrics
+01:28:19.982 INFO    livekit.agents            STT metrics
+01:28:21.659 INFO    livekit.agents            STT metrics
+01:28:23.598 INFO    livekit.agents            STT metrics
+01:28:23.773 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:23.773 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:23.776 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:23.776 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:25.472 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:28:25.472 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:28:25.475 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:25.475 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:28:25.685 INFO    livekit.agents            STT metrics
+01:28:26.274 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:26.274 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:28:26.275 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:26.275 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:28:26.693 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Wait.' (agent_was_speaking: False)
+01:28:26.693 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Wait.' (agent_was_speaking: False)
+01:28:26.696 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Wait.'
+01:28:26.696 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Wait.'
+01:28:26.697 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:28:26.697 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:28:26.700 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Wait.'
+01:28:26.700 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Wait.'
+01:28:30.718 INFO    livekit.agents            STT metrics
+01:28:34.287 INFO    livekit.agents            STT metrics
+01:28:34.452 INFO    livekit.agents            STT metrics
+01:28:37.138 INFO    livekit.agents            STT metrics
+01:28:38.743 INFO    livekit.agents            STT metrics
+01:28:39.344 INFO    livekit.agents            STT metrics
+01:28:44.382 INFO    livekit.agents            STT metrics
+01:28:45.425 INFO    livekit.agents            STT metrics
+01:28:46.975 INFO    livekit.agents            STT metrics
+01:28:48.218 INFO    livekit.agents            STT metrics
+01:28:50.541 INFO    livekit.agents            STT metrics
+01:28:52.617 INFO    livekit.agents            STT metrics
+01:28:55.412 INFO    livekit.agents            STT metrics
+01:28:56.707 INFO    livekit.agents            STT metrics
+01:28:57.512 INFO    livekit.agents            STT metrics
+01:29:01.026 INFO    livekit.agents            STT metrics
+01:29:02.609 INFO    livekit.agents            STT metrics
+01:29:06.628 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Did I hear' (agent_was_speaking: False)
+01:29:06.628 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Did I hear' (agent_was_speaking: False)
+01:29:06.631 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Did I hear'
+01:29:06.631 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Did I hear'
+01:29:06.633 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:06.633 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:06.635 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Did I hear'
+01:29:06.635 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Did I hear'
+01:29:07.611 INFO    livekit.agents            STT metrics
+01:29:08.484 INFO    livekit.agents            STT metrics
+01:29:09.205 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'a hundred percent.' (agent_was_speaking: False)
+01:29:09.205 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'a hundred percent.' (agent_was_speaking: False)
+01:29:09.207 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='a hundred percent.'
+01:29:09.207 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='a hundred percent.'
+01:29:09.211 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:09.211 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:09.213 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'a hundred percent.'
+01:29:09.213 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'a hundred percent.'
+01:29:10.006 INFO    livekit.agents            STT metrics
+01:29:10.008 INFO    intelligent-interruption-agent 📝 User transcript (final): 'Hundred percent' (agent_was_speaking: False)
+01:29:10.008 INFO    intelligent-interruption-agent 📝 User transcript (final): 'Hundred percent' (agent_was_speaking: False)
+01:29:10.011 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Hundred percent'
+01:29:10.011 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Hundred percent'
+01:29:10.016 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:10.016 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:10.020 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Hundred percent'
+01:29:10.020 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Hundred percent'
+01:29:10.037 INFO    livekit.agents            EOU metrics
+01:29:10.050 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:29:10.050 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:29:10.527 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → listening
+01:29:10.527 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → listening
+01:29:10.992 INFO    livekit.agents            STT metrics
+01:29:11.129 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:11.129 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:11.131 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:11.131 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:11.707 INFO    livekit.agents            LLM metrics
+01:29:12.927 INFO    livekit.agents            STT metrics
+01:29:13.926 INFO    livekit.agents            TTS metrics
+01:29:14.151 INFO    livekit.agents            STT metrics
+01:29:16.384 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:16.384 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:16.387 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:16.387 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:17.144 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Yeah. And I think' (agent_was_speaking: False)
+01:29:17.144 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Yeah. And I think' (agent_was_speaking: False)
+01:29:17.149 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Yeah. And I think'
+01:29:17.149 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Yeah. And I think'
+01:29:17.153 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:17.153 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:17.156 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Yeah. And I think'
+01:29:17.156 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Yeah. And I think'
+01:29:17.479 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:17.479 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:17.482 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:17.482 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:18.157 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Yeah.' (agent_was_speaking: True)
+01:29:18.157 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Yeah.' (agent_was_speaking: True)
+01:29:18.160 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=True, text='Yeah.'
+01:29:18.160 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=True, text='Yeah.'
+01:29:18.162 INFO    intelligent-interruption-agent ✅ Agent WAS speaking → checking transcript content
+01:29:18.162 INFO    intelligent-interruption-agent ✅ Agent WAS speaking → checking transcript content
+01:29:18.164 INFO    intelligent-interruption-agent 🔇 Only filler words → IGNORING interruption
+01:29:18.164 INFO    intelligent-interruption-agent 🔇 Only filler words → IGNORING interruption
+01:29:18.165 INFO    intelligent-interruption-agent 🔇 IGNORING interruption - agent continues speaking
+01:29:18.165 INFO    intelligent-interruption-agent 🔇 IGNORING interruption - agent continues speaking
+01:29:18.169 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:18.169 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:18.171 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:18.171 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:18.224 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:18.224 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:18.241 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:18.241 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:18.244 INFO    intelligent-interruption-agent ✅ Resumed agent speech successfully
+01:29:18.244 INFO    intelligent-interruption-agent ✅ Resumed agent speech successfully
+01:29:18.403 INFO    livekit.agents            STT metrics
+01:29:18.405 INFO    intelligent-interruption-agent 📝 User transcript (final): 'Yeah.' (agent_was_speaking: True)
+01:29:18.405 INFO    intelligent-interruption-agent 📝 User transcript (final): 'Yeah.' (agent_was_speaking: True)
+01:29:18.408 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=True, text='Yeah.'
+01:29:18.408 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=True, text='Yeah.'
+01:29:18.409 INFO    intelligent-interruption-agent ✅ Agent WAS speaking → checking transcript content
+01:29:18.409 INFO    intelligent-interruption-agent ✅ Agent WAS speaking → checking transcript content
+01:29:18.412 INFO    intelligent-interruption-agent 🔇 Only filler words → IGNORING interruption
+01:29:18.412 INFO    intelligent-interruption-agent 🔇 Only filler words → IGNORING interruption
+01:29:18.413 INFO    intelligent-interruption-agent 🔇 IGNORING interruption - agent continues speaking
+01:29:18.413 INFO    intelligent-interruption-agent 🔇 IGNORING interruption - agent continues speaking
+01:29:18.416 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:18.416 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:18.418 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:18.418 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:18.429 WARNING livekit.agents            _SegmentSynchronizerImpl.resume called after close
+01:29:18.432 INFO    livekit.agents            EOU metrics
+01:29:18.451 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:29:18.451 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:29:18.459 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → speaking
+01:29:18.459 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → speaking
+01:29:18.462 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:18.462 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:18.463 INFO    intelligent-interruption-agent ✅ Resumed agent speech successfully
+01:29:18.463 INFO    intelligent-interruption-agent ✅ Resumed agent speech successfully
+01:29:19.077 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:19.077 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:19.079 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:19.079 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:19.409 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Yeah. But I' (agent_was_speaking: False)
+01:29:19.409 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Yeah. But I' (agent_was_speaking: False)
+01:29:19.412 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Yeah. But I'
+01:29:19.412 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Yeah. But I'
+01:29:19.415 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:19.415 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:19.417 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Yeah. But I'
+01:29:19.417 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Yeah. But I'
+01:29:19.731 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:19.731 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:19.734 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:19.734 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:19.794 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:19.794 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:19.795 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:19.795 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:19.859 INFO    livekit.agents            LLM metrics
+01:29:20.488 INFO    livekit.agents            STT metrics
+01:29:20.531 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:20.531 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:20.533 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:20.533 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:21.770 INFO    livekit.agents            STT metrics
+01:29:21.975 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:21.975 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:21.976 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:21.976 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:22.019 INFO    livekit.agents            TTS metrics
+01:29:22.723 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:22.723 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:22.725 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:22.725 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:24.192 INFO    livekit.agents            STT metrics
+01:29:26.525 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:26.525 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:26.527 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:26.527 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:28.769 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:28.769 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:28.771 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:28.771 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:28.817 INFO    livekit.agents            STT metrics
+01:29:30.273 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:30.273 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:30.276 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:30.276 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:32.306 INFO    livekit.agents            STT metrics
+01:29:34.283 INFO    livekit.agents            STT metrics
+01:29:34.472 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:34.472 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → speaking
+01:29:34.474 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:34.474 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:29:35.223 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:35.223 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:29:35.225 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:35.225 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:29:36.781 INFO    livekit.agents            STT metrics
+01:29:39.698 INFO    livekit.agents            STT metrics
+01:29:40.495 INFO    livekit.agents            STT metrics
+01:29:42.343 INFO    livekit.agents            STT metrics
+01:29:45.641 INFO    livekit.agents            STT metrics
+01:29:48.421 INFO    livekit.agents            STT metrics
+01:29:52.347 INFO    livekit.agents            STT metrics
+01:29:52.842 INFO    livekit.agents            STT metrics
+01:29:54.592 INFO    livekit.agents            STT metrics
+01:29:56.110 INFO    livekit.agents            STT metrics
+01:29:58.040 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Thank' (agent_was_speaking: False)
+01:29:58.040 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'Thank' (agent_was_speaking: False)
+01:29:58.043 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Thank'
+01:29:58.043 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Thank'
+01:29:58.046 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:58.046 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:29:58.047 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Thank'
+01:29:58.047 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Thank'
+01:29:59.997 INFO    livekit.agents            STT metrics
+01:30:00.384 INFO    livekit.agents            STT metrics
+01:30:03.054 INFO    livekit.agents            STT metrics
+01:30:03.835 INFO    livekit.agents            STT metrics
+01:30:06.097 INFO    livekit.agents            STT metrics
+01:30:07.133 INFO    livekit.agents            STT metrics
+01:30:08.339 INFO    livekit.agents            STT metrics
+01:30:10.751 INFO    livekit.agents            STT metrics
+01:30:15.290 INFO    livekit.agents            STT metrics
+01:30:17.652 INFO    livekit.agents            STT metrics
+01:30:22.655 INFO    livekit.agents            STT metrics
+01:30:26.539 INFO    livekit.agents            STT metrics
+01:30:29.688 INFO    livekit.agents            STT metrics
+01:30:33.209 INFO    livekit.agents            STT metrics
+01:30:33.366 INFO    livekit.agents            STT metrics
+01:30:36.348 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'I get' (agent_was_speaking: False)
+01:30:36.348 INFO    intelligent-interruption-agent 📝 User transcript (interim): 'I get' (agent_was_speaking: False)
+01:30:36.351 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='I get'
+01:30:36.351 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='I get'
+01:30:36.352 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:30:36.352 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:30:36.353 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'I get'
+01:30:36.353 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'I get'
+01:30:38.393 INFO    livekit.agents            STT metrics
+01:30:39.449 INFO    livekit.agents            STT metrics
+01:30:39.951 INFO    livekit.agents            STT metrics
+01:30:42.059 INFO    livekit.agents            STT metrics
+01:30:43.589 INFO    livekit.agents            STT metrics
+01:30:44.370 INFO    livekit.agents            STT metrics
+01:30:46.640 INFO    livekit.agents            STT metrics
+01:30:50.340 INFO    livekit.agents            STT metrics
+01:30:54.289 INFO    livekit.agents            STT metrics
+01:30:59.203 INFO    livekit.agents            STT metrics
+01:31:00.598 INFO    livekit.agents            STT metrics
+01:31:03.538 INFO    livekit.agents            STT metrics
+01:31:04.129 INFO    livekit.agents            STT metrics
+01:31:04.820 INFO    livekit.agents            STT metrics
+01:31:05.295 INFO    livekit.agents            STT metrics
+01:31:06.043 INFO    livekit.agents            STT metrics
+01:31:08.659 INFO    livekit.agents            STT metrics
+01:31:08.944 INFO    livekit.agents            STT metrics
+01:31:11.647 INFO    livekit.agents            STT metrics
+01:31:12.787 INFO    livekit.agents            STT metrics
+01:31:13.489 INFO    livekit.agents            STT metrics
+01:31:13.491 INFO    intelligent-interruption-agent 📝 User transcript (final): 'Oh.' (agent_was_speaking: False)
+01:31:13.491 INFO    intelligent-interruption-agent 📝 User transcript (final): 'Oh.' (agent_was_speaking: False)
+01:31:13.493 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Oh.'
+01:31:13.493 INFO    intelligent-interruption-agent 🔍 Evaluating: agent_was_speaking=False, text='Oh.'
+01:31:13.496 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:31:13.496 INFO    intelligent-interruption-agent ❌ Agent was NOT speaking → allowing interruption
+01:31:13.499 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Oh.'
+01:31:13.499 INFO    intelligent-interruption-agent 🛑 ALLOWING interruption - user input: 'Oh.'
+01:31:13.527 INFO    livekit.agents            EOU metrics
+01:31:13.545 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:31:13.545 INFO    intelligent-interruption-agent 🔄 Agent state changed: listening → thinking
+01:31:15.073 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → speaking
+01:31:15.073 INFO    intelligent-interruption-agent 🔄 Agent state changed: thinking → speaking
+01:31:15.076 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:31:15.076 INFO    intelligent-interruption-agent ✅ Agent started speaking - will ignore filler words
+01:31:16.066 INFO    livekit.agents            LLM metrics
+01:31:16.224 INFO    livekit.agents            STT metrics
+01:31:17.675 INFO    livekit.agents            STT metrics
+01:31:18.388 INFO    livekit.agents            TTS metrics
+01:31:18.452 INFO    livekit.agents            STT metrics
+01:31:19.429 INFO    livekit.agents            STT metrics
+01:31:22.000 INFO    livekit.agents            STT metrics
+01:31:22.318 INFO    livekit.agents            STT metrics
+01:31:22.945 INFO    livekit.agents            STT metrics
+01:31:24.162 INFO    livekit.agents            STT metrics
+01:31:25.338 INFO    livekit.agents            STT metrics
+01:31:25.662 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:31:25.662 INFO    intelligent-interruption-agent 🔄 Agent state changed: speaking → listening
+01:31:25.664 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:31:25.664 INFO    intelligent-interruption-agent ⏸️ Agent stopped speaking - will process all inputs
+01:31:26.758 INFO    livekit.agents            STT metrics
+01:31:29.615 INFO    livekit.agents            shutting down worker
+01:31:29.657 INFO    intelligent-interruption-agent Usage summary: UsageSummary(llm_prompt_tokens=1382, llm_prompt_cached_tokens=0, llm_input_audio_tokens=0, llm_input_cached_audio_tokens=0, llm_input_text_tokens=0, llm_input_cached_text_tokens=0, llm_input_image_tokens=0, llm_input_cached_image_tokens=0, llm_completion_tokens=254, llm_output_audio_tokens=0, llm_output_image_tokens=0, llm_output_text_tokens=0, tts_characters_count=1152, tts_audio_duration=66.9660416666666, stt_audio_duration=220.09999999999988)
+01:31:29.657 INFO    intelligent-interruption-agent Usage summary: UsageSummary(llm_prompt_tokens=1382, llm_prompt_cached_tokens=0, llm_input_audio_tokens=0, llm_input_cached_audio_tokens=0, llm_input_text_tokens=0, llm_input_cached_text_tokens=0, llm_input_image_tokens=0, llm_input_cached_image_tokens=0, llm_completion_tokens=254, llm_output_audio_tokens=0, llm_output_image_tokens=0, llm_output_text_tokens=0, tts_characters_count=1152, tts_audio_duration=66.9660416666666, stt_audio_duration=220.09999999999988)
