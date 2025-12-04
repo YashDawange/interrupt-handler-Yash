@@ -53,6 +53,7 @@ from .events import (
     UserStateChangedEvent,
 )
 from .ivr import IVRActivity
+from .interrupt_handler import InterruptHandler
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
@@ -89,6 +90,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    interrupt_handler: InterruptHandler | None
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +161,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        interrupt_handler: NotGivenOr[InterruptHandler | None] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +248,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            interrupt_handler (InterruptHandler, optional): Handler for intelligent interruption
+                detection including backchannel filtering. When provided, analyzes user input
+                to distinguish between backchannel signals ("yeah", "okay") and actual
+                interruptions or commands. If not provided (``NOT_GIVEN``), a default handler
+                is created. Set to ``None`` to disable backchannel detection.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -288,6 +296,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            interrupt_handler=interrupt_handler
+            if is_given(interrupt_handler)
+            else InterruptHandler(),
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
@@ -823,7 +834,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 await self._room_io.aclose()
                 self._room_io = None
 
-        logger.debug("session closed", extra={"reason": reason.value, "error": error})
+        # Log error as string to avoid pickle issues with complex error objects
+        error_str = str(error) if error else None
+        logger.debug("session closed", extra={"reason": reason.value, "error": error_str})
 
     async def aclose(self) -> None:
         await self._aclose_impl(reason=CloseReason.USER_INITIATED)
