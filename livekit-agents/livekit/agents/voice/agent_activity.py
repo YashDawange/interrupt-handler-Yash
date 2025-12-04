@@ -16,6 +16,7 @@ from livekit.agents.llm.realtime import MessageGeneration
 from livekit.agents.metrics.base import Metadata
 
 from .. import llm, stt, tts, utils, vad
+from .interrupt_handler import classify_transcript, defer_vad_decision
 from ..llm.tool_context import (
     StopResponse,
     ToolFlag,
@@ -1241,7 +1242,24 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # If we're currently playing audio and have an audio_recognition
+            # instance (STT), defer briefly to allow a fast STT partial to
+            # arrive so we can classify filler/backchannel words and avoid
+            # interrupting the agent's speech unnecessarily.
+            if self._current_speech is not None and self._audio_recognition is not None:
+                async def _deferred():
+                    try:
+                        cls = await defer_vad_decision(self._audio_recognition, speaking=True)
+                        if cls == "interrupt":
+                            self._interrupt_by_audio_activity()
+                        # 'ignore' => do nothing; 'unknown' => conservative no-op
+                    except Exception:
+                        self._logger.exception("deferred vad decision failed")
+
+                # schedule and don't await
+                asyncio.create_task(_deferred())
+            else:
+                self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1261,6 +1279,16 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # If agent is currently speaking, classify the interim transcript and
+            # avoid interrupting for pure filler/backchannel words.
+            if self._current_speech is not None:
+                try:
+                    cls = classify_transcript(ev.alternatives[0].text or "")
+                    if cls == "ignore":
+                        return
+                except Exception:
+                    self._logger.exception("classify_transcript failed on interim")
+
             self._interrupt_by_audio_activity()
 
             if (
@@ -1292,6 +1320,16 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # Final transcripts are higher confidence.  If agent was speaking,
+            # classify and only interrupt for non-filler.
+            if self._current_speech is not None:
+                try:
+                    cls = classify_transcript(ev.alternatives[0].text or "")
+                    if cls == "ignore":
+                        return
+                except Exception:
+                    self._logger.exception("classify_transcript failed on final")
+
             self._interrupt_by_audio_activity()
 
             if (

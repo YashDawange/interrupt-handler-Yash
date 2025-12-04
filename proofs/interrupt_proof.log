@@ -1,0 +1,3 @@
+[2025-12-04T19:14:24.606210Z] Scenario 1 - Long explanation | utterance='Okay... yeah... uh-huh' | speaking=True | class=ignore | decision=IGNORE (continue speaking)
+[2025-12-04T19:14:24.606210Z] Scenario 2 - Passive affirmation (silent) | utterance='Yeah' | speaking=False | class=ignore | decision=RESPOND (treat as user input)
+[2025-12-04T19:14:24.606210Z] Scenario 3 - Correction | utterance='No stop' | speaking=True | class=interrupt | decision=INTERRUPT (stop speaking)
