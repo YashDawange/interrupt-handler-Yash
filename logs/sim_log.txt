@@ -1,0 +1,53 @@
+[08:36:50.860] 
+=== Running scenario 1: Long explanation with backchannels (ignore) (expected: IGNORE_ALL) ===
+[08:36:50.860] Initial agent state: speaking
+[08:36:50.860] --- VAD event #1 fired (agent_state=speaking) ---
+[08:36:50.860] VAD event #1 received while speaking. Starting validation window 0.25s...
+[08:36:50.940] STT arrived for VAD #1: 'okay'
+[08:36:50.941] Decision for VAD #1: IGNORE
+[08:36:50.941] VAD #1 -> agent CONTINUES speaking (IGNORED).
+[08:36:51.081] --- VAD event #2 fired (agent_state=speaking) ---
+[08:36:51.081] VAD event #2 received while speaking. Starting validation window 0.25s...
+[08:36:51.152] STT arrived for VAD #2: 'yeah'
+[08:36:51.152] Decision for VAD #2: IGNORE
+[08:36:51.152] VAD #2 -> agent CONTINUES speaking (IGNORED).
+[08:36:51.323] --- VAD event #3 fired (agent_state=speaking) ---
+[08:36:51.323] VAD event #3 received while speaking. Starting validation window 0.25s...
+[08:36:51.383] STT arrived for VAD #3: 'uh-huh'
+[08:36:51.384] Decision for VAD #3: IGNORE
+[08:36:51.384] VAD #3 -> agent CONTINUES speaking (IGNORED).
+[08:36:51.404] Scenario 1 result: PASS
+[08:36:51.805] 
+=== Running scenario 2: Passive affirmation while agent silent (respond) (expected: RESPOND) ===
+[08:36:51.805] Initial agent state: silent
+[08:36:51.805] --- VAD event #1 fired (agent_state=silent) ---
+[08:36:51.805] Agent is silent; waiting for STT (delay=0.05s)...
+[08:36:51.855] STT while agent silent: 'Yeah' -> DECISION: RESPOND
+[08:36:51.855] Agent responds: OK, proceeding (simulated).
+[08:36:51.876] Scenario 2 result: PASS
+[08:36:52.276] 
+=== Running scenario 3: Correction 'No stop' while speaking (interrupt) (expected: INTERRUPT_AT(1)) ===
+[08:36:52.276] Initial agent state: speaking
+[08:36:52.277] --- VAD event #1 fired (agent_state=speaking) ---
+[08:36:52.277] VAD event #1 received while speaking. Starting validation window 0.25s...
+[08:36:52.327] STT arrived for VAD #1: 'No stop'
+[08:36:52.327] Decision for VAD #1: INTERRUPT
+[08:36:52.327] VAD #1 -> agent INTERRUPTS speaking now.
+[08:36:52.348] Scenario 3 result: PASS
+[08:36:52.748] 
+=== Running scenario 4: Mixed input 'Yeah okay but wait' while speaking (interrupt) (expected: INTERRUPT_AT(1)) ===
+[08:36:52.749] Initial agent state: speaking
+[08:36:52.749] --- VAD event #1 fired (agent_state=speaking) ---
+[08:36:52.749] VAD event #1 received while speaking. Starting validation window 0.25s...
+[08:36:52.829] STT arrived for VAD #1: 'Yeah okay but wait'
+[08:36:52.829] Decision for VAD #1: INTERRUPT
+[08:36:52.829] VAD #1 -> agent INTERRUPTS speaking now.
+[08:36:52.850] Scenario 4 result: PASS
+[08:36:53.250] 
+=== Running scenario 5: VAD false-start no STT (ignore) (expected: IGNORE_ALL) ===
+[08:36:53.250] Initial agent state: speaking
+[08:36:53.250] --- VAD event #1 fired (agent_state=speaking) ---
+[08:36:53.250] VAD event #1 received while speaking. Starting validation window 0.25s...
+[08:36:53.501] No STT arrived within validation window for VAD #1 -> DECISION: IGNORE
+[08:36:53.502] VAD #1 -> agent CONTINUES speaking (IGNORED).
+[08:36:53.522] Scenario 5 result: PASS
