@@ -18,8 +18,8 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# uncomment to enable Krisp background voice/noise cancellation
-# from livekit.plugins import noise_cancellation
+# Import the BackchannelFilter from backchannel_agent
+from backchannel_agent import BackchannelFilter
 
 logger = logging.getLogger("basic-agent")
 
@@ -93,14 +93,21 @@ async def entrypoint(ctx: JobContext):
         # See more at https://docs.livekit.io/agents/build/turns
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
+        # Interruption settings (matching backchannel_agent.py)
+        allow_interruptions=True,
+        min_interruption_duration=3.0,
+        min_interruption_words=0,
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
         preemptive_generation=True,
         # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
-        false_interruption_timeout=1.0,
+        false_interruption_timeout=0.8,
     )
+
+    # Attach the backchannel filter for smart interruption handling
+    BackchannelFilter(session).attach()
 
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
@@ -121,10 +128,7 @@ async def entrypoint(ctx: JobContext):
         agent=MyAgent(),
         room=ctx.room,
         room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                # uncomment to enable the Krisp BVC noise cancellation
-                # noise_cancellation=noise_cancellation.BVC(),
-            ),
+            audio_input=room_io.AudioInputOptions(),
         ),
     )
 
