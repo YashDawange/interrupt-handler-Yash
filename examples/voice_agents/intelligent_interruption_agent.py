@@ -196,13 +196,15 @@ class IntelligentInterruptionHandler:
         elif event.old_state == "speaking":
             self._agent_was_speaking_on_interrupt = False
 
-    async def _on_user_input_transcribed(self, event):
+    def _on_user_input_transcribed(self, event):
         """
         Handle transcript events and decide whether to ignore/resume interruptions.
 
         This is called when STT produces interim or final transcripts.
         By this time, VAD has already triggered a pause if agent was speaking.
         Our job: decide if we should immediately resume.
+
+        Note: This must be a synchronous callback. We use asyncio.create_task for async operations.
         """
         text = event.alternatives[0].text if event.alternatives else ""
         is_final = event.is_final
@@ -234,7 +236,7 @@ class IntelligentInterruptionHandler:
             if self._pending_resume_task and not self._pending_resume_task.done():
                 self._pending_resume_task.cancel()
 
-            # Schedule immediate resume
+            # Schedule immediate resume using create_task
             self._pending_resume_task = asyncio.create_task(self._force_resume())
         else:
             # Valid interruption - let it proceed normally
