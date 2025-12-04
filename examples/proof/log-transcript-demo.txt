@@ -1,0 +1,209 @@
+2025-12-04 23:44:54,572 INFO  livekit.agents starting worker
+2025-12-04 23:44:54,573 INFO  livekit.agents starting inference executor
+2025-12-04 23:44:54,792 INFO  livekit.agents initializing process
+2025-12-04 23:45:38,092 INFO  livekit.agents process initialized
+2025-12-04 23:45:38,092 INFO  livekit.agents HTTP server listening on :8081
+2025-12-04 23:45:38,098 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,100 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,100 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,101 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,102 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,102 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,103 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,103 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,523 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:38,639 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:38,640 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:38,726 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:38,727 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:38,730 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:38,734 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:38,735 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:38,736 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,736 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,739 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,739 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,872 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:38,993 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,993 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:38,993 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:38,995 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:38,995 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,995 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:38,995 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,228 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,228 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,232 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,233 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,233 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,233 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,234 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,234 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,347 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,465 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,465 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,467 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,469 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,469 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,470 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,582 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,582 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,696 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,702 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,702 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,702 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:39,704 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,704 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,823 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,823 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,935 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:39,938 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,939 INFO  livekit.agents initializing job runner
+2025-12-04 23:45:39,939 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:39,940 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:40,052 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:40,052 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:40,053 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:45:40,167 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:45:40,168 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:40,169 INFO  livekit.agents job runner initialized
+2025-12-04 23:45:41,211 INFO  livekit.agents registered worker
+2025-12-04 23:50:08,972 INFO  livekit.agents draining worker
+2025-12-04 23:50:08,979 INFO  livekit.agents shutting down worker
+2025-12-04 23:50:09,028 INFO  livekit.agents process exiting
+2025-12-04 23:50:28,937 INFO  livekit.agents starting worker
+2025-12-04 23:50:28,938 INFO  livekit.agents starting inference executor
+2025-12-04 23:50:28,990 INFO  livekit.agents initializing process
+2025-12-04 23:50:32,537 INFO  livekit.agents process initialized
+2025-12-04 23:50:32,539 INFO  livekit.agents HTTP server listening on :8081
+2025-12-04 23:50:32,542 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:32,542 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:32,542 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:32,544 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:32,544 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:32,544 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:32,545 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:32,545 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:32,823 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:32,882 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,043 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,043 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,044 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,049 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,050 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,050 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,051 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,055 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,168 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,169 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,250 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,252 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,253 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,253 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,253 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,288 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,407 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,622 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,622 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,628 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,629 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,629 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,630 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,630 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,768 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:33,773 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,774 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,775 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:33,775 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:33,776 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,776 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,777 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:33,913 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,218 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:34,218 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,218 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,220 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:34,336 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,337 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,340 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,342 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,345 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,347 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:34,348 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:34,348 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:34,483 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,485 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:34,486 INFO  livekit.agents initializing job runner
+2025-12-04 23:50:34,700 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:50:34,701 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,872 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,872 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:50:34,874 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,875 INFO  livekit.agents job runner initialized
+2025-12-04 23:50:34,969 INFO  livekit.agents registered worker
+2025-12-04 23:51:02,343 INFO  livekit.agents draining worker
+2025-12-04 23:51:02,346 INFO  livekit.agents shutting down worker
+2025-12-04 23:51:02,367 INFO  livekit.agents process exiting
+2025-12-04 23:51:17,267 INFO  livekit      livekit_ffi::server:139:livekit_ffi::server - initializing ffi server v0.12.40
+2025-12-04 23:51:17,267 INFO  livekit      livekit_ffi::cabi:50:livekit_ffi::cabi - initializing ffi server v0.12.40
+2025-12-04 23:51:17,284 INFO  livekit.agents Downloading files for livekit.plugins.silero
+2025-12-04 23:51:17,287 INFO  livekit.agents Finished downloading files for livekit.plugins.silero
+2025-12-04 23:51:17,289 INFO  livekit.agents Downloading files for livekit.plugins.turn_detector
+2025-12-04 23:51:20,955 WARNING huggingface_hub.file_download Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+2025-12-04 23:51:24,921 WARNING huggingface_hub.file_download Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+2025-12-04 23:52:38,065 INFO  livekit.agents Finished downloading files for livekit.plugins.turn_detector
+2025-12-04 23:52:38,500 INFO  livekit.agents starting worker
+2025-12-04 23:52:38,501 INFO  livekit.agents starting inference executor
+2025-12-04 23:52:38,572 INFO  livekit.agents initializing process
+2025-12-04 23:52:43,941 INFO  livekit.agents process initialized
+2025-12-04 23:52:43,948 INFO  livekit.agents HTTP server listening on :8081
+2025-12-04 23:52:43,966 INFO  livekit.agents initializing job runner
+2025-12-04 23:52:43,969 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:52:43,969 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:52:43,970 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:43,972 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:44,043 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:52:44,043 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:52:44,044 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:44,049 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:44,050 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:44,050 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:44,051 INFO  livekit.agents initializing job runner
+2025-12-04 23:52:44,055 INFO  basic-agent  [PREWARM] loading VAD model
+2025-12-04 23:52:44,138 INFO  basic-agent  [PREWARM] VAD model loaded
+2025-12-04 23:52:44,140 INFO  livekit.agents job runner initialized
+2025-12-04 23:52:44,150 INFO  livekit.agents registered worker
+2025-12-04 23:52:44,185 INFO  basic-agent  [ENTRYPOINT] starting AgentSession for room=mock_room
+2025-12-04 23:52:44,669 INFO  basic-agent  [AGENT] on_enter -> generating initial reply
+2025-12-04 23:52:45,159 INFO  basic-agent  [STATE] agent_state changed: initializing -> listening | user_state=listening
+2025-12-04 23:52:45,166 WARNING livekit.agents resume_false_interruption is enabled but audio output does not support pause
+2025-12-04 23:52:45,175 INFO  basic-agent  [STATE] agent_state changed: listening -> thinking | user_state=listening
+2025-12-04 23:52:46,488 INFO  basic-agent  [TOOL] Looking up weather for New York
+2025-12-04 23:52:46,497 INFO  livekit.agents LLM metrics
+2025-12-04 23:52:46,578 INFO  basic-agent  [STATE] agent_state changed: thinking -> speaking | user_state=listening
+2025-12-04 23:52:47,676 INFO  livekit.agents STT metrics
+2025-12-04 23:52:47,846 INFO  livekit.agents TTS metrics
+2025-12-04 23:52:48,386 INFO  basic-agent  [STT] FINAL text='Yeah.' | agent_state=speaking | user_state=listening
+2025-12-04 23:52:48,395 INFO  basic-agent  [LOGIC] words=['yeah'] | is_soft=True | has_hard=False | agent_state=speaking
+2025-12-04 23:52:48,396 INFO  basic-agent  [LOGIC] SOFT backchannel while speaking -> IGNORE COMPLETELY (no interrupt, no new turn)
+2025-12-04 23:52:48,468 WARNING livekit.agents skipping reply to user input, current speech generation cannot be interrupted
+2025-12-04 23:52:49,888 INFO  livekit.agents LLM metrics
+2025-12-04 23:52:50,836 INFO  livekit.agents EOU metrics
+2025-12-04 23:52:52,496 INFO  livekit.agents STT metrics
+2025-12-04 23:52:52,501 INFO  basic-agent  [STT] FINAL text='Stop.' | agent_state=speaking | user_state=speaking
+2025-12-04 23:52:52,503 INFO  basic-agent  [LOGIC] words=['stop'] | is_soft=False | has_hard=True | agent_state=speaking
+2025-12-04 23:52:52,506 INFO  basic-agent  [LOGIC] HARD interrupt while speaking -> calling session.interrupt(force=True)
+2025-12-04 23:52:52,515 INFO  basic-agent  [STATE] agent_state changed: speaking -> listening | user_state=speaking
+2025-12-04 23:52:52,686 WARNING livekit.agents preemptive generation enabled but chat context changed
+2025-12-04 23:52:52,701 INFO  basic-agent  [STATE] agent_state changed: listening -> thinking | user_state=listening
+2025-12-04 23:52:54,675 INFO  basic-agent  [STATE] agent_state changed: thinking -> speaking | user_state=listening
+2025-12-04 23:52:58,486 INFO  basic-agent  [STT] PARTIAL text='Tell me about rocks.' | agent_state=speaking | user_state=listening
+2025-12-04 23:52:58,796 INFO  livekit.agents STT metrics
+2025-12-04 23:52:58,803 INFO  basic-agent  [STT] FINAL text='Tell me about rocks.' | agent_state=speaking | user_state=listening
+2025-12-04 23:52:58,806 INFO  basic-agent  [LOGIC] words=['tell', 'me', 'about', 'rocks'] | is_soft=False | has_hard=False | agent_state=speaking
+2025-12-04 23:52:58,806 INFO  basic-agent  [LOGIC] NON-SOFT utterance while speaking -> treating as interrupt (session.interrupt(force=True))
+2025-12-04 23:52:58,820 INFO  basic-agent  [STATE] agent_state changed: speaking -> listening | user_state=listening
+2025-12-04 23:53:02,235 INFO  basic-agent  [METRICS] Usage: UsageSummary(llm_prompt_tokens=2032, llm_output_text_tokens=0, tts_characters_count=838)
+2025-12-04 23:53:02,343 INFO  livekit.agents draining worker
+2025-12-04 23:53:02,346 INFO  livekit.agents shutting down worker
+2025-12-04 23:53:02,367 INFO  livekit.agents process exiting
