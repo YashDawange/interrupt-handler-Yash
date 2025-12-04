@@ -16,11 +16,10 @@ from opentelemetry.exporter.otlp.proto.http import Compression
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import (
-    LogData,
     LoggerProvider,
     LoggingHandler,
-    LogRecord,
     LogRecordProcessor,
+    ReadableLogRecord,
 )
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
@@ -77,20 +76,17 @@ class _MetadataLogProcessor(LogRecordProcessor):
     def __init__(self, metadata: dict[str, AttributeValue]) -> None:
         self._metadata = metadata
 
-    def emit(self, log_data: LogData) -> None:
-        if log_data.log_record.attributes:
-            log_data.log_record.attributes.update(self._metadata)  # type: ignore
-            log_data.log_record.attributes.update(  # type: ignore
-                {"logger.name": log_data.instrumentation_scope.name}
-            )
+    def emit(self, log_data: ReadableLogRecord) -> None:
+        if log_data.attributes:
+            log_data.attributes.update(self._metadata)  # type: ignore
         else:
-            log_data.log_record.attributes = self._metadata
+            log_data.attributes = self._metadata
 
-    def on_emit(self, log_data: LogData) -> None:
-        if log_data.log_record.attributes:
-            log_data.log_record.attributes.update(self._metadata)  # type: ignore
+    def on_emit(self, log_data: ReadableLogRecord) -> None:
+        if log_data.attributes:
+            log_data.attributes.update(self._metadata)  # type: ignore
         else:
-            log_data.log_record.attributes = self._metadata
+            log_data.attributes = self._metadata
 
     def shutdown(self) -> None:
         pass

@@ -21,6 +21,9 @@ from .room_io import (
     _ParticipantStreamTranscriptionOutput,
     _ParticipantTranscriptionOutput,
 )
+from .smart_interruption import SmartInterruptionFilter
+from .smart_activity import SmartInterruptionAgentActivity
+from .smart_session import SmartInterruptionAgentSession
 from .speech_handle import SpeechHandle
 from .transcription import TranscriptSynchronizer
 
@@ -45,6 +48,9 @@ __all__ = [
     "FunctionToolsExecutedEvent",
     "AgentFalseInterruptionEvent",
     "TranscriptSynchronizer",
+    "SmartInterruptionFilter",
+    "SmartInterruptionAgentActivity",
+    "SmartInterruptionAgentSession",
     "io",
     "room_io",
     "run_result",
