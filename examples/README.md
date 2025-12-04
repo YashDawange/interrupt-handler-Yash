@@ -95,11 +95,3 @@ I implemented a context-aware interruption logic that filters user input based o
    python my_submission.py dev
 
 ---
-
-### Step 3: Git Submission (The Critical Part)
-You need to submit this on a **new branch** in your forked repository.
-
-**1. Create the Branch** [cite: 82]
-Run this in your terminal:
-```cmd
-git checkout -b feature/interrupt-handler-DeepPatil22
