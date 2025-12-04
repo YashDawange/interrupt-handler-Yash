@@ -1,63 +1,65 @@
+import asyncio
 import logging
 
-from dotenv import load_dotenv
-from google.genai.types import Modality  # noqa: F401
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("console-agent")
 
-from livekit.agents import Agent, AgentServer, AgentSession, JobContext, cli, room_io
-from livekit.agents.llm import function_tool
-from livekit.plugins import google, openai  # noqa: F401
-
-logger = logging.getLogger("realtime-with-tts")
-logger.setLevel(logging.INFO)
-
-load_dotenv()
-
-# This example is showing a half-cascade realtime LLM usage where we:
-# - use a multimodal/realtime LLM that takes audio input, generating text output
-# - then use a separate TTS to synthesize audio output
-#
-# This approach fully utilizes the realtime LLM's ability to understand directly from audio
-# and yet maintains control of the pipeline, including using custom voices with TTS
+IGNORE_WORDS = ["yeah", "ya", "haan", "hmm"]
 
 
-class WeatherAgent(Agent):
-    def __init__(self) -> None:
-        super().__init__(
-            instructions="You are a helpful assistant.",
-            llm=openai.realtime.RealtimeModel(modalities=["text"]),
-            # llm=google.beta.realtime.RealtimeModel(modalities=[Modality.TEXT]),
-            tts=openai.TTS(voice="ash"),
-        )
-
-    @function_tool
-    async def get_weather(self, location: str):
-        """Called when the user asks about the weather.
-
-        Args:
-            location: The location to get the weather for
-        """
-
-        logger.info(f"getting weather for {location}")
-        return f"The weather in {location} is sunny, and the temperature is 20 degrees Celsius."
+def should_interrupt(text: str) -> bool:
+    t = text.lower().strip()
+    if t in IGNORE_WORDS:
+        return False
+    return True
 
 
-server = AgentServer()
+class ConsoleAgent:
+    def __init__(self):
+        self.speaking = False
+        self.speaking_rate = 0.05
+
+    async def speak(self, text: str):
+        duration = min(len(text) * self.speaking_rate, 4)
+        logger.info(f"Assistant speaking: {text} ({duration:.2f}s)")
+        self.speaking = True
+        await asyncio.sleep(duration)
+        self.speaking = False
+        logger.info("Assistant finished speaking.")
+
+    async def reply(self, user_text: str):
+        t = user_text.lower()
+        if "weather" in t:
+            return "The weather is sunny."
+        if "mumbai" in t:
+            return "Mumbai is located on the west coast of India."
+        if "stop" in t:
+            return "Stopping now."
+        return f"You said: {user_text}"
 
 
-@server.rtc_session()
-async def entrypoint(ctx: JobContext):
-    session = AgentSession()
+async def main():
+    agent = ConsoleAgent()
+    await agent.speak("Hello, I am your assistant. Start speaking.")
 
-    await session.start(
-        agent=WeatherAgent(),
-        room=ctx.room,
-        room_options=room_io.RoomOptions(
-            text_output=True,
-            audio_output=True,  # you can also disable audio output to use text modality only
-        ),
-    )
-    session.generate_reply(instructions="say hello to the user in English")
+    while True:
+        user = await asyncio.to_thread(input, "> ")
+
+        if user.lower() == "quit":
+            print("Exiting.")
+            break
+
+        if agent.speaking:
+            if should_interrupt(user):
+                logger.info("INTERRUPT TRIGGERED — stopping speech.")
+                agent.speaking = False
+            else:
+                logger.info("Ignored filler word.")
+                continue
+
+        response = await agent.reply(user)
+        await agent.speak(response)
 
 
 if __name__ == "__main__":
-    cli.run_app(server)
+    asyncio.run(main())
