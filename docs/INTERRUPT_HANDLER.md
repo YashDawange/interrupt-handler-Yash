@@ -53,3 +53,29 @@ Submission checklist
 - [x] Demo script and proof log generated
 
 If you want, I can prepare the PR text and open the PR for you, or provide the exact commands to create the PR using the GitHub web UI or `gh` CLI.
+
+Recording helpers
+-----------------
+Two helper scripts are provided to make creating a short proof video easy:
+
+- `tools/demo_interrupt_live.py`: an interactive Python script that walks you through each scenario and prints the classification/decision to the terminal. Run this while recording.
+- `tools/play_tts_interactive.ps1`: a small TTS player (Windows SAPI) you can run in a second PowerShell window to produce agent audio that you can interrupt.
+
+Recording steps (recommended):
+
+1. Open two PowerShell windows side-by-side. In one run OBS or Game Bar for recording. In the other run the TTS player:
+
+   ```powershell
+   Set-Location 'C:\Users\anshu\OneDrive\Desktop\SalesCode\agents-assignment'
+   .\tools\play_tts_interactive.ps1
+   ```
+
+2. Start screen recording (OBS or Game Bar). In the terminal where you will narrate and show logs run:
+
+   ```powershell
+   python .\tools\demo_interrupt_live.py
+   ```
+
+3. Follow the prompts in `demo_interrupt_live.py`. Speak the specified utterances clearly into your mic when prompted. The script will print the classification and the decision for each scenario — this is what the reviewer will look for in the video.
+
+4. Stop recording and attach the resulting video to your PR.
