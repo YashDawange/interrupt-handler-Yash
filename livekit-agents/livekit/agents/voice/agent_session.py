@@ -358,6 +358,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         # ivr activity
         self._ivr_activity: IVRActivity | None = None
 
+
+
     def emit(self, event: EventTypes, arg: AgentEvent) -> None:  # type: ignore
         self._recorded_events.append(arg)
         super().emit(event, arg)
@@ -891,6 +893,10 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             if run_state:
                 run_state._watch_handle(handle)
 
+             # tracking current speech for interruption logic
+        self.agent_speaking = True
+        self.current_speech_handle = handle    
+
         return handle
 
     def generate_reply(
@@ -944,6 +950,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             if run_state:
                 run_state._watch_handle(handle)
 
+        self.agent_speaking = True
+        self.current_speech_handle = handle    
+
         return handle
 
     def interrupt(self, *, force: bool = False) -> asyncio.Future[None]:
@@ -955,6 +964,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         """
         if self._activity is None:
             raise RuntimeError("AgentSession isn't running")
+        
+       
 
         return self._activity.interrupt(force=force)
 
