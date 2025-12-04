@@ -39,10 +39,10 @@ def log_case(name, user_utterance, agent_speaking):
 
 
 def main():
+    # Only produce the three required proof scenarios per request
     log_case("Scenario 1 - Long explanation", "Okay... yeah... uh-huh", True)
     log_case("Scenario 2 - Passive affirmation (silent)", "Yeah", False)
     log_case("Scenario 3 - Correction", "No stop", True)
-    log_case("Scenario 4 - Mixed input", "Yeah okay but wait", True)
 
     with open(LOG, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
