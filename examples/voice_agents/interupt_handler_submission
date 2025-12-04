@@ -1,0 +1,69 @@
+This project implements a real-time voice interruption handler for a LiveKit voice agent.
+The agent can:
+
+Ignore backchannel utterances like “yeah”, “hmm”, “ok” while speaking
+
+Interrupt speech immediately on key intent words like “stop”, “wait”, “no”
+
+Distinguish between false-start VAD triggers and real STT transcripts
+
+Maintain low latency so the user experience feels natural
+
+Integrate fully with the existing LiveKit Agent Framework provided in the starter repo
+
+This feature is implemented in:
+examples/voice_agents/interrupt_handler_agent.py
+examples/voice_agents/interrupt_config.py
+
+Approach & Architecture
+Backchannel Filtering
+
+A configurable keyword list suppresses non-interrupting short responses:
+
+BACKCHANNEL_WORDS = ["yeah", "ok", "okay", "hmm", "uhh", "yup"]
+Hard Interrupt Detection
+
+Interrupt keywords include:
+
+INTERRUPT_WORDS = ["stop", "wait", "no", "hold on"]
+
+
+These trigger a full agent speech cancellation:
+
+Cancel current TTS audio
+
+Mark session state as interrupted
+
+Allow user intent to take priority
+
+Agent State Handling (Backward-Compatible)
+
+Older versions of the LiveKit SDK do not expose AgentState.
+Instead, the implementation uses raw string states:
+
+self.agent_is_speaking = event.new_state in ["speaking", "thinking"]
+
+
+This ensures compatibility across SDK versions.
+
+VAD–STT Coordination
+
+Since VAD triggers before STT text arrives, the logic checks:
+
+Is the agent speaking → backchannel ignored
+
+Is the user actually interrupting → cancel immediately
+
+Otherwise → pass interaction to the LLM
+
+This prevents false early cut-offs.
+
+Robust TTS Cancellation
+
+Different SDK versions expose different TTS stop APIs.
+The implementation fallback-handles both:
+
+if hasattr(handle, "cancel"):
+    handle.cancel(cancel_nested=True)
+elif hasattr(handle, "stop"):
+    handle.stop()
