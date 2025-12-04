@@ -77,3 +77,29 @@ For frontend support, use the [Agents playground](https://agents-playground.live
 
 - [LiveKit Documentation](https://docs.livekit.io/)
 - [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
+
+
+## Interruption Handler Implementation (My Submission)
+
+### Logic Overview
+I implemented a context-aware interruption logic that filters user input based on the agent's state:
+1.  **Passive Input Filter:** If the agent is speaking and the user says "yeah", "ok", or "hmm", the system **ignores** the input and allows the agent to continue speaking seamlessly.
+2.  **Active Command Handler:** If the user says "Stop" or combines a filler word with a command (e.g., "Yeah wait"), the system manually triggers an interruption.
+3.  **Prompt Engineering:** Updated the system instructions to ensure the LLM does not hallucinate a response to ignored filler words.
+
+### How to Run
+1. Navigate to the `examples` directory.
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run the agent:
+   ```bash
+   python my_submission.py dev
+
+---
+
+### Step 3: Git Submission (The Critical Part)
+You need to submit this on a **new branch** in your forked repository.
+
+**1. Create the Branch** [cite: 82]
+Run this in your terminal:
+```cmd
+git checkout -b feature/interrupt-handler-DeepPatil22
