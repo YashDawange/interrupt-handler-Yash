@@ -229,6 +229,20 @@ class InterruptHandler:
             word.lower() for word in (command_words or self.DEFAULT_COMMAND_WORDS)
         )
 
+        # Pre-separate single words and multi-word phrases for O(1) lookup
+        self._backchannel_singles: set[str] = set()
+        self._backchannel_phrases: list[str] = []
+        self._command_singles: set[str] = set()
+        self._command_phrases: list[str] = []
+        self._rebuild_phrase_cache()
+
+    def _rebuild_phrase_cache(self) -> None:
+        """Rebuild the cached single words and phrases for efficient lookup."""
+        self._backchannel_singles = {w for w in self.backchannel_words if " " not in w}
+        self._backchannel_phrases = [w for w in self.backchannel_words if " " in w]
+        self._command_singles = {w for w in self.command_words if " " not in w}
+        self._command_phrases = [w for w in self.command_words if " " in w]
+
     def analyze(
         self,
         transcript: str,
@@ -245,6 +259,7 @@ class InterruptHandler:
         Returns:
             InterruptAnalysis with action and classification details
         """
+        # Fast path for empty input
         if not transcript or not transcript.strip():
             return InterruptAnalysis(
                 action=InterruptAction.RESPOND,
@@ -254,8 +269,10 @@ class InterruptHandler:
                 confidence=0.0,
             )
 
-        # Tokenize and lowercase
-        words = [word.lower().strip(".,!?;:\"'") for word in transcript.split()]
+        transcript_lower = transcript.lower()
+
+        # Tokenize once - O(n) where n is transcript length
+        words = [word.strip(".,!?;:\"'") for word in transcript_lower.split()]
         words = [w for w in words if w]  # Remove empty strings
 
         if not words:
@@ -267,38 +284,37 @@ class InterruptHandler:
                 confidence=0.0,
             )
 
-        # Find matched words (both single words and multi-word phrases)
-        matched_backchannels = [w for w in words if w in self.backchannel_words]
-        matched_commands = [w for w in words if w in self.command_words]
+        word_count = len(words)
 
-        # Check for multi-word backchannel phrases like "all right", "uh huh"
-        transcript_lower = transcript.lower()
-        for phrase in self.backchannel_words:
-            if " " in phrase and phrase in transcript_lower:
-                if phrase not in matched_backchannels:
-                    matched_backchannels.append(phrase)
+        # Single-word matching using set intersection - O(min(w, b)) and O(min(w, c))
+        word_set = set(words)
+        matched_backchannels = list(word_set & self._backchannel_singles)
+        matched_commands = list(word_set & self._command_singles)
 
-        # Check for multi-word command phrases like "hold on"
-        for phrase in self.command_words:
-            if " " in phrase and phrase in transcript_lower:
-                if phrase not in matched_commands:
-                    matched_commands.append(phrase)
+        # Multi-word phrase matching - only iterate over phrases (typically few)
+        # O(p) where p is number of multi-word phrases
+        for phrase in self._backchannel_phrases:
+            if phrase in transcript_lower:
+                matched_backchannels.append(phrase)
 
-        # Also check if the entire cleaned transcript matches a backchannel
-        # This handles cases like "Yeah." -> "yeah" or "Okay!" -> "okay"
+        for phrase in self._command_phrases:
+            if phrase in transcript_lower:
+                matched_commands.append(phrase)
+
+        # Check if entire cleaned transcript is a single backchannel/command
+        # O(1) set lookup
         full_cleaned = transcript_lower.strip().strip(".,!?;:\"'").strip()
-        if full_cleaned in self.backchannel_words and full_cleaned not in matched_backchannels:
+        if full_cleaned in self.backchannel_words and full_cleaned not in word_set:
             matched_backchannels.append(full_cleaned)
-
-        # Check if entire transcript matches a command
-        if full_cleaned in self.command_words and full_cleaned not in matched_commands:
+        if full_cleaned in self.command_words and full_cleaned not in word_set:
             matched_commands.append(full_cleaned)
 
-        is_backchannel_only = len(matched_backchannels) > 0 and len(matched_commands) == 0
-        has_command_words = len(matched_commands) > 0
+        # Determine classification
+        is_backchannel_only = bool(matched_backchannels) and not matched_commands
+        has_command_words = bool(matched_commands)
 
         # Check minimum word threshold
-        if len(words) < self.min_interruption_words:
+        if word_count < self.min_interruption_words:
             is_backchannel_only = False
             has_command_words = False
 
@@ -308,7 +324,7 @@ class InterruptHandler:
             has_command_words=has_command_words,
             agent_state=agent_state,
             speech_duration=speech_duration,
-            word_count=len(words),
+            word_count=word_count,
         )
 
         # Calculate confidence (0.0 to 1.0)
@@ -316,7 +332,7 @@ class InterruptHandler:
             action=action,
             matched_backchannels=matched_backchannels,
             matched_commands=matched_commands,
-            word_count=len(words),
+            word_count=word_count,
         )
 
         all_matched = matched_backchannels + matched_commands
@@ -386,16 +402,42 @@ class InterruptHandler:
 
     def add_backchannel_word(self, word: str) -> None:
         """Add a word to the backchannel set."""
-        self.backchannel_words.add(word.lower())
+        word_lower = word.lower()
+        self.backchannel_words.add(word_lower)
+        # Update cache
+        if " " in word_lower:
+            self._backchannel_phrases.append(word_lower)
+        else:
+            self._backchannel_singles.add(word_lower)
 
     def add_command_word(self, word: str) -> None:
         """Add a word to the command set."""
-        self.command_words.add(word.lower())
+        word_lower = word.lower()
+        self.command_words.add(word_lower)
+        # Update cache
+        if " " in word_lower:
+            self._command_phrases.append(word_lower)
+        else:
+            self._command_singles.add(word_lower)
 
     def remove_backchannel_word(self, word: str) -> None:
         """Remove a word from the backchannel set."""
-        self.backchannel_words.discard(word.lower())
+        word_lower = word.lower()
+        self.backchannel_words.discard(word_lower)
+        # Update cache
+        if " " in word_lower:
+            if word_lower in self._backchannel_phrases:
+                self._backchannel_phrases.remove(word_lower)
+        else:
+            self._backchannel_singles.discard(word_lower)
 
     def remove_command_word(self, word: str) -> None:
         """Remove a word from the command set."""
-        self.command_words.discard(word.lower())
+        word_lower = word.lower()
+        self.command_words.discard(word_lower)
+        # Update cache
+        if " " in word_lower:
+            if word_lower in self._command_phrases:
+                self._command_phrases.remove(word_lower)
+        else:
+            self._command_singles.discard(word_lower)
