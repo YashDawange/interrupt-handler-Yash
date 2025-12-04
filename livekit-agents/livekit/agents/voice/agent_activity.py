@@ -164,6 +164,12 @@ class AgentActivity(RecognitionHooks):
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
 
+    def _is_ignored_transcript(self, text: str) -> bool:
+        ignore_words = {'yeah', 'ok', 'hmm', 'right', 'uh-huh', 'aha', 'okay'}
+        import string
+        cleaned_text = text.strip().lower().strip(string.punctuation)
+        return cleaned_text in ignore_words
+
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
     ) -> TurnDetectionMode | None:
@@ -1185,6 +1191,9 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+            if self._is_ignored_transcript(text):
+                return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1397,6 +1406,14 @@ class AgentActivity(RecognitionHooks):
             # is detected. So the previous execution should complete quickly.
             await old_task
 
+        # Check if the transcript should be ignored (e.g. "yeah", "ok")
+        # If the agent is currently speaking, we don't want to interrupt it
+        # If the agent is silent, we treat it as a valid input
+        if self._current_speech is not None and not self._current_speech.done():
+             if self._is_ignored_transcript(info.new_transcript):
+                 logger.debug(f"ignoring user input '{info.new_transcript}' while agent is speaking")
+                 return
+
         # When the audio recognition detects the end of a user turn:
         #  - check if realtime model server-side turn detection is enabled
         #  - check if there is no current generation happening
@@ -1444,6 +1461,7 @@ class AgentActivity(RecognitionHooks):
                 self._agent._chat_ctx.items.append(user_message)
                 self._session._conversation_item_added(user_message)
             return
+
 
         # create a temporary mutable chat context to pass to on_user_turn_completed
         # the user can edit it for the current generation, but changes will not be kept inside the

@@ -1,3 +1,19 @@
+# Intelligent Interruption Handling Assignment
+
+**Name:** Aryan Kumar
+**Roll No:** 22b2423
+
+This repository contains the implementation of intelligent interruption handling for the LiveKit agent.
+
+## Features Implemented
+- **Context-Aware Interruption**: The agent now ignores backchanneling words (e.g., "yeah", "ok", "hmm") while speaking, allowing for a more natural conversation flow.
+- **Active Interruption**: The agent correctly stops speaking when the user intends to interrupt (e.g., "stop", "wait").
+- **Configuration**: Added `min_interruption_words=1` to `basic_agent.py` to prevent VAD false starts.
+
+## Verification
+A log transcript of the verification tests is included in `submission_log.txt`.
+
+---
 <!--BEGIN_BANNER_IMAGE-->
 
 <picture>
