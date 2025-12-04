@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import re
 import contextvars
 import heapq
 import json
@@ -124,6 +126,10 @@ class AgentActivity(RecognitionHooks):
         # for false interruption handling
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
+        # short timer used to defer immediate VAD-driven interruptions when the
+        # agent is currently speaking. This allows a quick STT interim to arrive
+        # and decide whether the audio was just a backchannel/filler.
+        self._deferred_interrupt_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
@@ -163,6 +169,27 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+
+# Configurable lists - can be overridden with env vars (comma separated)
+_DEFAULT_IGNORE_WORDS = (
+    os.getenv(
+        "AGENT_IGNORE_WORDS",
+        "yeah,ok,okay,hmm,right,uh-huh,uh,mmhmm,mhm",
+    )
+    .split(",")
+)
+_DEFAULT_INTERRUPT_WORDS = os.getenv("AGENT_INTERRUPT_WORDS", "wait,stop,no").split(",")
+# delay (s) to wait for STT after a VAD inference before forcing an interruption
+_DEFER_INTERRUPT_DELAY = float(os.getenv("AGENT_DEFER_INTERRUPT_DELAY", "0.15"))
+
+
+def _tokenize_words(text: str) -> list[str]:
+    if not text:
+        return []
+    # simple word tokenizer, keeps words like "uh-huh" together
+    tokens = re.findall(r"[\w'-]+", text.lower())
+    return [t.strip("'\"") for t in tokens]
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1241,27 +1268,76 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # If the agent is currently speaking and we have an STT engine,
+            # defer the VAD-driven interruption briefly to allow a fast STT
+            # interim to arrive. This prevents short backchannel words from
+            # causing an audible pause/stutter.
+            if self._session.agent_state == "speaking" and self.stt is not None:
+                # cancel previous deferred timer
+                if self._deferred_interrupt_timer:
+                    try:
+                        self._deferred_interrupt_timer.cancel()
+                    except Exception:
+                        pass
+
+                loop = getattr(self._session, "_loop", asyncio.get_event_loop())
+
+                def _cb() -> None:
+                    try:
+                        # clear the reference first
+                        self._deferred_interrupt_timer = None
+                        self._interrupt_by_audio_activity()
+                    except Exception:
+                        logger.exception("deferred interrupt callback failed")
+
+                self._deferred_interrupt_timer = loop.call_later(_DEFER_INTERRUPT_DELAY, _cb)
+            else:
+                self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text
+
+        # cancel any deferred VAD interrupt – we now have text to make a decision
+        if self._deferred_interrupt_timer:
+            try:
+                self._deferred_interrupt_timer.cancel()
+            except Exception:
+                pass
+            self._deferred_interrupt_timer = None
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript,
                 is_final=False,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        if transcript and self._turn_detection not in ("manual", "realtime_llm"):
+            tokens = _tokenize_words(transcript)
+            ignore_set = set(w.lower() for w in _DEFAULT_IGNORE_WORDS)
+            interrupt_set = set(w.lower() for w in _DEFAULT_INTERRUPT_WORDS)
+
+            # if agent is speaking, we discriminate between soft backchannels
+            # and real interruptions
+            if self._session.agent_state == "speaking" and self._current_speech is not None and not self._current_speech.interrupted:
+                # any explicit interrupt keywords cause immediate interruption
+                if any(tok in interrupt_set for tok in tokens):
+                    self._interrupt_by_audio_activity()
+                # mixed utterances containing non-ignore words are treated as interruptions
+                elif tokens and all(tok in ignore_set for tok in tokens):
+                    # pure filler/backchannel while agent speaking: ignore
+                    return
+                else:
+                    self._interrupt_by_audio_activity()
+            else:
+                # agent is silent: treat as valid user activity
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False
@@ -1276,23 +1352,41 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text
+
+        # cancel any deferred VAD interrupt – we now have the final text
+        if self._deferred_interrupt_timer:
+            try:
+                self._deferred_interrupt_timer.cancel()
+            except Exception:
+                pass
+            self._deferred_interrupt_timer = None
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript,
                 is_final=True,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
-        # agent speech might not be interrupted if VAD failed and a final transcript is received
-        # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
-        # which will also be immediately interrupted
 
-        if self._audio_recognition and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
-            self._interrupt_by_audio_activity()
+        # decide about interruption similar to interim transcripts
+        if self._audio_recognition and self._turn_detection not in ("manual", "realtime_llm"):
+            tokens = _tokenize_words(transcript)
+            ignore_set = set(w.lower() for w in _DEFAULT_IGNORE_WORDS)
+            interrupt_set = set(w.lower() for w in _DEFAULT_INTERRUPT_WORDS)
+
+            if self._session.agent_state == "speaking" and self._current_speech is not None and not self._current_speech.interrupted:
+                if any(tok in interrupt_set for tok in tokens):
+                    self._interrupt_by_audio_activity()
+                elif tokens and all(tok in ignore_set for tok in tokens):
+                    # pure filler while agent speaking: ignore
+                    pass
+                else:
+                    self._interrupt_by_audio_activity()
+            else:
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False

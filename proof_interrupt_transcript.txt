@@ -1,0 +1,20 @@
+Scenario: Long explanation — user backchannels while agent speaks
+ Agent speaking: True
+ User speech: 'okay yeah uh-huh'
+ Decision: IGNORE (expected: IGNORE)
+---
+Scenario: Passive affirmation — agent silent, user says 'yeah'
+ Agent speaking: False
+ User speech: 'yeah'
+ Decision: INTERRUPT (expected: INTERRUPT)
+---
+Scenario: Correction — agent speaks, user says 'no stop'
+ Agent speaking: True
+ User speech: 'no stop'
+ Decision: INTERRUPT (expected: INTERRUPT)
+---
+Scenario: Mixed input — agent speaks, user says 'yeah okay but wait'
+ Agent speaking: True
+ User speech: 'yeah okay but wait'
+ Decision: INTERRUPT (expected: INTERRUPT)
+---
