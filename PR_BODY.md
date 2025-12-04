@@ -42,3 +42,10 @@ Notes & limitations
 Contact
 -------
 If you'd like, I can create the PR for you with this body, but I need gh CLI or API credentials to do that here. Otherwise this `PR_BODY.md` is ready to paste into the PR form.
+
+Proof (minimal transcript)
+-------------------------
+
+[2025-12-04T17:54:18.979588Z] Scenario 1 - Long explanation | utterance='Okay... yeah... uh-huh' | speaking=True | class=ignore | decision=IGNORE (continue speaking)
+[2025-12-04T17:54:18.980599Z] Scenario 2 - Passive affirmation (silent) | utterance='Yeah' | speaking=False | class=ignore | decision=RESPOND (treat as user input)
+[2025-12-04T17:54:18.980599Z] Scenario 3 - Correction | utterance='No stop' | speaking=True | class=interrupt | decision=INTERRUPT (stop speaking)
