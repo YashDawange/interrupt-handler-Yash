@@ -373,3 +373,32 @@ The Agents framework is under active development in a rapidly evolving field. We
 </tbody>
 </table>
 <!--END_REPO_NAV-->
+
+### Core Architecture
+The logic follows a strict decision matrix based on the agent's current state (Speaking vs. Silent) and the semantic content of the user's speech.
+
+1.  **VAD Desensitization:**
+    * The agent is configured with `interrupt_on_speaking=False` (or equivalent buffering strategy) to prevent the low-level VAD kernel from cutting audio immediately upon detecting sound.
+
+2.  **Semantic Filtering Layer:**
+    * We hook into the transcription event stream. When user text is finalized, it passes through a logic filter:
+    * **Ignore List:** A configurable set of words (`['yeah', 'ok', 'hmm', ...]`) is checked.
+    * **Context Check:**
+        * If the agent is **SPEAKING** and the input is in the ignore list $\rightarrow$ **IGNORE** (Audio continues seamlessly).
+        * If the agent is **SPEAKING** and the input is a command (e.g., "Stop") or mixed input (e.g., "Yeah wait") $\rightarrow$ **INTERRUPT** (Audio is manually cut, and text is processed).
+        * If the agent is **SILENT** $\rightarrow$ **RESPOND** (All inputs are treated as valid conversational turns).
+
+### Logic Matrix
+| Agent State | User Input | Action | Reason |
+| :--- | :--- | :--- | :--- |
+| **Speaking** | "Yeah", "Ok", "Uh-huh" | **IGNORE** | Passive backchanneling; implies "I'm listening." |
+| **Speaking** | "Stop", "Wait", "No" | **INTERRUPT** | Explicit command to halt. |
+| **Speaking** | "Yeah wait", "Ok but..." | **INTERRUPT** | Semantic meaning overrides the filler word. |
+| **Silent** | "Yeah", "Ok" | **RESPOND** | Standard conversation flow (e.g., answering a question). |
+
+## Installation
+
+To install the core Agents library, along with plugins for popular model providers:
+
+```bash
+pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"

@@ -123,7 +123,7 @@ class ConsoleAudioOutput(io.AudioOutput):
             label="Console",
             next_in_chain=None,
             sample_rate=SAMPLE_RATE,
-            capabilities=io.AudioOutputCapabilities(pause=False),  # TODO(theomonnom): support pause
+            capabilities=io.AudioOutputCapabilities(pause=True),
         )
         self._loop = loop
 
@@ -137,6 +137,9 @@ class ConsoleAudioOutput(io.AudioOutput):
 
         self._output_buf = bytearray()
         self._audio_lock = threading.Lock()
+        # playback control: when cleared, output will play silence but retain buffer
+        self._playback_enabled = threading.Event()
+        self._playback_enabled.set()
 
     @property
     def audio_lock(self) -> threading.Lock:
@@ -145,6 +148,9 @@ class ConsoleAudioOutput(io.AudioOutput):
     @property
     def audio_buffer(self) -> bytearray:
         return self._output_buf
+
+    def is_playback_enabled(self) -> bool:
+        return self._playback_enabled.is_set()
 
     async def capture_frame(self, frame: rtc.AudioFrame) -> None:
         await super().capture_frame(frame)
@@ -192,6 +198,14 @@ class ConsoleAudioOutput(io.AudioOutput):
                 interrupted=played_duration + 1.0 < self._pushed_duration,
             )
             self._pushed_duration = 0.0
+
+    def pause(self) -> None:
+        # stop playback (play silence) but keep buffer for resume
+        self._playback_enabled.clear()
+
+    def resume(self) -> None:
+        # resume playback from the existing buffer
+        self._playback_enabled.set()
 
 
 class AgentsConsole:
@@ -588,6 +602,16 @@ class AgentsConsole:
         self._output_delay = time.outputBufferDacTime - time.currentTime
 
         FRAME_SAMPLES = 240
+        # if playback is disabled (paused), play silence but do not consume buffer
+        try:
+            is_enabled = self._io_audio_output.is_playback_enabled()
+        except Exception:
+            is_enabled = True
+
+        if not is_enabled:
+            outdata[:] = 0
+            return
+
         with self._io_audio_output.audio_lock:
             bytes_needed = frames * 2
             if len(self._io_audio_output.audio_buffer) < bytes_needed:
