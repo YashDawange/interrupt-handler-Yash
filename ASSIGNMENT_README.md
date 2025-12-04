@@ -1,5 +1,9 @@
 # Smart Interruption System for LiveKit Agents
 
+## Demo Video
+
+Watch the system in action: [View Demo Video](https://drive.google.com/file/d/1ZJxUHhLIZBuD_amN3qa6NDOK0CD6IzNp/view?usp=sharing)
+
 ## Overview
 
 This project implements a context-aware interruption filtering system for LiveKit voice agents. The agent distinguishes between passive backchannel feedback (e.g., "yeah", "okay", "hmm") and active interruption commands (e.g., "stop", "wait", "no") based on whether the agent is currently speaking or silent.
