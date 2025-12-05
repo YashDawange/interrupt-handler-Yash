@@ -56,6 +56,7 @@ class Agent:
         use_tts_aligned_transcript: NotGivenOr[bool] = NOT_GIVEN,
         min_endpointing_delay: NotGivenOr[float] = NOT_GIVEN,
         max_endpointing_delay: NotGivenOr[float] = NOT_GIVEN,
+        ignored_words: list[str] | None = None,
     ) -> None:
         tools = tools or []
         if type(self) is Agent:
@@ -86,6 +87,7 @@ class Agent:
         self._use_tts_aligned_transcript = use_tts_aligned_transcript
         self._min_endpointing_delay = min_endpointing_delay
         self._max_endpointing_delay = max_endpointing_delay
+        self._ignored_words = ignored_words
 
         if isinstance(mcp_servers, list) and len(mcp_servers) == 0:
             mcp_servers = None  # treat empty list as None (but keep NOT_GIVEN)
@@ -636,6 +638,19 @@ class Agent:
             RuntimeError: If the agent is not running
         """
         return self._get_activity_or_raise().session
+
+    @property
+    def ignored_words(self) -> list[str] | None:
+        """
+        Retrieves the list of words that should be ignored by the agent.
+
+        If this property was not set at Agent creation, but an ``AgentSession`` provides a value for
+        ignored words, the session's value will be used at runtime instead.
+
+        Returns:
+            NotGivenOr[list[str]]: An optional list of words to ignore.
+        """ 
+        return self._ignored_words
 
 
 TaskResult_T = TypeVar("TaskResult_T")

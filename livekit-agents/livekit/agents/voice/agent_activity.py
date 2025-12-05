@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import string
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -309,6 +310,14 @@ class AgentActivity(RecognitionHooks):
         )
 
         return use_aligned_transcript is True
+
+    @property
+    def ignored_words(self) -> list[str]:
+        return (
+            self._agent.ignored_words
+            if self._agent.ignored_words is not None
+            else self._session.options.ignored_words
+        )
 
     async def update_instructions(self, instructions: str) -> None:
         self._agent._instructions = instructions
@@ -1176,6 +1185,25 @@ class AgentActivity(RecognitionHooks):
 
         if (
             self.stt is not None
+            and self._audio_recognition is not None
+            and opt.ignored_words
+            and self._session.agent_state == "speaking"
+        ):
+            text = self._audio_recognition.current_transcript
+            if not text:
+                return
+
+            words = [w[0] for w in split_words(text)]
+            ignored = {w.lower() for w in opt.ignored_words}
+            clean_words = [w.strip(string.punctuation).lower() for w in words]
+            clean_words = [w for w in clean_words if w]
+
+            if clean_words and all(w in ignored for w in clean_words):
+                logger.debug(f"Ignoring interruption: {text}")
+                return
+
+        if (
+            self.stt is not None
             and opt.min_interruption_words > 0
             and self._audio_recognition is not None
         ):
@@ -1276,14 +1304,36 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
-        self._session._user_input_transcribed(
-            UserInputTranscribedEvent(
-                language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
-                is_final=True,
-                speaker_id=ev.alternatives[0].speaker_id,
-            ),
-        )
+        # Check for ignored words
+        opt = self._session.options
+        text = ev.alternatives[0].text
+        should_ignore = False
+        if (
+            opt.ignored_words
+            and self._session.agent_state == "speaking"
+            and text
+        ):
+            words = [w[0] for w in split_words(text)]
+            ignored = {w.lower() for w in opt.ignored_words}
+            clean_words = [w.strip(string.punctuation).lower() for w in words]
+            clean_words = [w for w in clean_words if w]
+
+            if clean_words and all(w in ignored for w in clean_words):
+                should_ignore = True
+                logger.debug(f"Ignoring final transcript: {text}")
+                if self._audio_recognition:
+                    self._audio_recognition._ignored_transcripts.add(text)
+
+        if not should_ignore:
+            self._session._user_input_transcribed(
+                UserInputTranscribedEvent(
+                    language=ev.alternatives[0].language,
+                    transcript=ev.alternatives[0].text,
+                    is_final=True,
+                    speaker_id=ev.alternatives[0].speaker_id,
+                ),
+            )
+        
         # agent speech might not be interrupted if VAD failed and a final transcript is received
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
@@ -1292,7 +1342,8 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            if not should_ignore:
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False
@@ -1353,6 +1404,17 @@ class AgentActivity(RecognitionHooks):
             )
 
             if self._session._closing:
+                # Check if this transcript should be ignored
+                if self._session.options.ignored_words:
+                    words = [w[0] for w in split_words(info.new_transcript)]
+                    ignored = {w.lower() for w in self._session.options.ignored_words}
+                    clean_words = [w.strip(string.punctuation).lower() for w in words]
+                    clean_words = [w for w in clean_words if w]
+
+                    if clean_words and all(w in ignored for w in clean_words):
+                        logger.debug(f"Ignoring end_of_turn (closing): {info.new_transcript}")
+                        return False
+
                 # add user input to chat context
                 user_message = llm.ChatMessage(
                     role="user",
@@ -1371,13 +1433,25 @@ class AgentActivity(RecognitionHooks):
             and self._current_speech is not None
             and self._current_speech.allow_interruptions
             and not self._current_speech.interrupted
-            and self._session.options.min_interruption_words > 0
-            and len(split_words(info.new_transcript, split_character=True))
-            < self._session.options.min_interruption_words
         ):
-            self._cancel_preemptive_generation()
-            # avoid interruption if the new_transcript is too short
-            return False
+            if self._session.options.ignored_words:
+                words = [w[0] for w in split_words(info.new_transcript)]
+                ignored = {w.lower() for w in self._session.options.ignored_words}
+                clean_words = [w.strip(string.punctuation).lower() for w in words]
+                clean_words = [w for w in clean_words if w]
+
+                if clean_words and all(w in ignored for w in clean_words):
+                    self._cancel_preemptive_generation()
+                    return False
+
+            if (
+                self._session.options.min_interruption_words > 0
+                and len(split_words(info.new_transcript, split_character=True))
+                < self._session.options.min_interruption_words
+            ):
+                self._cancel_preemptive_generation()
+                # avoid interruption if the new_transcript is too short
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
