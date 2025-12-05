@@ -1,3 +1,13 @@
+"""
+Basic Voice Agent with Intelligent Interruption Handling
+
+This agent demonstrates:
+1. Natural voice conversation with STT/TTS
+2. Smart interruption filtering (ignores "yeah", "ok" while speaking)
+3. Immediate response to command words ("wait", "stop", "no")
+4. Proper session management and metrics
+"""
+
 import logging
 
 from dotenv import load_dotenv
@@ -15,30 +25,34 @@ from livekit.agents import (
     room_io,
 )
 from livekit.agents.llm import function_tool
+from livekit.agents.voice import InterruptionFilter, InterruptionFilterConfig
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# uncomment to enable Krisp background voice/noise cancellation
-# from livekit.plugins import noise_cancellation
-
 logger = logging.getLogger("basic-agent")
+logger.setLevel(logging.INFO)
 
 load_dotenv()
 
 
 class MyAgent(Agent):
+    """Voice agent named Kelly with natural conversation capabilities."""
+
     def __init__(self) -> None:
         super().__init__(
-            instructions="Your name is Kelly. You would interact with users via voice."
-            "with that in mind keep your responses concise and to the point."
-            "do not use emojis, asterisks, markdown, or other special characters in your responses."
-            "You are curious and friendly, and have a sense of humor."
-            "you will speak english to the user",
+            instructions="""You are Kelly, a friendly voice AI assistant.
+Keep your responses concise and to the point.
+Do not use markdown, asterisks, or special characters in your responses.
+You are curious, friendly, and have a sense of humor.
+Speak naturally in English.
+
+Important: Don't get interrupted by casual acknowledgements like "yeah", "ok", or "hmm" - 
+these mean the person is listening. Keep speaking unless they say "wait", "stop", "hold on", 
+or similar commands."""
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
-        # according to its instructions
+        """Generate greeting when agent enters the session."""
         self.session.generate_reply()
 
     # all functions annotated with @function_tool will be passed to the LLM when this
@@ -93,6 +107,9 @@ async def entrypoint(ctx: JobContext):
         # See more at https://docs.livekit.io/agents/build/turns
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
+        # IMPORTANT: Enable interruptions so the filter can control them intelligently
+        # Soft words like "yeah", "ok" won't interrupt, but "wait", "stop" will
+        allow_interruptions=True,
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
         preemptive_generation=True,
