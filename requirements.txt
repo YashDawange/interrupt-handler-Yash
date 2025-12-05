@@ -1,0 +1,25 @@
+# LiveKit Agents - Intelligent Interruption Handling
+# Requirements file for the intelligent interruption handling implementation
+
+# Core LiveKit Agents framework with required plugins
+# Includes: OpenAI (LLM), Deepgram (STT), Cartesia (TTS), Silero (VAD), Turn Detector
+livekit-agents[openai,deepgram,cartesia,silero,turn-detector]>=1.0.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Note: The intelligent interruption handling feature does NOT require
+# any additional dependencies beyond the standard LiveKit Agents framework.
+# All functionality is implemented using existing framework utilities.
+
+# Optional: If you want to use other TTS/STT/LLM providers, install them:
+# livekit-agents[elevenlabs]  # For ElevenLabs TTS
+# livekit-agents[anthropic]   # For Claude LLM
+# livekit-agents[google]      # For Google STT/TTS/LLM
+# livekit-agents[azure]       # For Azure STT/TTS
+
+# Development dependencies (optional, for testing and development)
+# pytest>=7.0.0
+# pytest-asyncio>=0.25.0
+# mypy>=1.0.0
+# ruff>=0.1.0
