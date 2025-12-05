@@ -1,0 +1,23 @@
+# =============================================================================
+# REQUIRED ENVIRONMENT VARIABLES
+# =============================================================================
+# You need to set these environment variables or create a .env file:
+#
+# For OpenAI LLM:
+# OPENAI_API_KEY=your_openai_api_key_here
+#
+# For Deepgram Speech-to-Text:
+# DEEPGRAM_API_KEY=your_deepgram_api_key_here
+#
+# For Cartesia Text-to-Speech:
+# CARTESIA_API_KEY=your_cartesia_api_key_here
+#
+# For LiveKit Server (required for dev/production mode):
+# LIVEKIT_URL=wss://your-project-name.livekit.cloud
+# LIVEKIT_API_KEY=your_livekit_api_key
+# LIVEKIT_API_SECRET=your_livekit_api_secret
+#
+# Optional: Custom interruption settings for voice agents:
+# LIVEKIT_IGNORE_WORDS="yeah?,ok(ay)?,h+m+,right,uh-?huh,aha,yep,uh+,um+,mm-?hmm+,yes,sure,got it,alright,mhm+,yup,correct,gotcha,roger,indeed,exactly,absolutely,understood,see,true,agreed,fine,good,nice,great,wow,oh"
+LIVEKIT_INTERRUPT_WORDS="stop,wait,hold,cancel,no,pause"
+# =============================================================================
