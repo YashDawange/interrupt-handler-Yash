@@ -214,6 +214,46 @@ async def test_no_availability() -> None:
 
 ```
 
+## Intelligent Interruption Handling
+
+LiveKit Agents now includes intelligent interruption handling that distinguishes between passive acknowledgements (backchanneling) and active interruptions. This prevents the agent from stopping when users say "yeah", "ok", or "hmm" while the agent is speaking.
+
+### How It Works
+
+The intelligent interruption handler uses context-aware logic:
+
+- **When agent is speaking:**
+  - Backchanneling words like "yeah", "ok", "hmm", "uh-huh" are **ignored** - the agent continues speaking
+  - Interruption commands like "wait", "stop", "no" **trigger interruption** - the agent stops immediately
+  - Mixed input like "Yeah wait a second" is treated as an interruption (contains a command)
+
+- **When agent is silent:**
+  - All user input, including "yeah" or "ok", is treated as valid input and the agent responds normally
+
+### Configuration
+
+The interruption handler is automatically enabled. You can customize it via environment variables:
+
+```bash
+# Customize words to ignore (comma-separated)
+LIVEKIT_AGENT_IGNORE_WORDS="yeah,ok,hmm,right,sure"
+
+# Customize interruption commands (comma-separated)
+LIVEKIT_AGENT_INTERRUPTION_COMMANDS="wait,stop,no,hold on"
+```
+
+### Example
+
+See [`examples/voice_agents/intelligent_interruption_agent.py`](examples/voice_agents/intelligent_interruption_agent.py) for a complete example demonstrating the feature.
+
+**To run locally:**
+```bash
+cd examples/voice_agents
+python intelligent_interruption_agent.py console
+```
+
+See [`examples/voice_agents/README_INTERRUPTION.md`](examples/voice_agents/README_INTERRUPTION.md) for detailed setup and testing instructions.
+
 ## Examples
 
 <table>
@@ -235,6 +275,13 @@ async def test_no_availability() -> None:
 </tr>
 
 <tr>
+<td width="50%">
+<h3>🧠 Intelligent interruption handling</h3>
+<p>Context-aware interruption handling that ignores backchanneling words.</p>
+<p>
+<a href="examples/voice_agents/intelligent_interruption_agent.py">Code</a>
+</p>
+</td>
 <td width="50%">
 <h3>🎵 Background audio</h3>
 <p>Background ambient and thinking audio to improve realism.</p>
