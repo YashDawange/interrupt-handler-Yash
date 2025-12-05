@@ -1,0 +1,16 @@
+# Smart Interruption Agent - Dependencies
+# ========================================
+
+# Core LiveKit Agents Framework
+livekit-agents>=1.0.0
+
+# LiveKit Plugins
+livekit-plugins-openai>=0.1.0
+livekit-plugins-deepgram>=0.1.0
+livekit-plugins-silero>=0.1.0
+
+# Alternative: Install all at once
+# pip install "livekit-agents[openai,silero,deepgram]~=1.0"
+
+# No additional libraries needed - solution uses only standard library
+# and LiveKit framework components
