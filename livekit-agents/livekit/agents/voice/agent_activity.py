@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .backchannel_filter import BackchannelFilter
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -163,6 +164,14 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+        # Initialize backchannel filter if enabled
+        if self._session.options.enable_backchannel_filter:
+            self._backchannel_filter = BackchannelFilter(
+                backchannel_words=self._session.options.backchannel_words
+            )
+        else:
+            self._backchannel_filter = None
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1174,6 +1183,31 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Check if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
+        # Apply backchannel filter if enabled and agent is speaking
+        if (
+            self._backchannel_filter is not None
+            and agent_is_speaking
+            and self.stt is not None
+            and self._audio_recognition is not None
+        ):
+            text = self._audio_recognition.current_transcript
+            if text and self._backchannel_filter.should_ignore_interruption(
+                text, agent_is_speaking=True
+            ):
+                # This is a backchannel-only input, ignore the interruption
+                logger.debug(
+                    "ignoring backchannel interruption",
+                    extra={"transcript": text, "agent_speaking": True},
+                )
+                return
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
@@ -1188,11 +1222,7 @@ class AgentActivity(RecognitionHooks):
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
-        if (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
-        ):
+        if agent_is_speaking:
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1365,12 +1395,35 @@ class AgentActivity(RecognitionHooks):
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
 
+        # Check if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and self._current_speech.allow_interruptions
+            and not self._current_speech.interrupted
+        )
+
+        # Apply backchannel filter if enabled and agent is speaking
+        if (
+            self._backchannel_filter is not None
+            and agent_is_speaking
+            and self.stt is not None
+            and self._turn_detection != "manual"
+        ):
+            if self._backchannel_filter.should_ignore_interruption(
+                info.new_transcript, agent_is_speaking=True
+            ):
+                # This is a backchannel-only input, ignore the interruption
+                logger.debug(
+                    "ignoring backchannel interruption at end of turn",
+                    extra={"transcript": info.new_transcript, "agent_speaking": True},
+                )
+                self._cancel_preemptive_generation()
+                return False
+
         if (
             self.stt is not None
             and self._turn_detection != "manual"
-            and self._current_speech is not None
-            and self._current_speech.allow_interruptions
-            and not self._current_speech.interrupted
+            and agent_is_speaking
             and self._session.options.min_interruption_words > 0
             and len(split_words(info.new_transcript, split_character=True))
             < self._session.options.min_interruption_words
