@@ -18,8 +18,35 @@ Environment Variables Required:
 import asyncio
 import logging
 import os
+import sys
+from pathlib import Path
 
-from dotenv import load_dotenv
+# Optional dependency: python-dotenv. Fallback to a minimal loader if missing.
+try:  # pragma: no cover
+    from dotenv import load_dotenv  # type: ignore
+except ImportError:  # pragma: no cover
+    def load_dotenv(dotenv_path: str = ".env") -> None:
+        """Minimal .env loader: key=value per line, ignores comments/blank lines."""
+        if not os.path.exists(dotenv_path):
+            return
+        with open(dotenv_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if "=" not in stripped:
+                    continue
+                key, value = stripped.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+# Make local livekit-agents importable without installing the package
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LIVEKIT_AGENTS_PATH = REPO_ROOT / "livekit-agents"
+if str(LIVEKIT_AGENTS_PATH) not in sys.path:
+    sys.path.insert(0, str(LIVEKIT_AGENTS_PATH))
+
 from livekit import agents, rtc
 from livekit.agents import JobContext, WorkerOptions, cli
 from livekit.plugins import deepgram, openai, silero

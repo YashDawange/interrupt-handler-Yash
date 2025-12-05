@@ -15,14 +15,31 @@ from opentelemetry._logs.severity import SeverityNumber
 from opentelemetry.exporter.otlp.proto.http import Compression
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk._logs import (
-    LogData,
-    LoggerProvider,
-    LoggingHandler,
-    LogRecord,
-    LogRecordProcessor,
-)
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+
+# Handle version compatibility for opentelemetry SDK
+try:
+    from opentelemetry.sdk._logs import (
+        LogData,
+        LoggerProvider,
+        LoggingHandler,
+        LogRecord,
+        LogRecordProcessor,
+    )
+except ImportError:
+    # Newer versions don't export these directly
+    LogData = None
+    from opentelemetry.sdk._logs import (
+        LoggerProvider,
+        LoggingHandler,
+        LogRecordProcessor,
+    )
+    ReadableLogRecord = None
+
+try:
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+except ImportError:
+    # Fallback for version compatibility
+    BatchLogRecordProcessor = None
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -77,7 +94,7 @@ class _MetadataLogProcessor(LogRecordProcessor):
     def __init__(self, metadata: dict[str, AttributeValue]) -> None:
         self._metadata = metadata
 
-    def emit(self, log_data: LogData) -> None:
+    def emit(self, log_data: Any) -> None:
         if log_data.log_record.attributes:
             log_data.log_record.attributes.update(self._metadata)  # type: ignore
             log_data.log_record.attributes.update(  # type: ignore
@@ -86,7 +103,7 @@ class _MetadataLogProcessor(LogRecordProcessor):
         else:
             log_data.log_record.attributes = self._metadata
 
-    def on_emit(self, log_data: LogData) -> None:
+    def on_emit(self, log_data: Any) -> None:
         if log_data.log_record.attributes:
             log_data.log_record.attributes.update(self._metadata)  # type: ignore
         else:
@@ -156,7 +173,8 @@ def _setup_cloud_tracer(*, room_id: str, job_id: str, cloud_hostname: str) -> No
         compression=otlp_compression,
     )
     logger_provider.add_log_record_processor(_MetadataLogProcessor(metadata))
-    logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+    if BatchLogRecordProcessor is not None:
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
     handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
 
     root = logging.getLogger()
