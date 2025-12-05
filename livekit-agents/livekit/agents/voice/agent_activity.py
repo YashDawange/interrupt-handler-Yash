@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interruption_filter import InterruptionFilter
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -163,6 +164,11 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+        
+        # Initialize intelligent interruption filter
+        self._interruption_filter = InterruptionFilter(
+            enabled=self._session.options.enable_backchannel_filter
+        )
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1174,6 +1180,35 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Check if we have a transcript to evaluate
+        transcript = ""
+        if self.stt is not None and self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+
+        # Apply intelligent interruption filtering
+        # Determine if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+        
+        # Use the interruption filter to decide if we should interrupt
+        if agent_is_speaking and transcript:
+            should_interrupt = self._interruption_filter.should_interrupt(
+                transcript=transcript,
+                agent_is_speaking=True
+            )
+            
+            if not should_interrupt:
+                # This is a backchannel word - ignore the interruption
+                logger.debug(
+                    "Ignoring backchannel input while agent is speaking",
+                    extra={"transcript": transcript}
+                )
+                return
+
+        # Original min_interruption_words check (kept for backward compatibility)
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
