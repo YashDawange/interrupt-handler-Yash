@@ -15,8 +15,12 @@ from livekit.agents import (
     room_io,
 )
 from livekit.agents.llm import function_tool
-from livekit.plugins import silero
+from livekit.plugins import silero, openai, minimal
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+
+# Intelligent interruption agent with advanced interruption handling
+from intelligent_agent import IntelligentInterruptionAgent
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -102,6 +106,33 @@ async def entrypoint(ctx: JobContext):
         false_interruption_timeout=1.0,
     )
 
+    # session = AgentSession(
+    #     # Keep OpenAI models
+    #     stt=openai.STT(),
+    #     llm=openai.LLM(model="gpt-4o-mini"),
+    #     tts=openai.TTS(),
+
+    #     # --- CHANGE: REMOVE VAD & Turn Detector ---
+    #     # turn_detection=MultilingualModel(),  <-- DELETE or COMMENT OUT
+    #     # vad=ctx.proc.userdata["vad"],        <-- DELETE or COMMENT OUT
+
+    #     # --- REPLACE WITH: Simple Server VAD ---
+    #     # This tells LiveKit to use the VAD from the STT stream itself (OpenAI Whisper handles this)
+    #     turn_detection=None, 
+    #     vad=None,
+
+    #     # Keep the rest
+    #     preemptive_generation=True,
+    # )
+
+    # session = AgentSession(
+    #     stt=minimal.STT(),
+    #     llm=minimal.LLM(),
+    #     tts=minimal.TTS(),
+    #     turn_detection=None, # Disable complex turn detection for stability
+    #     vad=None,            # Disable VAD to avoid the ONNX crash
+    # )
+
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
 
@@ -117,14 +148,24 @@ async def entrypoint(ctx: JobContext):
     # shutdown callbacks are triggered when the session is over
     ctx.add_shutdown_callback(log_usage)
 
+    # await session.start(
+    #     agent=MyAgent(),
+    #     room=ctx.room,
+    #     room_options=room_io.RoomOptions(
+    #         audio_input=room_io.AudioInputOptions(
+    #             # uncomment to enable the Krisp BVC noise cancellation
+    #             # noise_cancellation=noise_cancellation.BVC(),
+    #         ),
+    #     ),
+    # )
     await session.start(
-        agent=MyAgent(),
+        agent=IntelligentInterruptionAgent(
+             instructions="Your name is Kelly...", 
+             # ... other instructions ...
+        ),
         room=ctx.room,
         room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                # uncomment to enable the Krisp BVC noise cancellation
-                # noise_cancellation=noise_cancellation.BVC(),
-            ),
+            audio_input=room_io.AudioInputOptions(),
         ),
     )
 
