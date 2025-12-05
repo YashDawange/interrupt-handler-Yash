@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import string
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -309,6 +310,14 @@ class AgentActivity(RecognitionHooks):
         )
 
         return use_aligned_transcript is True
+
+    @property
+    def ignored_words(self) -> list[str]:
+        return (
+            self._agent.ignored_words
+            if self._agent.ignored_words is not None
+            else self._session.options.ignored_words
+        )
 
     async def update_instructions(self, instructions: str) -> None:
         self._agent._instructions = instructions
@@ -1276,14 +1285,36 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
-        self._session._user_input_transcribed(
-            UserInputTranscribedEvent(
-                language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
-                is_final=True,
-                speaker_id=ev.alternatives[0].speaker_id,
-            ),
-        )
+        # Check for ignored words
+        opt = self._session.options
+        text = ev.alternatives[0].text
+        should_ignore = False
+        if (
+            opt.ignored_words
+            and self._session.agent_state == "speaking"
+            and text
+        ):
+            words = [w[0] for w in split_words(text)]
+            ignored = {w.lower() for w in opt.ignored_words}
+            clean_words = [w.strip(string.punctuation).lower() for w in words]
+            clean_words = [w for w in clean_words if w]
+
+            if clean_words and all(w in ignored for w in clean_words):
+                should_ignore = True
+                logger.debug(f"Ignoring final transcript: {text}")
+                if self._audio_recognition:
+                    self._audio_recognition._ignored_transcripts.add(text)
+
+        if not should_ignore:
+            self._session._user_input_transcribed(
+                UserInputTranscribedEvent(
+                    language=ev.alternatives[0].language,
+                    transcript=ev.alternatives[0].text,
+                    is_final=True,
+                    speaker_id=ev.alternatives[0].speaker_id,
+                ),
+            )
+        
         # agent speech might not be interrupted if VAD failed and a final transcript is received
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
@@ -1292,7 +1323,8 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            if not should_ignore:
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False

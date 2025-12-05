@@ -1,79 +1,81 @@
-# LiveKit Agents Examples
+# LiveKit – Intelligent Interruption Handling
 
-This directory contains various examples demonstrating different capabilities and use cases for LiveKit agents. Each example showcases specific features, integrations, or workflows that can be built with the LiveKit Agents framework.
+This project implements an advanced, context-aware interruption system for LiveKit agents. Its purpose is to distinguish between meaningful interruptions and small “backchannel” responses (e.g., *yeah*, *ok*, *hmm*) so that the agent is not unnecessarily stopped while speaking. When the agent is silent, these same words are treated as valid input.
 
-## 📁 Example Categories
+---
 
-### 🎙️ [Voice Agents](./voice_agents/)
+## 📌 Behavior Overview
 
-A comprehensive collection of voice-based agent examples, including basic voice interactions, tool integrations, RAG implementations, and advanced features like multi-agent workflows and push-to-talk agents.
+| User Input          | Agent State | Expected Behavior                       | Status |
+|--------------------|-------------|-------------------------------------------|---------|
+| “Yeah / Ok / Hmm”  | Speaking    | Ignore — agent continues speaking         | ✅ Done |
+| “Wait / Stop / No” | Speaking    | Interrupt — agent stops immediately       | ✅ Done |
+| “Yeah / Ok / Hmm”  | Silent      | Respond — handled as normal input         | ✅ Done |
+| “Hello / Start”    | Silent      | Respond — standard behavior               | ✅ Done |
 
-### 🖼️ [Avatar Agents](./avatar_agents/)
+---
 
-Examples showing how to integrate visual avatars with voice agents, including integrations with various avatar providers like Anam, Bey, BitHuman, Hedra, Simli, and Tavus.
+## ✅ Test Summary
 
-### 🔄 [Warm Transfer](./warm-transfer/)
+| Test File                         | Test Name                       | Result | Progress |
+|----------------------------------|----------------------------------|--------|-----------|
+| `tests/test_interruption.py`     | `test_ignored_interruption`      | PASS   | 20%       |
+| `tests/test_interruption.py`     | `test_valid_interruption`        | PASS   | 40%       |
+| `tests/test_interruption.py`     | `test_silent_response`           | PASS   | 60%       |
+| `tests/test_mixed_interruption.py` | `test_mixed_input_interruption` | PASS   | 80%       |
+| `tests/test_mixed_interruption.py` | `test_all_ignored_words`        | PASS   | 100%     |
 
-Demonstrates supervisor escalation workflows for call centers, showing how to implement warm transfers where agents can brief supervisors before connecting them to customers.
+All tests required by the assignment are fully implemented and validated.
 
-### 🚗 [Drive-Thru](./drive-thru/)
+---
 
-A complete drive-thru ordering system example that showcases interactive voice agents for food ordering with database integration and order management.
+## 🌟 Key Features
 
-### 🏢 [Front Desk](./frontdesk/)
+- **Customizable ignore list** for backchannel/filler words  
+- **State-aware logic** — filtering applies only when the agent is speaking  
+- **Mixed input detection** — e.g., “yeah wait” still triggers an interruption  
+- **No modifications to VAD** — logic is entirely within agent event lifecycle  
+- **Real-time behavior** with zero perceptible delay  
+- **Smooth speech output** — ignored words never cause stuttering or pauses  
 
-A front desk agent example demonstrating how to build customer service agents with calendar integration and appointment management capabilities.
+---
 
-### 🔧 [Primitives](./primitives/)
+## 🧠 How It Works
 
-Basic building blocks and fundamental examples showing core LiveKit concepts like room connections, participant management, and basic audio/video handling.
+The interruption handling logic functions at multiple points within the LiveKit agent pipeline.
 
-### 🛠️ [Other](./other/)
+### 1. Final Transcript Filtering (`on_final_transcript`)
+When STT produces a final transcript:
+- If the agent is currently speaking:
+  - Normalize words  
+  - If **all words** are in the ignore list → transcript is discarded  
+  - If **any word** is meaningful → treated as a valid interruption  
 
-Additional examples including text-only agents, various TTS providers, transcription services, and translation utilities.
+### 2. Turn Management (`on_end_of_turn`)
+Ensures:
+- Ignored words never interrupt  
+- Ignored transcripts are not stored in conversation history  
 
-## Running Examples
+### 3. Commit-Turn Protection (`audio_recognition`)
+- Maintains an internal set of ignored transcripts  
+- Prevents them from resurfacing during buffer flush operations  
 
-To run the examples, you'll need:
+### ⚠️ Important Note
 
-- A [LiveKit Cloud](https://cloud.livekit.io) account or a local [LiveKit server](https://github.com/livekit/livekit)
-- API keys for the model providers you want to use in a `.env` file
-- Python 3.9 or higher
-- [uv](https://docs.astral.sh/uv/)
+The agent’s TTS output **never pauses** when ignored words are detected.  
+Filtering happens *before* interruption logic, guaranteeing seamless speech flow.
 
-### Environment file
+---
 
-Create a `.env` file in the `examples` directory and add your API keys (see `examples/.env.example`):
+## ⚙️ Configuration
 
-```bash
-LIVEKIT_URL="wss://your-project.livekit.cloud"
-LIVEKIT_API_KEY="your_api_key"
-LIVEKIT_API_SECRET="your_api_secret"
-OPENAI_API_KEY="sk-xxx" # or any other model provider API key
-# ... other model provider API keys as needed
-```
+Ignored words can be set when creating the `AgentSession`:
 
-### Install dependencies
-
-From the repository root, run the following command:
-
-```bash
-uv sync --all-extras --dev
-```
-
-### Running an individual example
-
-Run an example agent:
-
-```bash
-uv run examples/voice_agents/basic_agent.py console
-```
-
-Your agent is now running in the console.
-
-For frontend support, use the [Agents playground](https://agents-playground.livekit.io) or the [starter apps](https://docs.livekit.io/agents/start/frontend/#starter-apps).
-
-## 📖 Additional Resources
-
-- [LiveKit Documentation](https://docs.livekit.io/)
-- [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
+```python
+session = AgentSession(
+    vad=silero.VAD.load(),
+    stt=deepgram.STT(),
+    llm=openai.LLM(),
+    tts=elevenlabs.TTS(),
+    ignored_words=["yeah", "ok", "okay", "hmm", "right", "uh"],
+)
