@@ -53,6 +53,7 @@ from .audio_recognition import (
     _EndOfTurnInfo,
     _PreemptiveGenerationInfo,
 )
+from .interruption_filter import InterruptionFilter
 from .events import (
     AgentFalseInterruptionEvent,
     ErrorEvent,
@@ -113,6 +114,9 @@ class AgentActivity(RecognitionHooks):
         self._audio_recognition: AudioRecognition | None = None
         self._lock = asyncio.Lock()
         self._tool_choice: llm.ToolChoice | None = None
+
+        # Initialize intelligent interruption filter for handling backchanneling
+        self._interruption_filter = InterruptionFilter()
 
         self._started = False
         self._closed = False
@@ -1364,6 +1368,29 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        # Apply intelligent interruption filtering for backchanneling handling
+        # This distinguishes between passive acknowledgements and active interruptions
+        agent_speaking = self._current_speech is not None and not self._current_speech.interrupted
+        should_interrupt, filtered_transcript = self._interruption_filter.process(
+            info.new_transcript, agent_speaking=agent_speaking
+        )
+
+        if not should_interrupt:
+            # This is a soft acknowledgement while the agent is speaking - ignore it
+            logger.debug(
+                "ignoring soft acknowledgement while agent is speaking",
+                extra={
+                    "original_transcript": info.new_transcript,
+                    "agent_speaking": agent_speaking,
+                },
+            )
+            self._cancel_preemptive_generation()
+            return False
+
+        # Update the transcript in info if filtered (for cases where modification might be needed)
+        if filtered_transcript != info.new_transcript:
+            info.new_transcript = filtered_transcript
 
         if (
             self.stt is not None
