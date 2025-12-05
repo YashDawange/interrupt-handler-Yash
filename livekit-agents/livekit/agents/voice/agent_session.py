@@ -78,6 +78,7 @@ class AgentSessionOptions:
     discard_audio_if_uninterruptible: bool
     min_interruption_duration: float
     min_interruption_words: int
+    interrupt_ignore_words: list[str]
     min_endpointing_delay: float
     max_endpointing_delay: float
     max_tool_steps: int
@@ -147,6 +148,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         discard_audio_if_uninterruptible: bool = True,
         min_interruption_duration: float = 0.5,
         min_interruption_words: int = 0,
+        interrupt_ignore_words: Sequence[str] = (),
         min_endpointing_delay: float = 0.5,
         max_endpointing_delay: float = 3.0,
         max_tool_steps: int = 3,
@@ -271,6 +273,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             discard_audio_if_uninterruptible=discard_audio_if_uninterruptible,
             min_interruption_duration=min_interruption_duration,
             min_interruption_words=min_interruption_words,
+            interrupt_ignore_words=list(interrupt_ignore_words),
             min_endpointing_delay=min_endpointing_delay,
             max_endpointing_delay=max_endpointing_delay,
             max_tool_steps=max_tool_steps,
