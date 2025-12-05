@@ -40,6 +40,7 @@ from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils.misc import is_given
 from ._utils import _set_participant_attributes
+from .backchanneling_filter import BackchannelingFilter
 from .agent import (
     Agent,
     ModelSettings,
@@ -125,6 +126,9 @@ class AgentActivity(RecognitionHooks):
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
+
+        # backchanneling filter for intelligent interruption handling
+        self._backchanneling_filter = BackchannelingFilter()
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
@@ -1241,6 +1245,27 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
+            # Apply backchanneling filter: check if this is just passive acknowledgment
+            # when agent is speaking
+            agent_is_speaking = (
+                self._current_speech is not None and not self._current_speech.interrupted
+            )
+            
+            if (
+                self.stt is not None
+                and self._audio_recognition is not None
+                and agent_is_speaking
+            ):
+                # Get current transcript from STT
+                current_text = self._audio_recognition.current_transcript.strip()
+                
+                # Use backchanneling filter to check if this is just passive acknowledgment
+                if not self._backchanneling_filter.should_interrupt_agent(
+                    current_text, agent_is_speaking=True
+                ):
+                    # This is just backchanneling (e.g., "yeah", "ok"), ignore it
+                    return
+            
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
@@ -1261,6 +1286,20 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # Apply backchanneling filter
+            agent_is_speaking = (
+                self._current_speech is not None and not self._current_speech.interrupted
+            )
+            current_text = ev.alternatives[0].text.strip()
+            
+            # Check if this should interrupt the agent
+            if not self._backchanneling_filter.should_interrupt_agent(
+                current_text, agent_is_speaking=agent_is_speaking
+            ):
+                # If agent is speaking and this is just backchanneling, don't interrupt
+                if agent_is_speaking:
+                    return
+
             self._interrupt_by_audio_activity()
 
             if (
@@ -1292,6 +1331,23 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # Apply backchanneling filter
+            agent_is_speaking = (
+                self._current_speech is not None and not self._current_speech.interrupted
+            )
+            current_text = ev.alternatives[0].text.strip()
+            
+            # Check if this should interrupt the agent
+            if not self._backchanneling_filter.should_interrupt_agent(
+                current_text, agent_is_speaking=agent_is_speaking
+            ):
+                # If agent is speaking and this is just backchanneling, don't interrupt
+                if agent_is_speaking:
+                    self._interrupt_paused_speech_task = asyncio.create_task(
+                        self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
+                    )
+                    return
+
             self._interrupt_by_audio_activity()
 
             if (
