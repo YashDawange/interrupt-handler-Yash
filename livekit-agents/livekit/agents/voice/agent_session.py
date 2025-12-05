@@ -89,6 +89,8 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    enable_backchannel_filter: bool
+    backchannel_words: Sequence[str] | None
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +161,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        enable_backchannel_filter: bool = True,
+        backchannel_words: NotGivenOr[Sequence[str] | None] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +249,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            enable_backchannel_filter (bool): Whether to filter out backchannel acknowledgments
+                (e.g., "yeah", "ok", "hmm") when the agent is speaking. When enabled, these
+                backchannels will not interrupt the agent, but real commands (e.g., "stop", "wait")
+                will still interrupt. Default ``True``.
+            backchannel_words (Sequence[str] | None, optional): Custom list of backchannel words/phrases
+                to ignore when agent is speaking. If None, uses a default list. Only used if
+                ``enable_backchannel_filter`` is True.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -285,7 +296,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             ),
             preemptive_generation=preemptive_generation,
             ivr_detection=ivr_detection,
-            use_tts_aligned_transcript=use_tts_aligned_transcript
+            use_tts_aligned_transcript=use_tts_aligned_transcript,
+            enable_backchannel_filter=enable_backchannel_filter,
+            backchannel_words=backchannel_words if is_given(backchannel_words) else None,
             if is_given(use_tts_aligned_transcript)
             else None,
         )
