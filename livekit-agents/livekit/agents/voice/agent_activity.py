@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import re
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -1166,6 +1167,62 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
+    ###Added by me
+    def _should_ignore_interruption(self, transcript: str) -> bool:
+        """
+        Check if an interruption should be ignored based on transcript content.
+        
+        Returns True if the transcript contains only filler words (should ignore),
+        False if it contains interrupt words or other meaningful content (should interrupt).
+        
+        Args:
+            transcript: The user's speech transcript text
+            
+        Returns:
+            True if should ignore (only filler words), False if should interrupt
+        """
+        if not transcript or not transcript.strip():
+            # Empty or whitespace-only transcripts should be ignored
+            return True
+        
+        opt = self._session.options
+        ignore_words = opt.ignore_words or []
+        interrupt_words = opt.interrupt_words or []
+        
+        # Normalize transcript: lowercase, strip punctuation for matching
+        normalized = transcript.lower().strip()
+        
+        # Remove punctuation for word matching (keep hyphens for words like "uh-huh")
+        # Split on word boundaries
+        words = split_words(normalized, split_character=True)
+        
+        if not words:
+            return True
+        
+        # Check if transcript contains any interrupt words
+        # Use case-insensitive word boundary matching
+        for interrupt_word in interrupt_words:
+            # Create regex pattern with word boundaries
+            pattern = r'\b' + re.escape(interrupt_word.lower()) + r'\b'
+            if re.search(pattern, normalized):
+                # Contains interrupt word - should interrupt
+                return False
+        
+        # Check if all words are in the ignore list
+        ignore_set = {word.lower() for word in ignore_words}
+        # Filter out empty/whitespace words
+        meaningful_words = [word for word in words if word.strip()]
+        
+        if not meaningful_words:
+            # No meaningful words (all empty/whitespace) - ignore
+            return True
+        
+        all_ignored = all(word.lower() in ignore_set for word in meaningful_words)
+        
+        # If all words are ignored, return True (should ignore)
+        # Otherwise, return False (should interrupt - contains meaningful content)
+        return all_ignored
+
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
@@ -1173,6 +1230,29 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
             return
+
+        ###Added by me
+        # Check if agent is currently speaking
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
+        # If agent is speaking, check transcript before interrupting
+        if agent_is_speaking and self.stt is not None and self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+            
+            # If transcript is available, check if we should ignore
+            if transcript and transcript.strip():
+                if self._should_ignore_interruption(transcript):
+                    # Transcript contains only filler words - ignore the interruption
+                    return
+                # Transcript contains interrupt words or meaningful content - proceed with interruption
+            else:
+                # Transcript not available yet (VAD fired before STT)
+                # Defer to STT handlers - they will check transcript when available
+                return
 
         if (
             self.stt is not None
@@ -1188,11 +1268,8 @@ class AgentActivity(RecognitionHooks):
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
-        if (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
-        ):
+        ###Added by me
+        if agent_is_speaking:
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1261,6 +1338,21 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            ###Added by me
+            # Check if agent is speaking and if transcript should be ignored
+            agent_is_speaking = (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            )
+            
+            if agent_is_speaking:
+                # Check transcript directly from the event before interrupting
+                transcript_text = ev.alternatives[0].text
+                if transcript_text and self._should_ignore_interruption(transcript_text):
+                    # Transcript contains only filler words - ignore the interruption
+                    return
+            
             self._interrupt_by_audio_activity()
 
             if (
@@ -1292,6 +1384,22 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            ###Added by me
+            # Check if agent is speaking and if transcript should be ignored
+            agent_is_speaking = (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            )
+            
+            if agent_is_speaking and ev.alternatives[0].text:
+                # Check transcript directly from the event before interrupting
+                transcript_text = ev.alternatives[0].text
+                if transcript_text and self._should_ignore_interruption(transcript_text):
+                    # Transcript contains only filler words - ignore the interruption
+                    # Don't interrupt when agent is speaking and user only said filler words
+                    return
+            
             self._interrupt_by_audio_activity()
 
             if (
