@@ -106,7 +106,7 @@ def run_test(name: str, tests: list[tuple[str, bool, bool]]) -> bool:
     for transcript, agent_speaking, expected in tests:
         result = filter.should_interrupt(transcript, agent_is_speaking=agent_speaking)
         passed = result == expected
-        status = "✓" if passed else "✗"
+        status = "[PASS]" if passed else "[FAIL]"
         print(f"  {status} '{transcript}' (agent_speaking={agent_speaking}): {result} (expected {expected})")
         if not passed:
             all_passed = False
@@ -249,9 +249,9 @@ def main():
     
     print("\n" + "=" * 70)
     if all_tests_passed:
-        print("✓ ALL TESTS PASSED")
+        print("[SUCCESS] ALL TESTS PASSED")
     else:
-        print("✗ SOME TESTS FAILED")
+        print("[FAILURE] SOME TESTS FAILED")
     print("=" * 70)
     
     return all_tests_passed
