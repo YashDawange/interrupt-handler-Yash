@@ -89,6 +89,8 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    ignore_words: list[str] | None ###Added by me
+    interrupt_words: list[str] | None ###Added by me
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +161,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        ignore_words: NotGivenOr[list[str] | None] = NOT_GIVEN, ###Added by me
+        interrupt_words: NotGivenOr[list[str] | None] = NOT_GIVEN, ###Added by me
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +249,12 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            ignore_words (list[str] | None, optional): List of filler words to ignore when agent
+                is speaking (e.g., "yeah", "ok", "hmm"). If None, uses default list.
+                Default ``None`` (uses default: ['yeah', 'ok', 'okay', 'hmm', 'uh-huh', 'right', 'aha', 'yep', 'mm-hmm']).
+            interrupt_words (list[str] | None, optional): List of words that should always
+                interrupt agent speech (e.g., "wait", "stop", "no"). If None, uses default list.
+                Default ``None`` (uses default: ['wait', 'stop', 'no', 'halt', 'pause']).
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -266,6 +276,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # This is the "global" chat_context, it holds the entire conversation history
         self._chat_ctx = ChatContext.empty()
+        
+        # Default ignore and interrupt word lists
+        default_ignore_words = ['yeah', 'ok', 'okay', 'hmm', 'uh-huh', 'right', 'aha', 'yep', 'mm-hmm'] ###Added by me
+        default_interrupt_words = ['wait', 'stop', 'no', 'halt', 'pause'] ###Added by me
+        
         self._opts = AgentSessionOptions(
             allow_interruptions=allow_interruptions,
             discard_audio_if_uninterruptible=discard_audio_if_uninterruptible,
@@ -288,6 +303,14 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            ###Added by me
+            ignore_words=(
+                ignore_words if is_given(ignore_words) else default_ignore_words
+            ),
+            ###Added by me
+            interrupt_words=(
+                interrupt_words if is_given(interrupt_words) else default_interrupt_words
+            ),
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
