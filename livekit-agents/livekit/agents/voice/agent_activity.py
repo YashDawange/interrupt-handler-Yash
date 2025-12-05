@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import string
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -1185,6 +1186,24 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        if (
+            self.stt is not None
+            and self._audio_recognition is not None
+            and opt.interrupt_ignore_words
+        ):
+            text = self._audio_recognition.current_transcript
+            if not text:
+                return
+
+            clean_text = text.lower().translate(str.maketrans("", "", string.punctuation))
+            words = clean_text.split()
+            if not words:
+                return
+
+            ignore_set = {w.lower() for w in opt.interrupt_ignore_words}
+            if all(w in ignore_set for w in words):
+                return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1371,13 +1390,23 @@ class AgentActivity(RecognitionHooks):
             and self._current_speech is not None
             and self._current_speech.allow_interruptions
             and not self._current_speech.interrupted
-            and self._session.options.min_interruption_words > 0
-            and len(split_words(info.new_transcript, split_character=True))
-            < self._session.options.min_interruption_words
         ):
-            self._cancel_preemptive_generation()
-            # avoid interruption if the new_transcript is too short
-            return False
+            if self._session.options.interrupt_ignore_words:
+                clean_text = info.new_transcript.lower().translate(str.maketrans("", "", string.punctuation))
+                words = clean_text.split()
+                ignore_set = {w.lower() for w in self._session.options.interrupt_ignore_words}
+                if words and all(w in ignore_set for w in words):
+                    self._cancel_preemptive_generation()
+                    return False
+
+            if (
+                self._session.options.min_interruption_words > 0
+                and len(split_words(info.new_transcript, split_character=True))
+                < self._session.options.min_interruption_words
+            ):
+                self._cancel_preemptive_generation()
+                # avoid interruption if the new_transcript is too short
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
