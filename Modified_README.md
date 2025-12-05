@@ -59,10 +59,15 @@ How to Run
 1.Create a .env file with:
 
 LIVEKIT_URL=
+
 LIVEKIT_API_KEY=
+
 LIVEKIT_API_SECRET=
+
 OPENAI_API_KEY=
+
 DEEPGRAM_API_KEY=
+
 CARTESIA_API_KEY=
 
 2.Run the agent:
