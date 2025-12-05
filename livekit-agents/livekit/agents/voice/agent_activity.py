@@ -46,6 +46,8 @@ from .agent import (
     _get_activity_task_info,
     _set_activity_task_info,
 )
+from .agent_state import AgentState
+from .interrupt_handler import InterruptHandler
 from .audio_recognition import (
     AudioRecognition,
     RecognitionHooks,
@@ -163,6 +165,9 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+        self._agent_state = AgentState.get_instance()
+        self._interrupt_handler = InterruptHandler()
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1212,12 +1217,40 @@ class AgentActivity(RecognitionHooks):
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
-        self._session._update_user_state("speaking")
+        # If the agent is NOT speaking, we treat this as a normal start of turn
+        if not self._agent_state.speaking:
+            self._session._update_user_state("speaking")
+            if self._false_interruption_timer:
+                self._false_interruption_timer.cancel()
+                self._false_interruption_timer = None
+            return
 
-        if self._false_interruption_timer:
-            # cancel the timer when user starts speaking but leave the paused state unchanged
-            self._false_interruption_timer.cancel()
-            self._false_interruption_timer = None
+        # If the agent IS speaking, we queue a delayed check
+        # to see if we should interrupt or ignore.
+        asyncio.create_task(self._delayed_interruption_check())
+
+    async def _delayed_interruption_check(self) -> None:
+        # Wait for partial transcripts to arrive (150-250ms as per requirements)
+        await asyncio.sleep(0.2) 
+        
+        # If agent stopped speaking in the meantime, no need to check
+        if not self._agent_state.speaking:
+            return
+
+        transcript = self._audio_recognition.current_transcript
+        
+        # If we have a hard command, interrupt immediately
+        if self._interrupt_handler.is_hard_command(transcript):
+             self._interrupt_by_audio_activity()
+             return
+
+        # If we have ONLY ignore words, do nothing (let agent continue)
+        if self._interrupt_handler.is_ignore_word(transcript):
+            return
+
+        # If we have mixed content or other words, interrupt (default behavior)
+        if transcript:
+             self._interrupt_by_audio_activity()
 
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
         speech_end_time = time.time()
@@ -1261,15 +1294,22 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            transcript = ev.alternatives[0].text
+            should_interrupt = True
+            
+            if self._agent_state.speaking:
+                should_interrupt = self._interrupt_handler.should_interrupt(transcript)
+            
+            if should_interrupt:
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1292,15 +1332,22 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            transcript = ev.alternatives[0].text
+            should_interrupt = True
+            
+            if self._agent_state.speaking:
+                should_interrupt = self._interrupt_handler.should_interrupt(transcript)
+            
+            if should_interrupt:
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
 
         self._interrupt_paused_speech_task = asyncio.create_task(
             self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)

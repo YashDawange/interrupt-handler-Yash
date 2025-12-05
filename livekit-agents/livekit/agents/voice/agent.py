@@ -434,20 +434,27 @@ class Agent:
                 )
 
             conn_options = activity.session.conn_options.tts_conn_options
-            async with wrapped_tts.stream(conn_options=conn_options) as stream:
+            
+            # Update state: Speaking starts
+            AgentState.get_instance().speaking = True
+            try:
+                async with wrapped_tts.stream(conn_options=conn_options) as stream:
 
-                async def _forward_input() -> None:
-                    async for chunk in text:
-                        stream.push_text(chunk)
+                    async def _forward_input() -> None:
+                        async for chunk in text:
+                            stream.push_text(chunk)
 
-                    stream.end_input()
+                        stream.end_input()
 
-                forward_task = asyncio.create_task(_forward_input())
-                try:
-                    async for ev in stream:
-                        yield ev.frame
-                finally:
-                    await utils.aio.cancel_and_wait(forward_task)
+                    forward_task = asyncio.create_task(_forward_input())
+                    try:
+                        async for ev in stream:
+                            yield ev.frame
+                    finally:
+                        await utils.aio.cancel_and_wait(forward_task)
+            finally:
+                # Update state: Speaking ends
+                AgentState.get_instance().speaking = False
 
         @staticmethod
         async def transcription_node(
