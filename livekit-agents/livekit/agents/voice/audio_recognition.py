@@ -142,6 +142,7 @@ class AudioRecognition:
 
         self._user_turn_span: trace.Span | None = None
         self._closing = asyncio.Event()
+        self._ignored_transcripts: set[str] = set()
 
     def update_options(
         self,
@@ -239,6 +240,7 @@ class AudioRecognition:
         self._audio_preflight_transcript = ""
         self._final_transcript_confidence = []
         self._user_turn_committed = False
+        self._ignored_transcripts.clear()
 
         # reset stt to clear the buffer from previous user turn
         stt = self._stt
@@ -294,7 +296,7 @@ class AudioRecognition:
                             },
                         )
 
-            if self._audio_interim_transcript:
+            if self._audio_interim_transcript and self._audio_interim_transcript not in self._ignored_transcripts:
                 # emit interim transcript as final for frontend display
                 self._hooks.on_final_transcript(
                     stt.SpeechEvent(

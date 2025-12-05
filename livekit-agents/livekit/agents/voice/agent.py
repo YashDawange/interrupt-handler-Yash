@@ -56,6 +56,7 @@ class Agent:
         use_tts_aligned_transcript: NotGivenOr[bool] = NOT_GIVEN,
         min_endpointing_delay: NotGivenOr[float] = NOT_GIVEN,
         max_endpointing_delay: NotGivenOr[float] = NOT_GIVEN,
+        ignored_words: list[str] | None = None,
     ) -> None:
         tools = tools or []
         if type(self) is Agent:
@@ -86,12 +87,17 @@ class Agent:
         self._use_tts_aligned_transcript = use_tts_aligned_transcript
         self._min_endpointing_delay = min_endpointing_delay
         self._max_endpointing_delay = max_endpointing_delay
+        self._ignored_words = ignored_words
 
         if isinstance(mcp_servers, list) and len(mcp_servers) == 0:
             mcp_servers = None  # treat empty list as None (but keep NOT_GIVEN)
 
         self._mcp_servers = mcp_servers
         self._activity: AgentActivity | None = None
+
+    @property
+    def ignored_words(self) -> list[str] | None:
+        return self._ignored_words
 
     @property
     def id(self) -> str:
