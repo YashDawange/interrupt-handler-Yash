@@ -11,6 +11,17 @@ This project implements a context-aware interruption handling logic for LiveKit 
 | "Yeah/Ok/Hmm" | Silent | RESPOND - Treated as input | ✅ Implemented & Tested |
 | "Start/Hello" | Silent | RESPOND - Normal behavior | ✅ Implemented & Tested |
 
+### Test Results
+
+| Test File                         | Test Name                       | Result | Progress |
+|----------------------------------|----------------------------------|--------|----------|
+| tests/test_interruption.py       | test_ignored_interruption        | PASSED | 20%      |
+| tests/test_interruption.py       | test_valid_interruption          | PASSED | 40%      |
+| tests/test_interruption.py       | test_silent_response             | PASSED | 60%      |
+| tests/test_mixed_interruption.py | test_mixed_input_interruption    | PASSED | 80%      |
+| tests/test_mixed_interruption.py | test_all_ignored_words           | PASSED | 100%     |
+
+
 ### Key Features Implemented
 
 1. **Configurable Ignore List**: Define words via `ignored_words` parameter
@@ -163,24 +174,3 @@ The implementation touches the following core files:
 
 - **`tests/test_mixed_interruption.py`** (NEW)
   - Mixed input and edge case scenarios
-
-## Evaluation
-
-### Strict Functionality (70%)
-- Agent continues speaking over "yeah/ok" WITHOUT pause
-- No stuttering or hiccups
-- Audio playback is uninterrupted
-
-### State Awareness (10%)
-- Agent correctly responds to "yeah" when silent
-- State checked before filtering
-
-### Code Quality (10%)
-- Modular and maintainable
-- Easy to configure
-- Well-documented
-
-### Documentation (10%)
-- Clear README with setup instructions
-- Logic explanation
-- Test coverage documentation
