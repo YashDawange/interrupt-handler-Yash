@@ -1180,24 +1180,35 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Get current transcript for backchannel and word count checks
+        text = ""
+        if self.stt is not None and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+
+        # Backchannel filtering: check if this is just a passive acknowledgement
+        # while the agent is speaking (e.g., "yeah", "ok", "hmm")
+        # This MUST be checked BEFORE any pausing/interrupting to ensure seamless continuation
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+        if text and self._backchannel_filter.should_ignore(text, agent_is_speaking):
+            # This is a backchannel word while agent is speaking
+            # DO NOT interrupt - agent continues seamlessly without any pause/stutter
+            logger.debug(
+                "backchannel detected, agent continues speaking",
+                extra={"user_input": text, "agent_is_speaking": agent_is_speaking},
+            )
+            return
+
+        # Check min_interruption_words threshold
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
             and self._audio_recognition is not None
+            and text
         ):
-            text = self._audio_recognition.current_transcript
-
-            # Backchannel filtering: check if this is just a passive acknowledgement
-            # while the agent is speaking (e.g., "yeah", "ok", "hmm")
-            agent_is_speaking = (
-                self._current_speech is not None
-                and not self._current_speech.interrupted
-            )
-            if self._backchannel_filter.should_ignore(text, agent_is_speaking):
-                # This is a backchannel word while agent is speaking
-                # DO NOT interrupt - agent continues seamlessly
-                return
-
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
@@ -1394,6 +1405,34 @@ class AgentActivity(RecognitionHooks):
         ):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
+            return False
+
+        # Backchannel filtering: Ignore passive acknowledgements like "yeah", "ok", "mhmm"
+        # when the agent is currently speaking. Only applies to interruptible speech.
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+        
+        # Debug logging to trace filter behavior
+        logger.debug(
+            "backchannel filter check",
+            extra={
+                "user_input": info.new_transcript,
+                "agent_is_speaking": agent_is_speaking,
+                "current_speech_exists": self._current_speech is not None,
+                "speech_interrupted": self._current_speech.interrupted if self._current_speech else None,
+                "speech_allows_interruptions": self._current_speech.allow_interruptions if self._current_speech else None,
+            },
+        )
+        
+        if self._backchannel_filter.should_ignore(info.new_transcript, agent_is_speaking):
+            self._cancel_preemptive_generation()
+            logger.debug(
+                "ignoring backchannel while agent is speaking",
+                extra={"user_input": info.new_transcript},
+            )
             return False
 
         old_task = self._user_turn_completed_atask
