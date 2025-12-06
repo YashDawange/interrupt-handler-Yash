@@ -1261,25 +1261,26 @@ class AgentActivity(RecognitionHooks):
         if self._turn_detection in ("manual", "realtime_llm"):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
-
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-
+            logger.info("interrupting due to vad inference done")
             # Check if we have a transcript to filter
             if (
-                self.stt is not None
-                and self._audio_recognition is not None
+                self._audio_recognition is not None
                 and self._current_speech is not None
                 and not self._current_speech.interrupted
             ):
+                logger.info("checking backchannel filter")
                 text = self._audio_recognition.current_transcript.lower().strip()
-                
+                logger.info(text)
                 # If we have text, check for backchannel
                 if text:
+                    logger.info("transcript for backchannel filter:")
                     has_interrupt = any(word in text for word in ['wait', 'stop', 'no', 'hold', 'pause'])
                     has_backchannel = any(word in text for word in ['yeah', 'ok', 'okay', 'hmm', 'hm', 'uh', 'um', 'right', 'aha'])
                     
                     if has_backchannel and not has_interrupt:
                         # Check if ONLY backchannel
+                        logger.info("checking if only backchannel")
                         remaining = text
                         for bc_word in ['yeah', 'ok', 'okay', 'hmm', 'hm', 'uh', 'um', 'right', 'aha', 'mhmm']:
                             remaining = remaining.replace(bc_word, '')
@@ -1323,6 +1324,29 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
+        
+        # Filter backchannel/interrupt words BEFORE sending to LLM
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and ev.alternatives[0].text
+        ):
+            text = ev.alternatives[0].text.lower().strip()
+            has_stop = 'stop' in text
+            has_wait = 'wait' in text
+            has_interrupt = has_stop or has_wait or ' no' in text or 'hold' in text
+            has_backchannel = 'hmm' in text or 'yeah' in text or 'ok' in text or 'uh' in text or 'um' in text
+            
+            # If interrupt word: hard stop audio but DON'T send to LLM
+            if has_interrupt and len(text) < 15:
+                if self._rt_session is not None:
+                    self._rt_session.interrupt()
+                self._current_speech.interrupt(force=True)
+                return  # Block - don't send to LLM
+            
+            # If only backchannel: ignore completely
+            if has_backchannel and len(text) < 10:
+                return  # Block - don't send to LLM
         
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
