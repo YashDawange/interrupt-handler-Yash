@@ -1,4 +1,4 @@
-# main.py  — super simple hard-interrupt logic
+# main.py
 
 import logging
 import sys
@@ -23,7 +23,7 @@ from livekit.agents import (
 )
 from livekit.plugins import silero, google
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
-
+from interrupt_handler import HandlingInterrupt
 if TYPE_CHECKING:
     from livekit.agents.voice.agent_activity import AgentActivity
 

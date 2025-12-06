@@ -5,7 +5,7 @@ import re
 from typing import Set
 
 
-class IntelligentInterruptionHandler:
+class HandlingInterrupt:
     """
     A policy handler to decide whether a user interruption should be processed or ignored.
 

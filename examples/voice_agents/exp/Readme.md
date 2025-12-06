@@ -135,23 +135,19 @@ The final implementation in `main.py` intentionally uses the **simplest stable v
 
 ## 6. How to Run
 
-````bash
+```bash
 git clone <repo-url>
 cd agents-assignment
 
-```bash
 python -m venv venv
 venv\Scripts\Activate.ps1
 
-```bash
 pip install -r examples/voice_agents/exp/requirements.txt
 
-```bash
 cd examples/voice_agents/exp
 
-```bash
 python main.py download-files
 
-```bash
 python main.py dev
-````
+
+```
