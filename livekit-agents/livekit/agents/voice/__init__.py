@@ -1,6 +1,7 @@
 from . import io, run_result
 from .agent import Agent, AgentTask, ModelSettings
 from .agent_session import AgentSession, VoiceActivityVideoSampler
+from .backchannel_filter import BackchannelConfig, BackchannelFilter
 from .events import (
     AgentEvent,
     AgentFalseInterruptionEvent,
@@ -24,6 +25,7 @@ from .room_io import (
 from .speech_handle import SpeechHandle
 from .transcription import TranscriptSynchronizer
 
+
 __all__ = [
     "AgentSession",
     "VoiceActivityVideoSampler",
@@ -45,6 +47,8 @@ __all__ = [
     "FunctionToolsExecutedEvent",
     "AgentFalseInterruptionEvent",
     "TranscriptSynchronizer",
+    "BackchannelConfig",
+    "BackchannelFilter",
     "io",
     "room_io",
     "run_result",

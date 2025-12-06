@@ -74,6 +74,7 @@ from .generation import (
     remove_instructions,
     update_instructions,
 )
+from .backchannel_filter import BackchannelFilter
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -141,6 +142,13 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        # Initialize backchannel filter for intelligent interruption handling
+        self._backchannel_filter = BackchannelFilter(
+            config=sess.options.backchannel_config
+        )
+        # Track if agent was speaking when user started talking (for accurate backchannel detection)
+        self._agent_was_speaking_when_user_started: bool = False
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1174,13 +1182,62 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Get current transcript for backchannel and word count checks
+        text = ""
+        if self.stt is not None and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript
+
+        # Check if agent is currently speaking (for backchannel detection)
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
+        # Backchannel filtering: When agent is speaking, check the transcript
+        if agent_is_speaking and text:
+            # Check if this is a backchannel word - if so, don't interrupt
+            if self._backchannel_filter.should_ignore(text, agent_is_speaking):
+                # This is a backchannel word while agent is speaking
+                # DO NOT interrupt - agent continues seamlessly without any pause/stutter
+                logger.debug(
+                    "backchannel detected, agent continues speaking",
+                    extra={"user_input": text, "agent_is_speaking": agent_is_speaking},
+                )
+                return
+            
+            # Check if transcript contains an interrupt command - if so, interrupt immediately
+            if self._backchannel_filter.contains_interrupt_command(text):
+                logger.debug(
+                    "interrupt command detected, stopping agent",
+                    extra={"user_input": text},
+                )
+                # Fall through to interrupt logic below
+            else:
+                # Transcript exists but is neither a clear backchannel nor interrupt command
+                # Don't interrupt yet - let on_end_of_turn handle it after full transcript
+                logger.debug(
+                    "waiting for complete transcript before deciding",
+                    extra={"user_input": text, "agent_is_speaking": agent_is_speaking},
+                )
+                return
+
+        # When agent is speaking but transcript is empty/short, don't interrupt yet
+        # This allows the backchannel filter to work once we get the transcript
+        if agent_is_speaking and (not text or len(text.strip()) < 2):
+            logger.debug(
+                "agent speaking, waiting for transcript before interrupting",
+                extra={"text_length": len(text) if text else 0},
+            )
+            return
+
+        # Check min_interruption_words threshold
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
             and self._audio_recognition is not None
+            and text
         ):
-            text = self._audio_recognition.current_transcript
-
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
@@ -1213,6 +1270,15 @@ class AgentActivity(RecognitionHooks):
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
+
+        # Capture agent's speaking state when user starts talking
+        # This is used for backchannel detection - we want to know if agent
+        # was speaking at the START of user's speech, not when transcript arrives
+        self._agent_was_speaking_when_user_started = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
 
         if self._false_interruption_timer:
             # cancel the timer when user starts speaking but leave the paused state unchanged
@@ -1377,6 +1443,34 @@ class AgentActivity(RecognitionHooks):
         ):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
+            return False
+
+        # Backchannel filtering: Ignore passive acknowledgements like "yeah", "ok", "mhmm"
+        # when the agent WAS speaking when user STARTED talking.
+        # We use the cached flag instead of current state because by the time
+        # the transcript arrives, the agent may have finished speaking.
+        agent_was_speaking = self._agent_was_speaking_when_user_started
+        
+        # Debug logging to trace filter behavior
+        logger.debug(
+            "backchannel filter check",
+            extra={
+                "user_input": info.new_transcript,
+                "agent_was_speaking_when_user_started": agent_was_speaking,
+                "current_speech_exists": self._current_speech is not None,
+                "speech_interrupted": self._current_speech.interrupted if self._current_speech else None,
+                "speech_allows_interruptions": self._current_speech.allow_interruptions if self._current_speech else None,
+            },
+        )
+        
+        if self._backchannel_filter.should_ignore(info.new_transcript, agent_was_speaking):
+            self._cancel_preemptive_generation()
+            logger.debug(
+                "ignoring backchannel while agent was speaking",
+                extra={"user_input": info.new_transcript},
+            )
+            # Reset the flag for next user speech
+            self._agent_was_speaking_when_user_started = False
             return False
 
         old_task = self._user_turn_completed_atask

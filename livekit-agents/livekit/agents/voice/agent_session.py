@@ -52,6 +52,7 @@ from .events import (
     UserState,
     UserStateChangedEvent,
 )
+from .backchannel_filter import BackchannelConfig
 from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
@@ -89,6 +90,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    backchannel_config: BackchannelConfig | None
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +161,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        backchannel_config: NotGivenOr[BackchannelConfig] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -288,6 +291,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            backchannel_config=backchannel_config
+            if is_given(backchannel_config)
+            else BackchannelConfig(),
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False

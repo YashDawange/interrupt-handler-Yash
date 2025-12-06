@@ -356,6 +356,61 @@ python myagent.py start
 
 Runs the agent with production-ready optimizations.
 
+## Intelligent Interruption Handling
+
+This implementation adds **context-aware backchannel filtering** to prevent the agent from being interrupted by passive acknowledgements like "yeah", "ok", "hmm" while speaking.
+
+### The Problem
+
+When the AI agent is explaining something, users often say things like "yeah", "okay", or "uh-huh" to indicate they're listening. The default VAD interprets these as interruptions and stops the agent mid-sentence.
+
+### The Solution
+
+The `BackchannelFilter` checks two things:
+1. **Agent State**: Is the agent currently speaking or silent?
+2. **Transcript Content**: Is the user input a backchannel word or an actual command?
+
+### Logic Matrix
+
+| User Says | Agent State | Result |
+|-----------|-------------|--------|
+| "yeah", "ok", "hmm" | Speaking | **IGNORED** - agent continues seamlessly |
+| "stop", "wait", "no" | Speaking | **INTERRUPTED** - agent stops immediately |
+| "yeah ok but wait" | Speaking | **INTERRUPTED** - contains command word |
+| "yeah" | Silent | **PROCESSED** - treated as valid input |
+
+### Configuration
+
+```python
+from livekit.agents.voice import BackchannelConfig, AgentSession
+
+# Use default configuration (recommended)
+session = AgentSession()
+
+# Or customize the word lists
+session = AgentSession(
+    backchannel_config=BackchannelConfig(
+        ignore_words={"yeah", "ok", "hmm", "custom_word"},
+        interrupt_words={"stop", "wait", "custom_command"},
+        enabled=True,
+    )
+)
+```
+
+### Default Word Lists
+
+**Ignore Words** (backchannels):
+`yeah`, `yea`, `yes`, `yep`, `yup`, `ok`, `okay`, `alright`, `right`, `sure`, `fine`, `hmm`, `mm`, `mmm`, `mhm`, `uh-huh`, `aha`, `gotcha`, `got it`, `i see`, `understood`
+
+**Interrupt Words** (commands):
+`stop`, `wait`, `pause`, `hold on`, `hold up`, `hang on`, `no`, `nope`, `actually`, `but`, `however`, `excuse me`, `hey`, `listen`
+
+### Running Tests
+
+```bash
+pytest tests/test_backchannel_filter.py -v
+```
+
 ## Contributing
 
 The Agents framework is under active development in a rapidly evolving field. We welcome and appreciate contributions of any kind, be it feedback, bugfixes, features, new plugins and tools, or better documentation. You can file issues under this repo, open a PR, or chat with us in LiveKit's [Slack community](https://livekit.io/join-slack).
