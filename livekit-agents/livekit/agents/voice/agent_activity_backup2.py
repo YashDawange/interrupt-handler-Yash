@@ -1295,6 +1295,26 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
         
+        if(
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and ev.alternatives[0].text
+        ):
+            text = ev.alternatives[0].text.lower().strip()
+            logger.info(f"🎤 INTERIM: '{text}' | Agent speaking: {self._current_speech is not None}")  # ADD THIS LINE
+        
+            if text:
+                has_interrupt = any(word in text for word in ['wait', 'stop', 'no', 'hold', 'pause'])
+                has_backchannel = any(word in text for word in ['yeah', 'ok', 'okay', 'hmm', 'hm', 'uh', 'um', 'right', 'aha'])
+                logger.info(f"🔍 has_interrupt={has_interrupt}, has_backchannel={has_backchannel}")  # ADD THIS LINE
+                if has_backchannel and not has_interrupt:
+                    remaining = text
+                    for bc_word in ['yeah', 'ok', 'okay', 'hmm', 'hm', 'uh', 'um', 'right', 'aha', 'mhmm']:
+                        remaining = remaining.replace(bc_word, '')
+                    if len(remaining.strip()) < 3:
+                        logger.info(f"✋ IGNORING interim backchannel '{text}'")
+                        return  # Exit early - don't process this transcript at all
+
         self._session._user_input_transcribed(
                 UserInputTranscribedEvent(
                     language=ev.alternatives[0].language,
@@ -1324,6 +1344,36 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
         
+
+        logger.info(f"📝 on_final_transcript | Text: '{ev.alternatives[0].text}' | Current speech: {self._current_speech is not None}")
+
+        # NEW: Filter backchannel words when agent is speaking
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and ev.alternatives[0].text
+        ):
+            text = ev.alternatives[0].text.lower().strip()
+            has_interrupt = any(word in text for word in ['wait', 'stop', 'no', 'hold', 'pause'])
+            has_backchannel = any(word in text for word in ['yeah', 'ok', 'okay', 'hmm', 'hm', 'uh', 'um', 'right', 'aha'])
+            
+            # If ONLY backchannel, completely ignore this transcript
+            if has_backchannel and not has_interrupt:
+                remaining = text
+                for bc_word in ['yeah', 'ok', 'okay', 'hmm', 'hm', 'uh', 'um', 'right', 'aha', 'mhmm']:
+                    remaining = remaining.replace(bc_word, '')
+                if len(remaining.strip()) < 3:
+                    return  # Ignore completely - don't even add to transcript
+            
+            # If interrupt word, force immediate stop
+            if has_interrupt:
+                if self._rt_session is not None:
+                    self._rt_session.interrupt()
+                self._current_speech.interrupt(force=True)
+                # Continue to process as interruption but don't generate LLM response
+                return
+
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
