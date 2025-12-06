@@ -84,9 +84,6 @@ class AgentSessionOptions:
     user_away_timeout: float | None
     false_interruption_timeout: float | None
     resume_false_interruption: bool
-    backchannel_words: set[str]
-    interrupt_words: set[str]
-
     min_consecutive_speech_delay: float
     use_tts_aligned_transcript: bool | None
     preemptive_generation: bool
@@ -157,8 +154,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         user_away_timeout: float | None = 15.0,
         false_interruption_timeout: float | None = 2.0,
         resume_false_interruption: bool = True,
-        backchannel_words: set[str] | None = None,
-        interrupt_words: set[str] | None = None,
         min_consecutive_speech_delay: float = 0.0,
         use_tts_aligned_transcript: NotGivenOr[bool] = NOT_GIVEN,
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
@@ -282,8 +277,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             user_away_timeout=user_away_timeout,
             false_interruption_timeout=false_interruption_timeout,
             resume_false_interruption=resume_false_interruption,
-            backchannel_words=backchannel_words or {'yeah', 'ok', 'okay', 'hmm', 'uh-huh', 'right', 'aha', 'mhmm', 'uh', 'um'},
-            interrupt_words=interrupt_words or {'wait', 'stop', 'no', 'hold', 'pause'},
             min_consecutive_speech_delay=min_consecutive_speech_delay,
             tts_text_transforms=(
                 tts_text_transforms
