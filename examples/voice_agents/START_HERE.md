@@ -321,4 +321,4 @@ python my_agent.py console
 
 
 
-**Status**: ✅ All test scenarios passing | Zero-pause backchannel handling achieved
+**Status**: All test scenarios passing | Zero-pause backchannel handling achieved
