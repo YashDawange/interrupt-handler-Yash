@@ -1,4 +1,4 @@
-from __future__ import annotations
+see this is my final saved code is it correct from __future__ import annotations
 
 import asyncio
 import copy
@@ -251,6 +251,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 session to. Falls back to :pyfunc:`asyncio.get_event_loop()`.
         """
         super().__init__()
+        self._ignore_next_vad_start = False
+
         self._loop = loop or asyncio.get_event_loop()
 
         if is_given(agent_false_interruption_timeout):
@@ -289,6 +291,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             if is_given(use_tts_aligned_transcript)
             else None,
         )
+        self._baseline_allow_interruptions = allow_interruptions
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
         self._turn_detection = turn_detection or None
@@ -1152,7 +1155,10 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         if self._agent_state == state:
             return
 
+        # hard gate: while agent is speaking, we disable interruptions globally
         if state == "speaking":
+            # agent just started speaking → block interruptions
+            self._opts.allow_interruptions = False
             self._llm_error_counts = 0
             self._tts_error_counts = 0
 
@@ -1163,11 +1169,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                     _set_participant_attributes(
                         self._agent_speaking_span, self._room_io.room.local_participant
                     )
-                # self._agent_speaking_span.set_attribute(trace_types.ATTR_START_TIME, time.time())
-        elif self._agent_speaking_span is not None:
-            # self._agent_speaking_span.set_attribute(trace_types.ATTR_END_TIME, time.time())
-            self._agent_speaking_span.end()
-            self._agent_speaking_span = None
+        else:
+            # agent is no longer speaking → restore original allow_interruptions behaviour
+            self._opts.allow_interruptions = self._baseline_allow_interruptions
+
+            if self._agent_speaking_span is not None:
+                self._agent_speaking_span.end()
+                self._agent_speaking_span = None
 
         if state == "listening" and self._user_state == "listening":
             self._set_user_away_timer()
@@ -1181,9 +1189,23 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             AgentStateChangedEvent(old_state=old_state, new_state=state),
         )
 
+
     def _update_user_state(
-        self, state: UserState, *, last_speaking_time: float | None = None
+        self,
+        state: UserState,
+        *,
+        last_speaking_time: float | None = None,
     ) -> None:
+        # While the agent is speaking, do NOT let VAD move user into "speaking".
+        # Also clear any partial user turn to avoid accidental commits.
+        if state == "speaking" and self.agent_state == "speaking":
+            if self._activity is not None:
+                try:
+                    self._activity.clear_user_turn()
+                except RuntimeError:
+                    pass
+            return
+
         if self._user_state == state:
             return
 
@@ -1194,11 +1216,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 _set_participant_attributes(
                     self._user_speaking_span, self._room_io.linked_participant
                 )
-
-            # self._user_speaking_span.set_attribute(trace_types.ATTR_START_TIME, time.time())
         elif self._user_speaking_span is not None:
-            # end_time = last_speaking_time or time.time()
-            # self._user_speaking_span.set_attribute(trace_types.ATTR_END_TIME, end_time)
             self._user_speaking_span.end()
             self._user_speaking_span = None
 
@@ -1211,12 +1229,47 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         self._user_state = state
         self.emit("user_state_changed", UserStateChangedEvent(old_state=old_state, new_state=state))
 
+
+        
     def _user_input_transcribed(self, ev: UserInputTranscribedEvent) -> None:
+        text = (ev.text or "").lower().strip()
+        agent_is_speaking = self.agent_state == "speaking"
+
+        # phrases that SHOULD interrupt even while the agent is talking
+        INTERRUPTION_TRIGGERS = {
+            "stop",
+            "wait",
+            "hold on",
+            "don't",
+            "dont",
+            "stop please",
+            "stop it",
+        }
+
+        # While the agent is speaking:
+        # - ignore everything EXCEPT explicit stop/wait style commands
+        if agent_is_speaking:
+            if text and any(trigger in text for trigger in INTERRUPTION_TRIGGERS):
+                if self._activity is not None:
+                    try:
+                        # hard interrupt of current TTS
+                        self._activity.interrupt(force=True)
+                    except RuntimeError:
+                        # if it can't be interrupted, just ignore
+                        pass
+            # in all cases, do NOT forward this transcript to the rest of the system
+            return
+
+        # Agent is NOT speaking → normal behaviour
         if self.user_state == "away" and ev.is_final:
-            # reset user state from away to listening in case VAD has a miss detection
             self._update_user_state("listening")
 
         self.emit("user_input_transcribed", ev)
+
+
+
+
+
 
     def _conversation_item_added(self, message: llm.ChatMessage) -> None:
         self._chat_ctx.insert(message)
@@ -1285,9 +1338,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         pass
 
     # ---
-
-    async def __aenter__(self) -> AgentSession:
-        return self
 
     async def __aexit__(
         self,
