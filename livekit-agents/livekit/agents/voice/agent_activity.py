@@ -1174,15 +1174,20 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
+        if self._audio_recognition is not None:
             text = self._audio_recognition.current_transcript
+            # normalize text: lower, strip punctuation
+            cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("?", "").replace("!", "").replace(";", "").replace(":", "")
+            
+            if not cleaned_text:
+                # wait for STT transcription to validate interruption
+                return
+
+            if cleaned_text in opt.ignore_words:
+                 return
 
             # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+            if opt.min_interruption_words > 0 and len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
         if self._rt_session is not None:
@@ -1371,13 +1376,21 @@ class AgentActivity(RecognitionHooks):
             and self._current_speech is not None
             and self._current_speech.allow_interruptions
             and not self._current_speech.interrupted
-            and self._session.options.min_interruption_words > 0
-            and len(split_words(info.new_transcript, split_character=True))
-            < self._session.options.min_interruption_words
         ):
-            self._cancel_preemptive_generation()
-            # avoid interruption if the new_transcript is too short
-            return False
+            text = info.new_transcript
+            cleaned_text = text.lower().strip().replace(".", "").replace(",", "").replace("?", "").replace("!", "").replace(";", "").replace(":", "")
+            if cleaned_text in self._session.options.ignore_words:
+                 self._cancel_preemptive_generation()
+                 return False
+
+            if (
+                self._session.options.min_interruption_words > 0
+                and len(split_words(info.new_transcript, split_character=True))
+                < self._session.options.min_interruption_words
+            ):
+                self._cancel_preemptive_generation()
+                # avoid interruption if the new_transcript is too short
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
