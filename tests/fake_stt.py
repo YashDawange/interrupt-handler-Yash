@@ -8,6 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+# Import the interrupt handler but DO NOT call it at import time.
+from livekit.interrupt_handlers import on_stt_result
+
 from livekit.agents import NOT_GIVEN, NotGivenOr, utils
 from livekit.agents.stt import (
     STT,
@@ -44,6 +47,7 @@ class FakeSTT(STT):
     def __init__(
         self,
         *,
+
         fake_exception: Exception | None = None,
         fake_transcript: str | None = None,
         fake_timeout: float | None = None,
@@ -159,6 +163,10 @@ class FakeRecognizeStream(RecognizeStream):
         return self._attempt
 
     def send_fake_transcript(self, transcript: str, is_final: bool = True) -> None:
+        """
+        Send a fake transcript event into the STT event channel.
+        If this is a FINAL transcript, also notify the interrupt handler.
+        """
         self._event_ch.send_nowait(
             SpeechEvent(
                 type=SpeechEventType.FINAL_TRANSCRIPT
@@ -167,6 +175,14 @@ class FakeRecognizeStream(RecognizeStream):
                 alternatives=[SpeechData(text=transcript, language="")],
             )
         )
+
+        # Notify the interrupt handler only for final transcripts (safe point to decide)
+        if is_final:
+            try:
+                on_stt_result(transcript)
+            except Exception:
+                # Protect the STT loop from errors in the handler
+                pass
 
     async def _run(self) -> None:
         self._attempt += 1
@@ -201,11 +217,13 @@ class FakeRecognizeStream(RecognizeStream):
             interim_transcript_time = fake_speech.end_time + fake_speech.stt_delay * 0.5
             if curr_time() < interim_transcript_time:
                 await asyncio.sleep(interim_transcript_time - curr_time())
+            # send a short interim
             self.send_fake_transcript(" ".join(fake_speech.transcript.split()[:2]), is_final=False)
 
             final_transcript_time = fake_speech.end_time + fake_speech.stt_delay
             if curr_time() < final_transcript_time:
                 await asyncio.sleep(final_transcript_time - curr_time())
+            # send the final transcript (this will also call on_stt_result)
             self.send_fake_transcript(fake_speech.transcript, is_final=True)
 
         with contextlib.suppress(asyncio.InvalidStateError):
