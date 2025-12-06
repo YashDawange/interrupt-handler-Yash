@@ -1,7 +1,7 @@
 import logging
-
+import os
 from dotenv import load_dotenv
-
+import asyncio
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -18,91 +18,128 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# uncomment to enable Krisp background voice/noise cancellation
-# from livekit.plugins import noise_cancellation
+# -----------------------
+# CONFIG
+# -----------------------
+IGNORE_LIST = {'yeah', 'ok', 'hmm', 'right', 'uh-huh', 'okay', 'yep', 'aha', 'mhm', 'mm-hmm', 'uh', 'hm'}
+INTERRUPT_KEYWORDS = {'wait', 'stop', 'no', 'cancel', 'hold', 'pause', 'but'}
 
 logger = logging.getLogger("basic-agent")
+logging.basicConfig(level=logging.INFO)
 
-load_dotenv()
+# Load environment variables
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path)
 
 
+# -----------------------
+# SMART FILTER
+# -----------------------
+class SmartInterruptFilter:
+    def __init__(self):
+        self.agent_is_speaking = False
+        self.should_block_next = False
+        
+    def set_speaking(self, is_speaking: bool):
+        self.agent_is_speaking = is_speaking
+        logger.info(f"{'🎙️ Agent STARTED' if is_speaking else '🔇 Agent STOPPED'} speaking")
+    
+    def check_if_should_block(self, text: str) -> bool:
+        """Check if this text should be blocked from interrupting"""
+        if not text or not text.strip():
+            return False
+            
+        text_lower = text.lower().strip()
+        words = text_lower.split()
+        
+        # If agent NOT speaking, never block
+        if not self.agent_is_speaking:
+            logger.info(f"✅ Agent silent - allowing: '{text}'")
+            return False
+        
+        # Check for interrupt keywords
+        has_interrupt = any(kw in text_lower for kw in INTERRUPT_KEYWORDS)
+        if has_interrupt:
+            logger.info(f"🛑 INTERRUPT keyword: '{text}'")
+            return False  # Don't block, allow interrupt
+        
+        # Check if ALL words are fillers
+        non_filler = [w for w in words if w and w not in IGNORE_LIST]
+        
+        if len(non_filler) == 0:
+            logger.info(f"🛡️ BLOCKING filler: '{text}'")
+            return True  # Block this
+        else:
+            logger.info(f"🔄 Real content: '{text}'")
+            return False  # Don't block
+
+
+# -----------------------
+# AGENT DEFINITION
+# -----------------------
 class MyAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="Your name is Kelly. You would interact with users via voice."
-            "with that in mind keep your responses concise and to the point."
-            "do not use emojis, asterisks, markdown, or other special characters in your responses."
-            "You are curious and friendly, and have a sense of humor."
-            "you will speak english to the user",
+            instructions=(
+                "Your name is Kelly. You interact with users via voice. "
+                "Keep your responses concise and to the point. "
+                "Do not use emojis, asterisks, markdown, or other special characters. "
+                "Be curious and friendly, with a sense of humor. "
+                "Speak English."
+            )
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
-        # according to its instructions
         self.session.generate_reply()
 
-    # all functions annotated with @function_tool will be passed to the LLM when this
-    # agent is active
     @function_tool
     async def lookup_weather(
         self, context: RunContext, location: str, latitude: str, longitude: str
     ):
-        """Called when the user asks for weather related information.
-        Ensure the user's location (city or region) is provided.
-        When given a location, please estimate the latitude and longitude of the location and
-        do not ask the user for them.
-
-        Args:
-            location: The location they are asking for
-            latitude: The latitude of the location, do not ask user for it
-            longitude: The longitude of the location, do not ask user for it
-        """
-
         logger.info(f"Looking up weather for {location}")
-
         return "sunny with a temperature of 70 degrees."
 
 
+# -----------------------
+# AGENT SERVER
+# -----------------------
 server = AgentServer()
-
 
 def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
 
-
 server.setup_fnc = prewarm
 
 
+# -----------------------
+# ENTRYPOINT
+# -----------------------
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
-    # each log entry will include these fields
-    ctx.log_context_fields = {
-        "room": ctx.room.name,
-    }
+    ctx.log_context_fields = {"room": ctx.room.name}
+    
+    interrupt_filter = SmartInterruptFilter()
+
     session = AgentSession(
-        # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
-        # See all available models at https://docs.livekit.io/agents/models/stt/
         stt="deepgram/nova-3",
-        # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
-        # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
-        # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
-        # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
+        llm="openai/gpt-4o-mini",
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
-        # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
-        # See more at https://docs.livekit.io/agents/build/turns
-        turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
-        # allow the LLM to generate a response while waiting for the end of turn
-        # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
+        turn_detection=MultilingualModel(),
         preemptive_generation=True,
-        # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
-        # when it's detected, you may resume the agent's speech
-        resume_false_interruption=True,
+        allow_interruptions=True,
+        
+        # CRITICAL: Require 2 words before interrupting
+        # This naturally filters single-word fillers
+        min_interruption_words=2,
+        min_interruption_duration=0.6,
+        
+        # Use false interruption recovery
         false_interruption_timeout=1.0,
+        resume_false_interruption=True,
     )
 
-    # log metrics as they are emitted, and total usage after session is over
+    # Metrics
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
@@ -114,20 +151,61 @@ async def entrypoint(ctx: JobContext):
         summary = usage_collector.get_summary()
         logger.info(f"Usage: {summary}")
 
-    # shutdown callbacks are triggered when the session is over
     ctx.add_shutdown_callback(log_usage)
+
+    # ------------------------------
+    # Track agent speaking
+    # ------------------------------
+    @session.on("agent_started_speaking")
+    def on_agent_started_speaking(ev):
+        interrupt_filter.set_speaking(True)
+
+    @session.on("agent_stopped_speaking")
+    def on_agent_stopped_speaking(ev):
+        interrupt_filter.set_speaking(False)
+
+    # ------------------------------
+    # Monitor and log transcriptions
+    # ------------------------------
+    last_text = {"text": "", "timestamp": 0}
+    
+    @session.on("user_speech_committed")
+    def on_user_speech_committed(ev):
+        """Log user speech and check filter"""
+        import time
+        
+        if not ev.alternatives or len(ev.alternatives) == 0:
+            return
+            
+        user_text = ev.alternatives[0].text.strip()
+        current_time = time.time()
+        
+        # Avoid duplicates
+        if user_text == last_text["text"] and current_time - last_text["timestamp"] < 1.0:
+            return
+            
+        last_text["text"] = user_text
+        last_text["timestamp"] = current_time
+        
+        logger.info(f"💬 User: '{user_text}' (agent_speaking={interrupt_filter.agent_is_speaking})")
+        
+        # Check what we WOULD do with this
+        should_block = interrupt_filter.check_if_should_block(user_text)
+        
+        if should_block:
+            logger.info("🚫 This should have been blocked (but min_interruption_words=2 helps)")
 
     await session.start(
         agent=MyAgent(),
         room=ctx.room,
         room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                # uncomment to enable the Krisp BVC noise cancellation
-                # noise_cancellation=noise_cancellation.BVC(),
-            ),
+            audio_input=room_io.AudioInputOptions()
         ),
     )
 
 
+# -----------------------
+# MAIN
+# -----------------------
 if __name__ == "__main__":
     cli.run_app(server)
