@@ -1,7 +1,7 @@
 import logging
 
 from dotenv import load_dotenv
-
+load_dotenv()  
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -101,7 +101,14 @@ async def entrypoint(ctx: JobContext):
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
     )
-
+  # ------------------------------------------------------------
+    # NEW: Add the interrupt handler right after session creation
+    # ------------------------------------------------------------
+    from interrupt_handler import InterruptHandler
+    interrupt_handler = InterruptHandler(session)
+    interrupt_handler.start()
+    # ------------------------------------------------------------
+    
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
 
