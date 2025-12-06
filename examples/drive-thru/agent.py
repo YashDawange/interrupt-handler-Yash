@@ -3,6 +3,11 @@ import logging
 import os
 import sys
 
+from .interrupt_handler import InterruptHandler
+
+interrupt_handler = InterruptHandler()
+agent_is_speaking = False
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from dataclasses import dataclass
@@ -439,7 +444,37 @@ async def drive_thru_agent(ctx: JobContext) -> None:
 
     await session.start(agent=DriveThruAgent(userdata=userdata), room=ctx.room)
     await background_audio.start(room=ctx.room, agent_session=session)
+    @session.on("stt.event")
+    async def on_stt_event(event):
+        global agent_is_speaking
+        transcript_text = event.alternatives[0].text if event.alternatives else ""
 
+        decision = interrupt_handler.process_transcript(transcript_text, agent_is_speaking)
+
+        if decision == "IGNORE":
+            print("IGNORING BACKCHANNEL:", transcript_text)
+            return
+
+        if decision == "INTERRUPT":
+            print("USER INTERRUPTED:", transcript_text)
+            await session.stop_audio()
+            agent_is_speaking = False
+            return
+
+        if decision == "RESPOND":
+            print("RESPONDING:", transcript_text)
+            await session.agent.say(transcript_text)
+            agent_is_speaking = False
+
+    @session.on("agent.tts_started")
+    async def on_tts_started():
+        global agent_is_speaking
+        agent_is_speaking = True
+
+    @session.on("agent.tts_finished")
+    async def on_tts_finished():
+        global agent_is_speaking
+        agent_is_speaking = False
 
 if __name__ == "__main__":
     cli.run_app(server)
