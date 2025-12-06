@@ -1,5 +1,5 @@
 # intelligent_interrupt_agent.py
-# Author: Abhay Kumar
+# Author: ABHAY KUMAR
 
 import logging
 import os

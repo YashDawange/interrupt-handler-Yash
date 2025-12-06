@@ -1,5 +1,5 @@
 # interrupt_handler.py
-# Author: Abhay Kumar
+# Author: ABHAY KUMAR
 # Description: Logic layer for Intelligent Interruption Handling
 # Used in: examples/voice_agents/intelligent_interrupt_agent.py
 
