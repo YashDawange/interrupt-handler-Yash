@@ -1,0 +1,9 @@
+livekit-agents
+langchain
+langchain-core
+langchain-community
+# Uncomment based on provider usage:
+langchain-openai
+langchain-google-genai
+langchain-ollama
+pytest
