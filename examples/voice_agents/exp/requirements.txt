@@ -1,0 +1,6 @@
+livekit-agents>=1.2.18
+livekit-plugins-silero
+livekit-plugins-google
+livekit-plugins-cartesia
+livekit-plugins-turn-detector
+python-dotenv
