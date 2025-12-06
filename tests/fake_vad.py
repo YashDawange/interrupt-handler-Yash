@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import time
 
+# Import the handler but DO NOT call it at import time.
+from livekit.interrupt_handlers import on_vad_detected
+
 from livekit.agents.vad import VAD, VADCapabilities, VADEvent, VADEventType, VADStream
 
 from .fake_stt import FakeUserSpeech
@@ -54,6 +57,7 @@ class FakeVADStream(VADStream):
             if current_time() < next_start_of_speech_time:
                 await asyncio.sleep(next_start_of_speech_time - current_time())
 
+            # send START_OF_SPEECH
             self._send_vad_event(VADEventType.START_OF_SPEECH, fake_speech, current_time())
 
             inference_interval = self._vad._min_speech_duration  # scaled by speed factor
@@ -71,12 +75,26 @@ class FakeVADStream(VADStream):
     def _send_vad_event(
         self, type: VADEventType, fake_speech: FakeUserSpeech, curr_time: float
     ) -> None:
+        """
+        Build the VADEvent and send it to event channel.
+        We call on_vad_detected() when a START_OF_SPEECH event is emitted.
+        """
         if curr_time <= fake_speech.end_time:
             raw_accumulated_speech = curr_time - fake_speech.start_time
             raw_accumulated_silence = 0.0
         else:
             raw_accumulated_speech = 0.0
             raw_accumulated_silence = curr_time - fake_speech.end_time
+
+        # If this is the start of a speech, notify our handler (do NOT do this at import time)
+        if type == VADEventType.START_OF_SPEECH:
+            try:
+                on_vad_detected()
+            except Exception:
+                # protect VAD loop from raising due to handler issues
+                # you may want to log this instead depending on repo's logging setup
+                pass
+
         self._event_ch.send_nowait(
             VADEvent(
                 type=type,
@@ -88,3 +106,6 @@ class FakeVADStream(VADStream):
                 raw_accumulated_silence=raw_accumulated_silence,
             )
         )
+
+        
+

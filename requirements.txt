@@ -1,0 +1,23 @@
+# --- LiveKit Agent SDK ---
+livekit-agents>=0.5.4
+
+# --- General dependencies used in the repo ---
+pydantic>=1.10.13
+typing_extensions>=4.7.1
+
+# --- Async utilities (commonly required by LiveKit internal utils) ---
+anyio>=3.7.1
+starlette>=0.27.0
+
+# --- Optional but commonly needed within LiveKit agent examples ---
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# --- For audio handling, emitters, buffering ---
+aiofiles>=23.1.0
+
+# --- If using WebRTC or actual audio I/O ---
+aiortc>=1.5.0
+
+# --- Logging / utils ---
+rich>=13.5.2
