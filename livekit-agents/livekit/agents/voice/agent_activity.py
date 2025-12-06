@@ -1185,20 +1185,47 @@ class AgentActivity(RecognitionHooks):
         if self.stt is not None and self._audio_recognition is not None:
             text = self._audio_recognition.current_transcript
 
-        # Backchannel filtering: check if this is just a passive acknowledgement
-        # while the agent is speaking (e.g., "yeah", "ok", "hmm")
-        # This MUST be checked BEFORE any pausing/interrupting to ensure seamless continuation
+        # Check if agent is currently speaking (for backchannel detection)
         agent_is_speaking = (
             self._current_speech is not None
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         )
-        if text and self._backchannel_filter.should_ignore(text, agent_is_speaking):
-            # This is a backchannel word while agent is speaking
-            # DO NOT interrupt - agent continues seamlessly without any pause/stutter
+
+        # Backchannel filtering: When agent is speaking, check the transcript
+        if agent_is_speaking and text:
+            # Check if this is a backchannel word - if so, don't interrupt
+            if self._backchannel_filter.should_ignore(text, agent_is_speaking):
+                # This is a backchannel word while agent is speaking
+                # DO NOT interrupt - agent continues seamlessly without any pause/stutter
+                logger.debug(
+                    "backchannel detected, agent continues speaking",
+                    extra={"user_input": text, "agent_is_speaking": agent_is_speaking},
+                )
+                return
+            
+            # Check if transcript contains an interrupt command - if so, interrupt immediately
+            if self._backchannel_filter.contains_interrupt_command(text):
+                logger.debug(
+                    "interrupt command detected, stopping agent",
+                    extra={"user_input": text},
+                )
+                # Fall through to interrupt logic below
+            else:
+                # Transcript exists but is neither a clear backchannel nor interrupt command
+                # Don't interrupt yet - let on_end_of_turn handle it after full transcript
+                logger.debug(
+                    "waiting for complete transcript before deciding",
+                    extra={"user_input": text, "agent_is_speaking": agent_is_speaking},
+                )
+                return
+
+        # When agent is speaking but transcript is empty/short, don't interrupt yet
+        # This allows the backchannel filter to work once we get the transcript
+        if agent_is_speaking and (not text or len(text.strip()) < 2):
             logger.debug(
-                "backchannel detected, agent continues speaking",
-                extra={"user_input": text, "agent_is_speaking": agent_is_speaking},
+                "agent speaking, waiting for transcript before interrupting",
+                extra={"text_length": len(text) if text else 0},
             )
             return
 
