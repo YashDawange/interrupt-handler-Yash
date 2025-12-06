@@ -40,6 +40,7 @@ from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils.misc import is_given
 from ._utils import _set_participant_attributes
+from .interruption_filter import should_interrupt_agent, is_transcript_passive_only, is_interruption_command_only
 from .agent import (
     Agent,
     ModelSettings,
@@ -1174,15 +1175,36 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        transcript = ""
+        if self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
             and self._audio_recognition is not None
         ):
-            text = self._audio_recognition.current_transcript
+            if len(split_words(transcript, split_character=True)) < opt.min_interruption_words:
+                return
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+        agent_is_speaking = (
+            self._current_speech is not None 
+            and not self._current_speech.interrupted
+        )
+        
+        if agent_is_speaking and not transcript:
+            logger.debug(
+                "Waiting for transcript before interrupting",
+                extra={"agent_state": "speaking", "has_transcript": False}
+            )
+            return
+        
+        if transcript and agent_is_speaking:
+            if not should_interrupt_agent(transcript, agent_is_speaking=True):
+                logger.debug(
+                    "Ignoring backchannel interruption, agent continues",
+                    extra={"transcript": transcript, "agent_state": "speaking"}
+                )
                 return
 
         if self._rt_session is not None:
@@ -1344,6 +1366,26 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+
+        transcript = info.new_transcript.strip()
+        agent_was_speaking = (
+            self._current_speech is not None 
+            and self._current_speech.allow_interruptions
+        )
+        
+        if transcript and agent_was_speaking and is_transcript_passive_only(transcript):
+            logger.debug(
+                "Ignoring passive-only backchannel (agent was speaking)",
+                extra={"transcript": transcript, "agent_was_speaking": True}
+            )
+            return False
+        
+        if transcript and agent_was_speaking and is_interruption_command_only(transcript):
+            logger.debug(
+                "Ignoring interruption command only (agent was speaking, now listening)",
+                extra={"transcript": transcript, "agent_was_speaking": True}
+            )
+            return False
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
