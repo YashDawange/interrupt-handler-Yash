@@ -22,6 +22,7 @@ class IntelligentInterruptionAgent(VoiceAgent):
         kwargs['allow_interruptions'] = True 
         super().__init__(*args, **kwargs)
         self._is_speaking = False
+        self._playback_task = None
 
     async def on_enter(self):
         # Starts the conversation automatically
@@ -39,46 +40,63 @@ class IntelligentInterruptionAgent(VoiceAgent):
     ) -> AsyncIterable[rtc.AudioFrame]:
         """
         Wrap TTS to track speaking state using EXACT AUDIO DURATION.
-        This fixes the "agent stops too early" bug.
+        Keeps _is_speaking=True until audio finishes playing, not just generating.
         """
         async def _tracking_tts_generator():
             tts_stream = super(IntelligentInterruptionAgent, self).tts_node(text, model_settings)
             
+            # Mark as speaking immediately
             self._is_speaking = True 
-            logger.debug("Agent started speaking (State: True)")
+            logger.debug("🔊 Agent started speaking (generation begins)")
             
             start_time = asyncio.get_event_loop().time()
             total_audio_duration = 0.0
 
             try:
                 async for frame in tts_stream:
-                    # 2. Calculate Audio Duration
+                    # Calculate audio duration as we generate
                     if frame.samples_per_channel and frame.sample_rate:
                         duration = frame.samples_per_channel / frame.sample_rate
                         total_audio_duration += duration
                     yield frame
             except asyncio.CancelledError:
+                # Interrupted - cancel the playback task if it exists
+                if self._playback_task and not self._playback_task.done():
+                    self._playback_task.cancel()
                 self._is_speaking = False
-                logger.debug("TTS Cancelled")
+                logger.debug(" TTS Cancelled (interrupted during generation)")
                 raise
             finally:
-                # 3. Calculate how much audio is left to play
+                # Generation is complete, but audio is still playing
                 elapsed_gen_time = asyncio.get_event_loop().time() - start_time
                 remaining_playback = total_audio_duration - elapsed_gen_time
                 
                 if remaining_playback < 0: 
                     remaining_playback = 0
 
-                # 4. Add Safety Buffer (2.0s covers network lag)
                 safety_buffer = 2.0
                 total_wait = remaining_playback + safety_buffer
 
-                if self._is_speaking and total_wait > 0:
-                    logger.debug(f"TTS Gen done. Audio remaining: {remaining_playback:.2f}s. Waiting total {total_wait:.2f}s")
-                    await asyncio.sleep(total_wait)
+                logger.debug(f" TTS generation done. Audio remaining: {remaining_playback:.2f}s. Waiting {total_wait:.2f}s")
                 
-                self._is_speaking = False
-                logger.debug("Agent finished speaking (State: False)")
+                if self._is_speaking and total_wait > 0:
+                    async def _wait_for_playback():
+                        try:
+                            await asyncio.sleep(total_wait)
+                            self._is_speaking = False
+                            logger.debug(" Agent finished speaking (playback complete)")
+                        except asyncio.CancelledError:
+                            self._is_speaking = False
+                            logger.debug(" Playback wait cancelled (interrupted during playback)")
+                    
+                    # Cancel any existing playback task
+                    if self._playback_task and not self._playback_task.done():
+                        self._playback_task.cancel()
+                    
+                    self._playback_task = asyncio.create_task(_wait_for_playback())
+                else:
+                    self._is_speaking = False
+                    logger.debug("🔇 Agent finished speaking (no wait needed)")
 
         return _tracking_tts_generator()
 
@@ -98,10 +116,11 @@ class IntelligentInterruptionAgent(VoiceAgent):
                 
                 if event.type == stt.SpeechEventType.START_OF_SPEECH:
                     if self._is_speaking:
-                        logger.debug("START detected (agent speaking) - withholding")
+                        logger.debug(" START detected (agent speaking) - withholding")
                         speech_started = True
                         continue # Swallow
                     else:
+                        logger.debug(" START detected (agent silent) - passing through")
                         yield event
 
                 elif event.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
@@ -117,13 +136,14 @@ class IntelligentInterruptionAgent(VoiceAgent):
                         has_real_word = any(word not in IGNORE_WORDS for word in words)
                         
                         if has_real_word:
-                            logger.info(f"Real interrupt detected: '{clean_text}'")
+                            logger.info(f" Real interrupt detected: '{clean_text}'")
                             # Yield the withheld START event now
                             yield stt.SpeechEvent(type=stt.SpeechEventType.START_OF_SPEECH)
                             yield event
                             speech_started = False # Released
                         else:
                             # Still just backchannels ("yeah...", "um...")
+                            logger.debug(f" Interim backchannel: '{clean_text}' - withholding")
                             continue 
                     else:
                         yield event
@@ -142,24 +162,26 @@ class IntelligentInterruptionAgent(VoiceAgent):
                     
                     if self._is_speaking:
                         if all_backchannels and speech_started:
-                            # IGNORE
-                            logger.info(f"Confirmed backchannel: '{clean_text}' - dropping")
+                            # IGNORE - confirmed backchannel
+                            logger.info(f" Confirmed backchannel: '{clean_text}' - dropping")
                             speech_started = False
                             continue 
                         else:
-                            #INTERRUPT
+                            # INTERRUPT - real interruption
                             if speech_started:
                                 yield stt.SpeechEvent(type=stt.SpeechEventType.START_OF_SPEECH)
                                 speech_started = False
-                            logger.info(f"Confirmed interrupt: '{clean_text}'")
+                            logger.info(f" Confirmed interrupt: '{clean_text}'")
                             yield event
                     else:
-                        #RESPOND
+                        # RESPOND - agent is silent
                         logger.info(f"→ Input (agent silent): '{clean_text}'")
                         yield event
 
                 elif event.type == stt.SpeechEventType.END_OF_SPEECH:
                     if self._is_speaking and speech_started:
+                        # Drop the END event for backchannels
+                        logger.debug(" END (backchannel) - dropping")
                         speech_started = False
                         continue 
                     yield event
