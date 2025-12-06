@@ -147,6 +147,8 @@ class AgentActivity(RecognitionHooks):
         self._backchannel_filter = BackchannelFilter(
             config=sess.options.backchannel_config
         )
+        # Track if agent was speaking when user started talking (for accurate backchannel detection)
+        self._agent_was_speaking_when_user_started: bool = False
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1269,6 +1271,15 @@ class AgentActivity(RecognitionHooks):
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
 
+        # Capture agent's speaking state when user starts talking
+        # This is used for backchannel detection - we want to know if agent
+        # was speaking at the START of user's speech, not when transcript arrives
+        self._agent_was_speaking_when_user_started = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
         if self._false_interruption_timer:
             # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
@@ -1435,31 +1446,31 @@ class AgentActivity(RecognitionHooks):
             return False
 
         # Backchannel filtering: Ignore passive acknowledgements like "yeah", "ok", "mhmm"
-        # when the agent is currently speaking. Only applies to interruptible speech.
-        agent_is_speaking = (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
-        )
+        # when the agent WAS speaking when user STARTED talking.
+        # We use the cached flag instead of current state because by the time
+        # the transcript arrives, the agent may have finished speaking.
+        agent_was_speaking = self._agent_was_speaking_when_user_started
         
         # Debug logging to trace filter behavior
         logger.debug(
             "backchannel filter check",
             extra={
                 "user_input": info.new_transcript,
-                "agent_is_speaking": agent_is_speaking,
+                "agent_was_speaking_when_user_started": agent_was_speaking,
                 "current_speech_exists": self._current_speech is not None,
                 "speech_interrupted": self._current_speech.interrupted if self._current_speech else None,
                 "speech_allows_interruptions": self._current_speech.allow_interruptions if self._current_speech else None,
             },
         )
         
-        if self._backchannel_filter.should_ignore(info.new_transcript, agent_is_speaking):
+        if self._backchannel_filter.should_ignore(info.new_transcript, agent_was_speaking):
             self._cancel_preemptive_generation()
             logger.debug(
-                "ignoring backchannel while agent is speaking",
+                "ignoring backchannel while agent was speaking",
                 extra={"user_input": info.new_transcript},
             )
+            # Reset the flag for next user speech
+            self._agent_was_speaking_when_user_started = False
             return False
 
         old_task = self._user_turn_completed_atask

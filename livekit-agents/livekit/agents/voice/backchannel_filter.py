@@ -36,7 +36,7 @@ class BackchannelConfig:
         # Acknowledgements
         "ok", "okay", "alright", "right", "sure", "fine",
         # Fillers/listening signals
-        "hmm", "mm", "mmm", "mhm", "uh-huh", "uh huh", "uhuh", "aha",
+        "hmm", "mm", "mmm", "mhm", "mhmm", "uh-huh", "uh huh", "uhuh", "aha", "hm",
         # Understanding signals
         "gotcha", "got it", "i see", "understood",
     })
