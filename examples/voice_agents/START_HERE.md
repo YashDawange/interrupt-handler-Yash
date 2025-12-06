@@ -10,6 +10,10 @@ This solution implements an intelligent context-aware interruption handling syst
 **State-aware processing** - Same word treated differently based on agent state  
 **No stuttering or resuming** - Meets strict requirement of seamless speech continuation
 
+## Video Proof (sped up coz of size constraints :/)
+
+https://github.com/user-attachments/assets/25a1faab-7793-4752-ae86-9eb7d63e7e14
+
 ---
 
 ## Architecture
