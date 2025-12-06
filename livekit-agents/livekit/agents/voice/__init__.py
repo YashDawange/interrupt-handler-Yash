@@ -1,6 +1,15 @@
 from . import io, run_result
 from .agent import Agent, AgentTask, ModelSettings
 from .agent_session import AgentSession, VoiceActivityVideoSampler
+from .backchanneling_filter import (
+    BackchannelingConfig,
+    BackchannelingFilter,
+    get_global_filter,
+    set_global_filter,
+    should_ignore_for_interruption,
+    DEFAULT_FILLER_WORDS,
+    DEFAULT_COMMAND_WORDS,
+)
 from .events import (
     AgentEvent,
     AgentFalseInterruptionEvent,
@@ -45,6 +54,13 @@ __all__ = [
     "FunctionToolsExecutedEvent",
     "AgentFalseInterruptionEvent",
     "TranscriptSynchronizer",
+    "BackchannelingConfig",
+    "BackchannelingFilter",
+    "get_global_filter",
+    "set_global_filter",
+    "should_ignore_for_interruption",
+    "DEFAULT_FILLER_WORDS",
+    "DEFAULT_COMMAND_WORDS",
     "io",
     "room_io",
     "run_result",
