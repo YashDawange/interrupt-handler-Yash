@@ -74,6 +74,7 @@ from .generation import (
     remove_instructions,
     update_instructions,
 )
+from .backchannel_filter import BackchannelFilter
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -141,6 +142,11 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        # Initialize backchannel filter for intelligent interruption handling
+        self._backchannel_filter = BackchannelFilter(
+            config=sess.options.backchannel_config
+        )
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1180,6 +1186,17 @@ class AgentActivity(RecognitionHooks):
             and self._audio_recognition is not None
         ):
             text = self._audio_recognition.current_transcript
+
+            # Backchannel filtering: check if this is just a passive acknowledgement
+            # while the agent is speaking (e.g., "yeah", "ok", "hmm")
+            agent_is_speaking = (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+            )
+            if self._backchannel_filter.should_ignore(text, agent_is_speaking):
+                # This is a backchannel word while agent is speaking
+                # DO NOT interrupt - agent continues seamlessly
+                return
 
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
