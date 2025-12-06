@@ -37,8 +37,18 @@ from livekit.agents import (
     cli,
     function_tool,
 )
-from livekit.plugins import cartesia, deepgram, openai, silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit_plugins.livekit_plugins_cartesia.livekit.plugins.cartesia import TTS as CartesiaTTS
+from livekit_plugins.livekit_plugins_deepgram.livekit.plugins.deepgram import STT as DeepgramSTT
+from livekit_plugins.livekit_plugins_openai.livekit.plugins.openai import LLM as OpenAILLM
+from livekit_plugins.livekit_plugins_silero.livekit.plugins.silero import VAD as SileroVAD
+from livekit_plugins.livekit_plugins_turn_detector.livekit.plugins.turn_detector.multilingual import MultilingualModel
+# from livekit_plugins_cartesia import cartesia
+# from livekit_plugins_deepgram import deepgram
+# from livekit_plugins_openai import openai
+# from livekit_plugins_silero import silero
+# from livekit_plugins_turn_detector.multilingual import MultilingualModel
+# from livekit_plugins import cartesia, deepgram, openai, silero
+# from livekit_plugins.turn_detector.multilingual import MultilingualModel
 
 load_dotenv()
 
@@ -478,3 +488,16 @@ async def drive_thru_agent(ctx: JobContext) -> None:
 
 if __name__ == "__main__":
     cli.run_app(server)
+
+from livekit.agents import WorkerOptions, cli
+from livekit.agents.worker import Worker
+
+def main():
+    # Register the agent to handle jobs with queue name "drive-thru"
+    Worker.create(
+        agents=[DriveThruAgent],
+        options=WorkerOptions(name="drive-thru"),
+    )
+
+if __name__ == "__main__":
+    cli.main(main)
