@@ -1,4 +1,4 @@
-# LiveKit Intelligent Interruption Handler
+# Intelligent Interruption Handler
 
 ## Solution Overview
 
