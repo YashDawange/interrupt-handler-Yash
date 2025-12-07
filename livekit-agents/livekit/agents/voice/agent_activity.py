@@ -73,8 +73,12 @@ from .generation import (
     perform_tts_inference,
     remove_instructions,
     update_instructions,
+    _LLMGenerationData,
 )
 from .speech_handle import SpeechHandle
+import os
+import re
+from typing import Set
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -135,6 +139,38 @@ class AgentActivity(RecognitionHooks):
         self._speech_tasks: list[asyncio.Task[Any]] = []
 
         self._preemptive_generation: _PreemptiveGeneration | None = None
+
+        # interruption policy words (configurable via env)
+        ignore_str = os.getenv(
+            "INTERRUPTION_IGNORE_WORDS",
+            "yeah,ok,okay,yep,yes,hmm,um,uh,mm-hmm,mm hmm,uh-huh,uh huh,alright,right,sure,mhmm,mhm",
+        )
+        command_str = os.getenv(
+            "INTERRUPTION_COMMAND_WORDS",
+            "stop,wait,no,hold on,hold,stop it,wait a second,wait a minute,pause",
+        )
+        self._ignore_words: Set[str] = set(w.strip().lower() for w in ignore_str.split(",") if w.strip())
+        self._command_words: Set[str] = set(w.strip().lower() for w in command_str.split(",") if w.strip())
+
+        # Debug logging for interrupt word lists
+        logger.debug(f"Interrupt handler initialized with:")
+        logger.debug(f"  Ignore words ({len(self._ignore_words)}): {self._ignore_words}")
+        logger.debug(f"  Command words ({len(self._command_words)}): {self._command_words}")
+
+        # deferred interrupt task used when VAD fires before STT interim
+        self._deferred_interrupt_task: asyncio.Task | None = None
+
+        # maximum allowed STT transcription delay (seconds) for EOU-triggered commits
+        eou_delay = os.getenv("EOU_MAX_TRANSCRIPT_DELAY_SEC", "2.0")
+        try:
+            self._eou_max_transcript_delay: float = float(eou_delay)
+        except Exception:
+            self._eou_max_transcript_delay = 2.0
+        logger.debug(f"EOU max transcript delay set to {self._eou_max_transcript_delay}s")
+        # allow disabling the turn-detector EOUs for dev/debugging
+        td_env = os.getenv("TURN_DETECTOR_ENABLED", "true").lower()
+        self._turn_detector_enabled: bool = td_env not in ("0", "false", "no", "off")
+        logger.debug(f"TURN_DETECTOR_ENABLED={self._turn_detector_enabled}")
 
         self._drain_blocked_tasks: list[asyncio.Task[Any]] = []
         self._mcp_tools: list[mcp.MCPTool] = []
@@ -1172,6 +1208,7 @@ class AgentActivity(RecognitionHooks):
 
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
+            logger.debug("Interrupt ignored: realtime model handles turn detection")
             return
 
         if (
@@ -1183,6 +1220,10 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                logger.debug(
+                    "Interrupt ignored: below min_interruption_words",
+                    extra={"words": split_words(text, split_character=True)},
+                )
                 return
 
         if self._rt_session is not None:
@@ -1193,6 +1234,10 @@ class AgentActivity(RecognitionHooks):
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
+            logger.info(
+                "Interrupting current speech due to user audio",
+                extra={"transcript": getattr(self._audio_recognition, "current_transcript", None)},
+            )
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1208,6 +1253,15 @@ class AgentActivity(RecognitionHooks):
                     self._rt_session.interrupt()
 
                 self._current_speech.interrupt()
+        else:
+            logger.debug(
+                "Interrupt skipped: no current speech or not interruptible",
+                extra={
+                    "has_current": self._current_speech is not None,
+                    "interrupted": getattr(self._current_speech, "interrupted", None),
+                    "allow": getattr(self._current_speech, "allow_interruptions", None),
+                },
+            )
 
     # region recognition hooks
 
@@ -1241,6 +1295,29 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
+            # If the agent is currently speaking and we have an STT recognizer,
+            # VAD may detect audio slightly before STT produces any interim text.
+            # Defer briefly to let STT produce an interim transcript so we can
+            # decide whether this is a soft backchannel (ignore) or a real
+            # interruption (interrupt). This avoids pausing/stuttering on
+            # filler/backchannel words.
+            if (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+                and self._audio_recognition is not None
+            ):
+                # cancel any previous deferred task
+                if self._deferred_interrupt_task and not self._deferred_interrupt_task.done():
+                    self._deferred_interrupt_task.cancel()
+
+                logger.debug("VAD detected during agent speech — deferring interrupt to await STT")
+                self._deferred_interrupt_task = asyncio.create_task(
+                    self._maybe_interrupt_after_brief_wait()
+                )
+                return
+
+            # default immediate behavior
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
@@ -1257,10 +1334,26 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
+        # cancel any VAD-deferred interrupt — we now have a transcript to act on
+        if self._deferred_interrupt_task and not self._deferred_interrupt_task.done():
+            logger.debug("Interim transcript arrived; cancelling deferred VAD interrupt")
+            self._deferred_interrupt_task.cancel()
+
+        text = ev.alternatives[0].text or ""
+        logger.debug("Interim transcript: %r (agent_speaking=%s)", text, bool(self._current_speech))
+        if text and self._turn_detection not in ("manual", "realtime_llm"):
+            # If the agent is speaking and the transcript is only backchannel
+            # words, ignore the interruption to avoid stutter. If it contains
+            # a command word or mixed content, interrupt immediately.
+            if (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._is_backchannel_only(text)
+            ):
+                logger.debug("Interim transcript contains only fillers — ignoring interrupt: %r", text)
+                # ignore the interruption — do nothing
+                return
+
             self._interrupt_by_audio_activity()
 
             if (
@@ -1288,10 +1381,23 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
-        if self._audio_recognition and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
-        ):
+
+        # cancel any VAD-deferred interrupt — final transcript available
+        if self._deferred_interrupt_task and not self._deferred_interrupt_task.done():
+            logger.debug("Final transcript arrived; cancelling deferred VAD interrupt")
+            self._deferred_interrupt_task.cancel()
+
+        if self._audio_recognition and self._turn_detection not in ("manual", "realtime_llm"):
+            text = ev.alternatives[0].text or ""
+            logger.debug("Final transcript: %r (agent_speaking=%s)", text, bool(self._current_speech))
+            if (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._is_backchannel_only(text)
+            ):
+                # final transcript contains only fillers; don't interrupt
+                return
+
             self._interrupt_by_audio_activity()
 
             if (
@@ -1365,6 +1471,87 @@ class AgentActivity(RecognitionHooks):
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
 
+        if not getattr(self, "_turn_detector_enabled", True):
+            logger.debug(
+                "EOU disabled via TURN_DETECTOR_ENABLED=false — ignoring EOU commit"
+            )
+            return False
+
+    
+        if (
+            hasattr(info, "transcription_delay")
+            and info.transcription_delay is not None
+            and info.transcription_delay > self._eou_max_transcript_delay
+        ):
+            logger.debug(
+                f"EOU: stale transcript — ignoring EOU commit (delay={info.transcription_delay:.2f}s, threshold={self._eou_max_transcript_delay}s)"
+            )
+            return False
+        # Check if the transcript is backchannel-only
+        text = info.new_transcript or ""
+        if text:
+            # If agent is currently speaking, check ONLY the last clause/words added
+            # (because accumulated transcript may have substantive content from earlier)
+            if (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            ):
+                # Check only the most recent addition (last clause after punctuation)
+                last_clause = self._get_last_clause(text)
+                is_all_ignored = self._is_backchannel_only(last_clause) if last_clause else True
+                has_command = self._contains_command_word(last_clause)
+                
+                logger.info(
+                    f"EOU interrupt check (agent speaking): full='{text}' last_clause='{last_clause}' | all_ignored={is_all_ignored}, has_command={has_command}"
+                )
+                if is_all_ignored and not has_command:
+                    logger.info(
+                        f"EOU: IGNORING backchannel-only interrupt: '{last_clause}'"
+                    )
+                    return False
+                else:
+                    logger.info(
+                        f"EOU: ALLOWING interrupt: '{last_clause}' (mixed content or command)"
+                    )
+                    # actively interrupt current speech before committing the user turn
+                    self._interrupt_by_audio_activity()
+            else:
+                # Agent is NOT speaking - check the full transcript
+                is_all_ignored = self._is_backchannel_only(text)
+                has_command = self._contains_command_word(text)
+                
+                logger.info(
+                    f"EOU turn check (agent not speaking): '{text}' | all_ignored={is_all_ignored}, has_command={has_command}"
+                )
+                if is_all_ignored and not has_command:
+                    logger.info(
+                        f"EOU: IGNORING backchannel-only turn: '{text}' (not starting new response)"
+                    )
+                    return False
+                elif has_command:
+                    # Check if this is onlu a command
+                    words = self._extract_words(text)
+                    command_only = all(w in self._command_words or w in self._ignore_words for w in words)
+                    
+                    if command_only:
+                        logger.info(
+                            f"EOU: command-only turn '{text}' — interrupting but NOT starting new response"
+                        )
+                        self._interrupt_by_audio_activity()
+                        return False
+                    else:
+                        logger.info(
+                            f"EOU: command with substantive content '{text}' — interrupting and allowing turn"
+                        )
+                        self._interrupt_by_audio_activity()
+                        # fall through to allow the turn
+                else:
+                    logger.debug(f"EOU: ALLOWING turn: '{text}' (substantive content)")
+        else:
+            logger.debug("EOU: empty transcript, allowing")
+        #end
+
         if (
             self.stt is not None
             and self._turn_detection != "manual"
@@ -1384,6 +1571,98 @@ class AgentActivity(RecognitionHooks):
             self._user_turn_completed_task(old_task, info),
             name="AgentActivity._user_turn_completed_task",
         )
+
+    # helper methods for interruption policy
+    def _normalize_transcript(self, transcript: str) -> str:
+        if not transcript:
+            return ""
+        text = transcript.lower().strip()
+        text = re.sub(r"\s+", " ", text)
+        return text
+
+    def _extract_words(self, text: str) -> list[str]:
+        if not text:
+            return []
+        return re.findall(r"\b[\w'-]+\b", text.lower())
+
+    def _contains_command_word(self, text: str) -> bool:
+        t = text.lower()
+        for cmd in sorted(self._command_words, key=len, reverse=True):
+            pattern = r"\b" + re.escape(cmd) + r"\b"
+            if re.search(pattern, t):
+                logger.debug(f"Command word detected: '{cmd}' in '{text}'")
+                return True
+        return False
+
+    def _all_words_ignored(self, transcript: str) -> bool:
+        normalized = self._normalize_transcript(transcript)
+        if not normalized:
+            return True
+        words = self._extract_words(normalized)
+        if not words:
+            return True
+        return all(w in self._ignore_words for w in words)
+
+    def _get_last_clause(self, transcript: str) -> str:
+        """Return the last clause (after final sentence punctuation) of transcript.
+
+        This helps treat trailing backchannel words ("yeah", "okay") separately
+        from preceding substantive content.
+        """
+        if not transcript:
+            return ""
+        # split 
+        parts = re.split(r"[.!?]+\s*", transcript.strip())
+        for part in reversed(parts):
+            p = part.strip()
+            if p:
+                return p
+        return ""
+
+    def _is_backchannel_only(self, transcript: str) -> bool:
+        """Return True if the last clause is only backchannel/filler words and contains no command words."""
+        last = self._get_last_clause(transcript)
+        if not last:
+            return True
+        # if there's a command anywhere, treat as not backchannel-only
+        if self._contains_command_word(last):
+            return False
+        words = self._extract_words(last)
+        if not words:
+            return True
+        return all(w in self._ignore_words for w in words)
+
+    async def _maybe_interrupt_after_brief_wait(self) -> None:
+        try:
+            # small wait to allow STT interim results to appear (keeps latency low)
+            # increased to accommodate slower STT interims observed in the field
+            await asyncio.sleep(0.6)
+
+            # if no audio_recognition available, fall back to immediate interrupt
+            if self._audio_recognition is None:
+                self._interrupt_by_audio_activity()
+                return
+
+            text = (self._audio_recognition.current_transcript or "").strip()
+            logger.info(f"Deferred interrupt check — transcript after wait: '{text}' | agent_speaking={self._current_speech is not None}")
+
+            # if command present -> interrupt immediately
+            if text and self._contains_command_word(text):
+                logger.info(f"Deferred check: command detected '{text}', interrupting")
+                self._interrupt_by_audio_activity()
+                return
+
+            # if the transcript is blank or only backchannel words -> ignore
+            if self._is_backchannel_only(text):
+                logger.info(f"Deferred check: only fillers or empty transcript '{text}' — ignoring interrupt")
+                return
+
+            # otherwise interrupt
+            logger.info(f"Deferred check: transcript looks substantive '{text}' — interrupting")
+            self._interrupt_by_audio_activity()
+        except asyncio.CancelledError:
+            # task cancelled because a transcript arrived or other event
+            return
         return True
 
     @utils.log_exceptions(logger=logger)
@@ -1745,12 +2024,35 @@ class AgentActivity(RecognitionHooks):
         # I should implement a retry mechanism?
 
         tasks: list[asyncio.Task[Any]] = []
-        llm_task, llm_gen_data = perform_llm_inference(
-            node=self._agent.llm_node,
-            chat_ctx=chat_ctx,
-            tool_ctx=tool_ctx,
-            model_settings=model_settings,
-        )
+        # Support a dev/demo fake-LLM mode to avoid external API usage during recordings
+        if os.getenv("USE_FAKE_LLM", "false").lower() in ("1", "true", "yes"):
+            # create fake generation data and a small task that writes canned text
+            canned = os.getenv("FAKE_LLM_TEXT", "Hello — this is a demo reply.")
+            data = _LLMGenerationData(text_ch=utils.aio.Chan(), function_ch=utils.aio.Chan())
+
+            async def _fake_llm_task() -> bool:
+                # signal started
+                if not data.started_fut.done():
+                    data.started_fut.set_result(None)
+                # stream the canned text in small chunks
+                try:
+                    for part in canned.split():
+                        data.text_ch.send_nowait(part + " ")
+                        await asyncio.sleep(0.01)
+                finally:
+                    return True
+
+            llm_task = asyncio.create_task(_fake_llm_task())
+            llm_task.add_done_callback(lambda _: data.text_ch.close())
+            llm_task.add_done_callback(lambda _: data.function_ch.close())
+            llm_gen_data = data
+        else:
+            llm_task, llm_gen_data = perform_llm_inference(
+                node=self._agent.llm_node,
+                chat_ctx=chat_ctx,
+                tool_ctx=tool_ctx,
+                model_settings=model_settings,
+            )
         tasks.append(llm_task)
 
         text_tee = utils.aio.itertools.tee(llm_gen_data.text_ch, 2)
