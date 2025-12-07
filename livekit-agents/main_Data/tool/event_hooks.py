@@ -5,141 +5,270 @@ This file wires the real-time events to the Switchable InterruptionManager.
 """
 import asyncio
 import logging
+from datetime import datetime
+from typing import Optional
 from .interruption_manager import InterruptionManager
 from .state_observer import AgentStateObserver
 from .config import STT_CONFIRM_DELAY, STT_MAX_WAIT
 
-# Configure logging for visibility into decision making
+# Configure logging
 log = logging.getLogger("interrupt_hooks")
-log.setLevel(logging.INFO) # Set to DEBUG for verbose output
+log.setLevel(logging.INFO)
 
 # --- SINGLETONS ---
 state = AgentStateObserver()
-# The manager is instantiated once and automatically loads its mode (RULES, LLM, RAG, HYBRID)
 manager = InterruptionManager() 
 
 # --- STATE VARIABLES ---
-# Tracks the last transcript received for correlation with VAD events
 _last_stt_for_vad = None
 _last_decision = None
-_vad_lock = asyncio.Lock() # Ensures VAD and STT processing doesn't overlap
+_vad_lock = asyncio.Lock()
+_stt_timestamp = None
+_agent_start_time = None
+_user_start_time = None
+
+# Reference to TTS stream (will be set by agent)
+_tts_stream = None
+_intent_handler = None
+
+# =====================================================================
+# SETUP FUNCTIONS - Call these from your agent initialization
+# =====================================================================
+
+def set_tts_stream(tts_stream):
+    """Set the TTS stream reference for stopping playback."""
+    global _tts_stream
+    _tts_stream = tts_stream
+    log.info("TTS stream reference set.")
+
+def set_intent_handler(handler):
+    """Set the intent handler callback for processing user input."""
+    global _intent_handler
+    _intent_handler = handler
+    log.info("Intent handler set.")
 
 # =====================================================================
 # 1. TTS LIFECYCLE HOOKS
-# These must be called by your agent's TTS/Audio playback code.
 # =====================================================================
 
 async def on_tts_start():
     """Called when the agent begins speaking."""
-    log.debug("AGENT_STATE: Speaking started.")
+    global _agent_start_time
+    _agent_start_time = datetime.now().timestamp() * 1000  # Convert to ms
     state.on_speaking_start()
+    log.debug(f"AGENT_STATE: Speaking started at {_agent_start_time}ms")
 
 async def on_tts_end():
     """Called when the agent finishes speaking."""
-    log.debug("AGENT_STATE: Speaking ended.")
+    global _agent_start_time
     state.on_speaking_end()
+    _agent_start_time = None
+    log.debug("AGENT_STATE: Speaking ended.")
 
 # =====================================================================
-# 2. VAD HOOK
-# Called when VAD suggests the agent should stop talking (user spoke).
+# 2. VAD HOOK - Enhanced with audio metadata
 # =====================================================================
 
-async def vad_stop_event_handler(vad_event_id: str, stop_callback: callable):
+async def vad_stop_event_handler(
+    vad_event_id: str, 
+    stop_callback: callable,
+    audio_rms: float = 0.0,
+    vad_confidence: float = 1.0
+):
     """
     Delays the VAD stop event to allow STT time to confirm the intent.
     
-    :param vad_event_id: A correlation ID for the VAD event.
-    :param stop_callback: The function to call to stop the agent's TTS stream.
+    :param vad_event_id: Correlation ID for the VAD event
+    :param stop_callback: Function to call to stop the agent's TTS stream
+    :param audio_rms: RMS energy of the audio signal
+    :param vad_confidence: VAD confidence score (0-1)
     """
-    global _last_stt_for_vad, _last_decision
+    global _last_stt_for_vad, _last_decision, _user_start_time, _agent_start_time
     
     async with _vad_lock:
-        # Wait a small buffer time for the STT transcript to arrive
+        # Record user start time
+        _user_start_time = datetime.now().timestamp() * 1000
+        
+        # Wait for STT to provide transcript
         await asyncio.sleep(STT_CONFIRM_DELAY)
         
+        # Build audio metadata
+        audio_meta = {
+            "vad": vad_confidence,
+            "user_start": _user_start_time,
+            "agent_start": _agent_start_time or 0,
+            "rms": audio_rms,
+        }
+        
         if _last_stt_for_vad:
-            # Analyze the received transcript using the configured engine
-            decision = await manager.analyze(_last_stt_for_vad, state.is_speaking())
+            # Analyze with full context
+            decision = await manager.analyze(
+                transcript=_last_stt_for_vad,
+                agent_is_speaking=state.is_speaking(),
+                audio_meta=audio_meta
+            )
             _last_decision = decision
             
-            log.debug(f"VAD Stop Check: STT='{_last_stt_for_vad}' | Decision={decision}")
+            log.info(
+                f"VAD Stop Analysis | "
+                f"Transcript: '{_last_stt_for_vad}' | "
+                f"Decision: {decision} | "
+                f"Engine: {manager.current_engine_name}"
+            )
             
+            # Decision logic
             if decision == "IGNORE" and state.is_speaking():
-                # Case 1: Agent speaking + User said "yeah/ok" -> IGNORE
-                log.info("VAD: Canceling stop due to IGNORE decision (Backchannel).")
-                return # Do nothing, agent continues speaking
-
-            if decision == "INTERRUPT" and state.is_speaking():
-                # Case 2: Agent speaking + User said "stop/wait" -> INTERRUPT
-                log.info("VAD: Honoring interrupt -> Stopping TTS.")
-                await stop_callback() # Stop the agent's speaking
+                # User said backchannel (yeah, ok) - keep speaking
+                log.info("✓ VAD: IGNORE decision - Agent continues speaking")
+                _last_stt_for_vad = None  # Clear for next event
                 return
-
-        # Case 3: Default Stop (Agent silent, or no STT, or NORMAL decision)
-        # If the agent is silent, VAD stop just confirms the user is done speaking.
-        log.debug("VAD: No context or NORMAL decision -> Honoring stop.")
-        await stop_callback()
+            
+            elif decision == "INTERRUPT" and state.is_speaking():
+                # User wants to interrupt (stop, wait, change, etc.)
+                log.info("✗ VAD: INTERRUPT decision - Stopping agent")
+                await stop_callback()
+                
+                # Process the user's intent after stopping
+                if _intent_handler:
+                    await _intent_handler(_last_stt_for_vad)
+                
+                _last_stt_for_vad = None
+                return
+        
+        # Default: honor the stop (user finished speaking or no transcript)
+        if state.is_speaking():
+            log.debug("VAD: Default stop (no STT or NORMAL decision)")
+            await stop_callback()
+        
+        _last_stt_for_vad = None
 
 # =====================================================================
-# 3. STT HOOK
-# Called on every partial or final transcript received from STT.
+# 3. STT HOOK - Enhanced with parallel processing
 # =====================================================================
 
-async def on_stt_partial(transcript: str):
+async def on_stt_partial(transcript: str, is_final: bool = False):
     """
-    Handles incoming STT transcripts. Provides immediate interrupt if detected mid-speech.
+    Handles incoming STT transcripts with parallel interrupt detection.
+    
+    :param transcript: The transcribed text
+    :param is_final: Whether this is a final transcript
     """
-    global _last_stt_for_vad, _last_decision
-    _last_stt_for_vad = transcript # Update state for VAD handler
+    global _last_stt_for_vad, _last_decision, _stt_timestamp, _user_start_time
+    
+    if not transcript or not transcript.strip():
+        return
+    
+    # Update state for VAD handler
+    _last_stt_for_vad = transcript
+    _stt_timestamp = datetime.now().timestamp() * 1000
+    
+    if not _user_start_time:
+        _user_start_time = _stt_timestamp
+    
+    # Build audio metadata
+    audio_meta = {
+        "vad": 1.0,
+        "user_start": _user_start_time,
+        "agent_start": _agent_start_time or 0,
+        "rms": 0.01,  # Default mid-range value
+    }
+    
+    log.debug(f"STT Partial: '{transcript}' | Final: {is_final} | Agent Speaking: {state.is_speaking()}")
     
     if state.is_speaking():
-        # Agent is speaking: we check for hard interrupts
-        decision = await manager.analyze(transcript, True)
+        # PARALLEL CHECK: Immediate interrupt detection while agent is speaking
+        decision = await manager.analyze(
+            transcript=transcript,
+            agent_is_speaking=True,
+            audio_meta=audio_meta
+        )
         _last_decision = decision
         
         if decision == "INTERRUPT":
-            # Hard stop detected immediately (e.g., user says "STOP!")
-            log.info(f"STT: Hard Interrupt detected mid-speech: '{transcript}'. Stopping immediately.")
+            # Hard interrupt detected - stop immediately
+            log.warning(f"🛑 STT: HARD INTERRUPT detected: '{transcript}'")
             await _stop_tts_immediately()
-            # Pass the transcript to the intent handler for processing
-            await _handle_user_intent(transcript)
-        # IGNORE case is handled by the VAD_STOP_EVENT_HANDLER
+            
+            # Handle the user's request
+            if _intent_handler and is_final:
+                await _intent_handler(transcript)
+            
+            return
+        
+        elif decision == "IGNORE":
+            # Backchannel - log but don't stop
+            log.debug(f"✓ STT: Backchannel ignored: '{transcript}'")
+            return
+        
+        # NORMAL: Let VAD handler decide based on timing
+        log.debug(f"➜ STT: NORMAL utterance, VAD will decide: '{transcript}'")
     
     else:
-        # Agent is silent: all transcripts are potential user input.
-        # We still run manager.analyze() to see if it's an IGNORE (noise/filler), 
-        # but the decision logic is typically simpler when silent (rules should default to NORMAL).
-        decision = await manager.analyze(transcript, False)
+        # Agent is silent - process user input normally
+        decision = await manager.analyze(
+            transcript=transcript,
+            agent_is_speaking=False,
+            audio_meta=audio_meta
+        )
         
-        # Original request check: if silent, must check the thing is not ignorable.
-        if decision != "IGNORE" and transcript.strip():
-            log.info(f"STT: Agent silent, processing user input: '{transcript}'")        
-            await _handle_user_intent(transcript)
+        if decision != "IGNORE" and is_final:
+            log.info(f"📝 STT: Agent silent, processing: '{transcript}'")
+            if _intent_handler:
+                await _intent_handler(transcript)
         else:
-            log.debug(f"STT: Agent silent, input ignored (likely noise/empty): '{transcript}'")
-
+            log.debug(f"⊘ STT: Input ignored (noise/filler): '{transcript}'")
 
 # =====================================================================
-# 4. PLACEHOLDERS (Must be implemented in your LiveKit Agent class)
+# 4. HELPER FUNCTIONS
 # =====================================================================
 
 async def _stop_tts_immediately():
-    """
-    MOCK FUNCTION: Replace with your actual TTS stopping mechanism.
-    This function should forcefully stop the agent's current audio playback queue.
-    """
-    # Example implementation might involve calling a method on a TtsStream object:
-    # await agent.tts_stream.stop_playback() 
-    log.warning("--- TTS STOP MOCK: Agent audio stopped immediately. ---")
+    """Stop the agent's TTS playback immediately."""
+    if _tts_stream:
+        try:
+            await _tts_stream.aclose()  # LiveKit method to stop TTS stream
+            log.info("✓ TTS stream stopped successfully")
+        except Exception as e:
+            log.error(f"✗ Error stopping TTS stream: {e}")
+    else:
+        log.warning("⚠ TTS stream not set - cannot stop playback")
 
 async def _handle_user_intent(text: str):
     """
-    MOCK FUNCTION: Replace with your actual user intent processing logic.
-    This is where the agent's core NLP/LLM pipeline takes over.
-    
-    :param text: The transcript (usually a final transcript) to process.
+    Process user intent through the registered handler.
+    This is the fallback if _intent_handler is not set.
     """
-    # Example implementation might submit a prompt to the LLM:
-    # response = await llm_chain.ainvoke({"user_input": text})
-    # await agent.say(response)
-    log.warning(f"--- INTENT HANDLER MOCK: Processing intent for: '{text}' ---")
+    if _intent_handler:
+        await _intent_handler(text)
+    else:
+        log.warning(f"⚠ No intent handler registered for: '{text}'")
+
+# =====================================================================
+# 5. UTILITY FUNCTIONS
+# =====================================================================
+
+def get_last_decision() -> Optional[str]:
+    """Get the last interruption decision made."""
+    return _last_decision
+
+def reset_state():
+    """Reset all state variables (useful for testing)."""
+    global _last_stt_for_vad, _last_decision, _stt_timestamp
+    global _agent_start_time, _user_start_time
+    
+    _last_stt_for_vad = None
+    _last_decision = None
+    _stt_timestamp = None
+    _agent_start_time = None
+    _user_start_time = None
+    
+    log.info("State reset complete")
+
+def get_manager_stats() -> dict:
+    """Get current manager statistics."""
+    return {
+        "current_engine": manager.current_engine_name,
+        "agent_speaking": state.is_speaking(),
+        "last_decision": _last_decision,
+        "last_transcript": _last_stt_for_vad,
+    }
