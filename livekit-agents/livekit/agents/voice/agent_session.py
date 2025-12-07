@@ -251,6 +251,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 session to. Falls back to :pyfunc:`asyncio.get_event_loop()`.
         """
         super().__init__()
+        self._ignore_next_vad_start = False
         self._loop = loop or asyncio.get_event_loop()
 
         if is_given(agent_false_interruption_timeout):
@@ -289,6 +290,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             if is_given(use_tts_aligned_transcript)
             else None,
         )
+        self._baseline_allow_interruptions = allow_interruptions
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
         self._turn_detection = turn_detection or None
@@ -1182,8 +1184,21 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         )
 
     def _update_user_state(
-        self, state: UserState, *, last_speaking_time: float | None = None
+        self,
+        state: UserState,
+        *,
+        last_speaking_time: float | None = None,
     ) -> None:
+        # While the agent is speaking, do NOT let VAD move user into "speaking".
+        # Also clear any partial user turn to avoid accidental commits.
+        if state == "speaking" and self.agent_state == "speaking":
+            if self._activity is not None:
+                try:
+                    self._activity.clear_user_turn()
+                except RuntimeError:
+                    pass
+            return
+
         if self._user_state == state:
             return
 
