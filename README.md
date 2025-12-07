@@ -321,40 +321,204 @@ async def test_no_availability() -> None:
 
 </table>
 
-## Running your agent
+## Running Your Agent
 
-### Testing in terminal
+This agent implements **context-aware interruption handling** that distinguishes between passive acknowledgements (backchanneling) and active interruptions.
 
-```shell
+### Prerequisites
+
+1. **Python 3.10+** with a virtual environment
+2. **Environment variables** in a `.env` file:
+   ```
+   OPENAI_API_KEY=your_openai_key
+   DEEPGRAM_API_KEY=your_deepgram_key
+   CARTESIA_API_KEY=your_cartesia_key
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install "livekit-agents[openai,deepgram,cartesia]~=1.0"
+   pip install python-dotenv
+   ```
+
+### Running the Agent
+
+#### Testing in Terminal (Recommended for Development)
+
+```bash
 python myagent.py console
 ```
 
-Runs your agent in terminal mode, enabling local audio input and output for testing.
-This mode doesn't require external servers or dependencies and is useful for quickly validating behavior.
+This runs the agent in terminal mode with local audio input/output. Perfect for testing the interruption logic without external dependencies.
 
-### Developing with LiveKit clients
+#### Development Mode (with LiveKit Server)
 
-```shell
+```bash
 python myagent.py dev
 ```
 
-Starts the agent server and enables hot reloading when files change. This mode allows each process to host multiple concurrent agents efficiently.
+Starts the agent server with hot reloading. Requires LiveKit server connection:
 
-The agent connects to LiveKit Cloud or your self-hosted server. Set the following environment variables:
-- LIVEKIT_URL
-- LIVEKIT_API_KEY
-- LIVEKIT_API_SECRET
+**Environment variables needed:**
+```
+LIVEKIT_URL=wss://your-livekit-server.com
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+```
 
-You can connect using any LiveKit client SDK or telephony integration.
-To get started quickly, try the [Agents Playground](https://agents-playground.livekit.io/).
+Connect using any LiveKit client SDK or the [Agents Playground](https://agents-playground.livekit.io/).
 
-### Running for production
+#### Production Mode
 
-```shell
+```bash
 python myagent.py start
 ```
 
-Runs the agent with production-ready optimizations.
+Runs with production optimizations.
+
+---
+
+## How the Interruption Logic Works
+
+This agent uses **manual interruption handling** to provide seamless conversation flow. Instead of letting the framework automatically interrupt on any user speech, we classify user input and decide whether to ignore, interrupt, or respond.
+
+### Architecture Overview
+
+```
+User Speech → STT Transcription → Classification → Action Decision
+                                              ↓
+                    ┌─────────────────────────┼─────────────────────────┐
+                    ↓                         ↓                         ↓
+                IGNORE                    INTERRUPT                  RESPOND
+         (keep speaking)            (stop immediately)        (generate reply)
+```
+
+### Key Components
+
+#### 1. **Agent State Tracking** (`AgentSpeechState`)
+
+The agent tracks its state as either:
+- **`SPEAKING`**: Agent is actively speaking
+- **`SILENT`**: Agent is idle, listening, or thinking
+
+This state is updated via the `agent_state_changed` event.
+
+#### 2. **Text Classification** (`interruption_handler.py`)
+
+The `classify_user_text()` function analyzes user input and returns one of three decisions:
+
+- **`IGNORE`**: Pure backchanneling words (e.g., "yeah", "ok", "uh-huh")
+- **`INTERRUPT`**: Commands that require immediate stopping (e.g., "stop", "wait", "no")
+- **`RESPOND`**: Normal user input that requires a response
+
+#### 3. **Event-Driven Logic** (`myagent.py`)
+
+Three event handlers coordinate the behavior:
+
+**`agent_state_changed`**: Tracks when agent starts/stops speaking
+```python
+if ev.new_state == "speaking":
+    agent_speech_state = AgentSpeechState.SPEAKING
+else:
+    agent_speech_state = AgentSpeechState.SILENT
+```
+
+**`user_state_changed`**: Detects when user starts speaking during agent speech
+```python
+if ev.new_state == "speaking" and agent_speech_state == SPEAKING:
+    pending_interrupt = True
+```
+
+**`user_input_transcribed`**: Makes the decision based on classified text
+```python
+decision = classify_user_text(text, agent_speech_state)
+# Then acts based on decision: IGNORE, INTERRUPT, or RESPOND
+```
+
+### Behavior Scenarios
+
+#### Scenario 1: Backchanneling During Explanation ✅
+**Situation**: Agent is explaining something long, user says "yeah" or "ok"
+
+**Flow**:
+1. Agent state: `SPEAKING`
+2. User says: "yeah"
+3. Classification: `IGNORE` (pure backchannel word)
+4. **Action**: Agent continues speaking seamlessly, no pause
+
+**Result**: Natural conversation flow maintained
+
+---
+
+#### Scenario 2: Backchanneling as Answer ✅
+**Situation**: Agent asks "Are you ready?" and goes silent, user says "yeah"
+
+**Flow**:
+1. Agent state: `SILENT`
+2. User says: "yeah"
+3. Classification: `RESPOND` (agent is silent, so all input is valid)
+4. **Action**: Agent generates a reply acknowledging the answer
+
+**Result**: Backchanneling words are treated as meaningful when agent is waiting
+
+---
+
+#### Scenario 3: Active Interruption Command ✅
+**Situation**: Agent is speaking, user says "stop" or "wait"
+
+**Flow**:
+1. Agent state: `SPEAKING`
+2. User says: "stop"
+3. Classification: `INTERRUPT` (contains interrupt word)
+4. **Action**: Agent stops immediately via `session.interrupt()`
+5. **Important**: Agent does NOT generate a reply, stays silent until user speaks again
+
+**Result**: Hard stop with no follow-up, waiting for user input
+
+---
+
+#### Scenario 4: Mixed Input ✅
+**Situation**: Agent is speaking, user says "yeah okay but wait"
+
+**Flow**:
+1. Agent state: `SPEAKING`
+2. User says: "yeah okay but wait"
+3. Classification: `INTERRUPT` (contains "wait" - an interrupt word)
+4. **Action**: Agent stops immediately
+
+**Result**: Even if mostly backchanneling, interrupt words take priority
+
+---
+
+### Classification Rules
+
+The classification logic in `interruption_handler.py` uses these rules:
+
+1. **Interrupt words take priority**: If text contains any word from `INTERRUPT_WORDS` ("stop", "wait", "no", etc.), always return `INTERRUPT`
+
+2. **While agent is SPEAKING**:
+   - Pure backchannel words only → `IGNORE`
+   - Anything else (even mixed) → `INTERRUPT`
+
+3. **While agent is SILENT**:
+   - Everything (including backchannel words) → `RESPOND`
+
+### Customization
+
+You can customize the behavior by modifying `interruption_handler.py`:
+
+- **Add ignore words**: Add to `IGNORE_WORDS` set
+- **Add interrupt words**: Add to `INTERRUPT_WORDS` set
+- **Change classification logic**: Modify `classify_user_text()` function
+
+### Key Design Decisions
+
+1. **`allow_interruptions=False`**: Disables automatic interruptions, giving us full control
+2. **Only final transcripts**: We only act on `is_final=True` transcripts to avoid premature decisions
+3. **No auto-reply on interrupt**: When interrupted, agent stays silent (hard stop requirement)
+4. **State-aware classification**: Same word ("yeah") behaves differently based on agent state
+
+This design ensures the agent never breaks its speech flow for passive acknowledgements while still responding appropriately to real interruptions and questions.
 
 ## Contributing
 
