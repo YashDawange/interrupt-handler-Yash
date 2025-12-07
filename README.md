@@ -31,37 +31,48 @@ Traditional voice agents have two limitations:
 
 ```
 ┌─────────────────────────────────────────────┐
-│   LiveKit Voice Agent (Agent Speaking)      │
+│   LiveKit Voice Agent                       │
 ├─────────────────────────────────────────────┤
-│  STT: Deepgram (nova-2)                     │
-│  LLM: Google Gemini 2.0 Flash               │
-│  TTS: Deepgram (aura-asteria-en)            │
+│  STT: Deepgram nova-2 (with interim)        │
+│  LLM: Groq (llama-3.1-8b-instant)           │
+│  TTS: Deepgram aura-asteria-en              │
 │  VAD: Silero (local)                        │
 ├─────────────────────────────────────────────┤
-│       Intelligent Interrupt Handler         │
-│  • Check against filler word list           │
-│  • Check against interrupt word list        │
-│  • Apply threshold logic                    │
+│  Hybrid Interruption Architecture:          │
+│  1. min_interruption_words=5                │
+│     → Blocks short utterances (fillers)     │
+│  2. Interim transcript monitoring           │
+│     → Detects interrupt words in real-time  │
+│  3. Manual session.interrupt()              │
+│     → Bypasses word count for valid words   │
 ├─────────────────────────────────────────────┤
 │  Decision: INTERRUPT or CONTINUE            │
 └─────────────────────────────────────────────┘
 ```
 
-### Decision Logic
+### Hybrid Decision Architecture
 
-```python
-if agent_state == SILENT:
-    return PROCESS  # Always respond when silent
-else:  # Agent is SPEAKING
-    if has_interrupt_word(text):
-        return INTERRUPT  # Priority to commands
-    elif all_filler_words(text):
-        return IGNORE  # Continue speaking
-    elif enough_content(text):
-        return INTERRUPT  # Real input
-    else:
-        return IGNORE  # Single filler word
-```
+**Two-Layer Approach:**
+
+1. **LiveKit Layer** (Automatic):
+   ```python
+   min_interruption_words=5  # Blocks utterances < 5 words
+   ```
+   - Filler words like "yeah" (1 word) → Blocked automatically
+   - Agent continues speaking without pause
+
+2. **Handler Layer** (Manual Override):
+   ```python
+   # Monitor interim transcripts in real-time
+   if agent_state == SPEAKING and event.is_interim:
+       if interrupt_handler.should_interrupt(state, text):
+           session.interrupt()  # Manual trigger for valid words
+   ```
+   - Interrupt words like "stop" → Detected in interim
+   - Manually bypass the 5-word minimum
+   - Agent stops immediately
+
+**Result**: Filler words filtered, interrupt words processed instantly!
 
 ---
 
@@ -89,16 +100,16 @@ agents-assignment/
 - Python 3.10+
 - pip or uv package manager
 - LiveKit Cloud account (free tier available)
-- Google Cloud account with Gemini API enabled
+- Groq API account (free, no credit card needed!)
 - Deepgram API key
 - Environment variables properly configured
 
 ### API Keys Required
 
 ```bash
-# 1. Google Gemini API
-# Get from: https://aistudio.google.com/app/apikeys
-GOOGLE_API_KEY=your_google_api_key_here
+# 1. Groq API (Free & Fast!)
+# Get from: https://console.groq.com/keys
+GROQ_API_KEY=gsk_your_groq_api_key_here
 
 # 2. Deepgram API
 # Get from: https://console.deepgram.com/
@@ -132,7 +143,7 @@ cp .env.example .env
 # 5. Edit .env with your API keys:
 nano .env
 # Add:
-# GOOGLE_API_KEY=sk-proj-your-key
+# GROQ_API_KEY=gsk_your-groq-key
 # DEEPGRAM_API_KEY=your-deepgram-key
 # LIVEKIT_URL=wss://your-project.livekit.cloud
 # LIVEKIT_API_KEY=your_livekit_key
@@ -141,7 +152,55 @@ nano .env
 
 ---
 
-## 🚀 Quick Start
+## � What Was Created (No Extra Packages Needed!)
+
+### Files Created for This Assignment
+
+**Core Implementation:**
+1. **`livekit-agents/livekit/agents/voice/interrupt_handler.py`** ⭐
+   - New file created for intelligent interruption logic
+   - `InterruptHandler` class implementation
+   - `AgentState` enum (SPEAKING/SILENT)
+   - `InterruptionConfig` dataclass
+
+2. **`examples/voice_agents/intelligent_agent.py`** ⭐
+   - Demo agent using the hybrid architecture
+   - Integrates `InterruptHandler` with LiveKit session
+   - Event listeners for interim transcripts
+   - Manual interrupt triggering
+
+3. **`interrupt_config.json`** ⭐
+   - Configuration file for word lists
+   - Filler words, interrupt words, thresholds
+   - Easy customization without code changes
+
+4. **`tests/test_my_interrupt_handler.py`** ⭐
+   - Standalone test suite (19 test cases)
+   - Tests all scenarios from assignment
+   - No external dependencies needed
+
+### Packages Used (Already in Workspace!)
+
+**No extra `pip install` needed!** All dependencies were already included in the LiveKit agents workspace:
+
+✅ `livekit-agents` - Core framework (workspace package)  
+✅ `livekit-plugins-deepgram` - STT/TTS (workspace package)  
+✅ `livekit-plugins-openai` - For Groq API (workspace package)  
+✅ `livekit-plugins-silero` - VAD (workspace package)  
+✅ `python-dotenv` - Environment variables  
+
+**Note:** We use `livekit-plugins-openai` with Groq's OpenAI-compatible endpoint:
+```python
+llm=openai.LLM(
+    model="llama-3.1-8b-instant",
+    base_url="https://api.groq.com/openai/v1",  # Groq endpoint
+    api_key=os.getenv("GROQ_API_KEY"),
+)
+```
+
+---
+
+## �🚀 Quick Start
 
 ### 1: Run Tests
 
@@ -152,7 +211,22 @@ python tests/test_interrupt_handler.py
 ```
 ---
 
-## 🧪 Test Scenarios
+## 📋 Assignment Requirements Mapping
+
+This project implements all scenarios from the assignment PDF:
+
+| Assignment Scenario | Implementation | Test Coverage |
+|---------------------|----------------|---------------|
+| **Scenario 1**: The Long Explanation<br>Agent speaking, user says "yeah" | ✅ Blocked by `min_interruption_words=5` | Test cases 1-4 |
+| **Scenario 2**: The Passive Affirmation<br>Agent silent, user says "yeah" | ✅ Always processed when agent is `SILENT` | Test cases 5-7 |
+| **Scenario 3**: The Correction<br>Agent speaking, user says "stop" | ✅ Manual `session.interrupt()` triggered | Test cases 8-10 |
+| **Scenario 4**: Mixed Input<br>"yeah but wait" | ✅ Interrupt word detected → interrupts | Test cases 11-13 |
+
+**All scenarios pass automated tests (19/19) ✅**
+
+---
+
+## 🧪 Test Scenarios (From Assignment PDF)
 
 ### Scenario 1: Filler Words (Agent Speaking)
 ```
@@ -253,39 +327,63 @@ stats = handler.get_stats()
 
 ## 🔍 How It Works
 
-### Step 1: Text Normalization
-```python
-text = "YEAH but WAIT"
-normalized = text.lower().strip()  # "yeah but wait"
-```
+### Hybrid Architecture Implementation
 
-### Step 2: Tokenization
+**Layer 1: LiveKit Auto-Blocking**
 ```python
-words = ["yeah", "but", "wait"]
-clean_words = [w for w in words if w]  # Remove empty strings
+session = AgentSession(
+    min_interruption_words=5,  # Automatic filter
+    allow_interruptions=True,   # But allow manual override
+)
 ```
+- Utterances with < 5 words are **automatically blocked**
+- "yeah" (1 word) → Blocked, agent continues
+- No pause, no detection needed
 
-### Step 3: Word Classification
+**Layer 2: Interim Transcript Monitoring**
 ```python
-has_interrupt_word = any(w in interrupt_words for w in words)
-# True: contains "wait"
-
-has_filler_only = all(w in filler_words for w in words)
-# False: "wait" is not a filler
+@session.on("user_input_transcribed")
+def on_user_transcript(event):
+    if not event.is_final and agent_state == SPEAKING:
+        # Real-time detection BEFORE final transcript
+        should_interrupt = interrupt_handler.should_interrupt(
+            agent_state, event.transcript
+        )
+        if should_interrupt:
+            session.interrupt()  # Manual override!
 ```
+- Listen to **interim** transcripts (partial, real-time)
+- Detect interrupt words like "stop", "wait"
+- Call `session.interrupt()` manually
+- **Bypasses** the 5-word minimum!
 
-### Step 4: Decision Logic
-```python
-if agent_state == SPEAKING:
-    if has_interrupt_word:  # "wait" is interrupt word
-        return True  # INTERRUPT immediately
-    elif has_filler_only:
-        return False  # IGNORE (all fillers)
-    else:
-        return determine_by_content(words)
-else:
-    return True  # Process when silent
-```
+**Result:**
+- ✅ "yeah" → 1 word → Auto-blocked by Layer 1
+- ✅ "stop" → 1 word BUT interrupt word → Detected in Layer 2 → Manual interrupt
+- ✅ "I have a question" → 4 words BUT has interrupt word → Manual interrupt
+
+### Step-by-Step Example
+
+**User says: "stop"**
+
+1. **VAD detects speech** → LiveKit receives audio
+2. **Deepgram STT** → Sends interim transcript: "stop"
+3. **Layer 1 check**: Only 1 word, but Layer 2 gets to run first
+4. **Layer 2 (Interim handler)**: 
+   ```python
+   interrupt_handler.should_interrupt(SPEAKING, "stop")
+   # Returns: True (interrupt word detected!)
+   session.interrupt()  # Manual bypass!
+   ```
+5. **Agent stops** immediately ✅
+
+**User says: "yeah"**
+
+1. **VAD detects speech** → LiveKit receives audio
+2. **Deepgram STT** → Sends interim transcript: "yeah"
+3. **Layer 1 check**: Only 1 word → **Auto-blocked!**
+4. **Layer 2 logs**: `🚫 Filler word detected: 'yeah' - blocking via min_interruption_words`
+5. **Agent continues** speaking ✅
 
 ---
 
@@ -390,50 +488,152 @@ Success Rate: 100%
 
 ## 🎬 Live Demo Steps
 
-### Step 1: Start Terminal 1 (Agent)
+### Step 1: Start Frontend (Terminal 1)
 
 ```bash
-cd ~/Desktop/agent-assignment/agents-assignment
-python examples/voice_agents/intelligent_agent.py start
+cd agents-assignment/frontend/agents-playground
+pnpm install  # First time only
+pnpm run dev
+```
+
+Watch for:
+```
+  ▲ Next.js 15.x.x
+  - Local:        http://localhost:3000
+  ✓ Ready in 2.5s
+```
+
+### Step 2: Start Agent (Terminal 2)
+
+```bash
+uv run python examples/voice_agents/intelligent_agent.py dev
 ```
 
 Watch for:
 ```
 INFO - registered worker {"agent_name": "intelligent-interruption-agent", ...}
-✓ VAD model prewarmed
-🚀 Starting session in room: test-room
+✓ Agent ready and waiting for connections
 ```
 
-### Step 2: Open Browser
+### Step 3: Open Browser & Connect
 
-Go to: **https://agents-playground.livekit.io/**
+1. Go to: **http://localhost:3000**
+2. Click **"Connect"** button
+3. Allow microphone permission when prompted
+4. Wait for agent to greet you
 
-### Step 3: Connect
+### Step 4: Test Live Interruption
 
-1. Sign in with Google
-2. Select project: **"interrupt-agent"**
-3. Click **"Connect"**
-4. Allow microphone permission
-
-### Step 4: Test Voice
-
-**Test 1: Filler Words**
+**✅ Test 1: Filler Words (Should NOT Interrupt)**
 ```
+Agent: "Hello! I'm your AI assistant..."
+You: "yeah" (while agent is still speaking)
+Result: Agent continues speaking (filtered by min_interruption_words=5)
+Console log: 🚫 Filler word detected: 'yeah' - blocking
+```
+
+**✅ Test 2: Interrupt Command (SHOULD Interrupt)**
+```
+Agent: "Go ahead, ask me anything..."
+You: "stop" (while agent is speaking)
+Result: Agent stops immediately (manual session.interrupt())
+Console log: ⚡ Valid interrupt word detected: 'stop' - manually triggering
+```
+
+**✅ Test 3: Question (SHOULD Interrupt)**
+```
+Agent: "Machine learning is..."
+You: "wait, what is that?"
+Result: Agent stops and processes your question
+Console log: ⚡ Valid interrupt word detected: 'wait'
+```
+
+**✅ Test 4: Silent Response (Always Processes)**
+```
+Agent: (finished speaking, silent)
 You: "yeah"
-Agent: Continues speaking (🚫 filtered)
+Result: Agent responds to your input
+Console log: ✅ Valid interruption processed
 ```
 
-**Test 2: Command**
-```
-You: "stop"
-Agent: Stops immediately (✅ interrupted)
-```
+---
 
-**Test 3: Question**
-```
-You: "wait, how does that work?"
-Agent: Stops and responds (interrupted)
-```
+##  Troubleshooting
+
+### Agent Not Responding
+
+**Problem**: Agent connects but doesn't respond to questions
+
+**Solutions**:
+1. **Check Groq API Key**:
+   ```bash
+   cat .env | grep GROQ_API_KEY
+   # Should show: GROQ_API_KEY=gsk_...
+   ```
+
+2. **Check Agent Logs** for errors:
+   ```bash
+   # Look for "Error", "Failed", or "429" in logs
+   uv run python examples/voice_agents/intelligent_agent.py dev 2>&1 | grep -i error
+   ```
+
+3. **API Quota Issues**:
+   - Groq free tier: Very generous, rarely hits limits
+   - If you see `429 Too Many Requests`: Wait a few minutes or create new account
+
+### Filler Words Still Interrupting
+
+**Problem**: Agent pauses on "yeah" or "um"
+
+**Check**:
+1. Verify `min_interruption_words=5` in `intelligent_agent.py`:
+   ```bash
+   grep "min_interruption_words" examples/voice_agents/intelligent_agent.py
+   # Should show: min_interruption_words=5
+   ```
+
+2. Check console logs:
+   ```
+   🚫 Filler word detected: 'yeah' - blocking via min_interruption_words
+   ```
+
+### Interrupt Words Not Working
+
+**Problem**: Saying "stop" doesn't interrupt the agent
+
+**Check**:
+1. Verify `interim_results=True` in STT config
+2. Check logs for:
+   ```
+   ⚡ Valid interrupt word detected: 'stop' - manually triggering
+   ```
+3. Make sure `allow_interruptions=True` in session config
+
+### Frontend Won't Connect
+
+**Problem**: Frontend loads but can't connect to agent
+
+**Solutions**:
+1. Check backend is running:
+   ```bash
+   ps aux | grep intelligent_agent
+   ```
+
+2. Check logs show "registered worker"
+
+3. Verify LiveKit credentials in `.env`:
+   ```bash
+   grep LIVEKIT .env
+   ```
+
+4. Restart both frontend and backend:
+   ```bash
+   # Terminal 1
+   cd frontend/agents-playground && pnpm run dev
+   
+   # Terminal 2  
+   cd ../.. && uv run python examples/voice_agents/intelligent_agent.py dev
+   ```
 
 ---
 
@@ -470,7 +670,7 @@ Handler initialization:
 - [Voice Agents API](https://docs.livekit.io/agents/voice/)
 
 ### API Documentation
-- [Google Gemini API](https://ai.google.dev/)
+- [Groq API](https://console.groq.com/docs/quickstart)
 - [Deepgram Speech API](https://developers.deepgram.com/)
 - [Silero VAD](https://github.com/snakers4/silero-vad)
 
@@ -489,11 +689,12 @@ Handler initialization:
 
 ✅ **Smart Filtering** - Distinguishes filler from real input  
 ✅ **Low Latency** - O(1) word lookups, fast decisions  
+✅ **Hybrid Architecture** - Combines LiveKit auto-blocking + manual overrides  
 ✅ **Configurable** - Easy to customize word lists  
 ✅ **Observable** - Statistics tracking for debugging  
 ✅ **Production-Ready** - Integrated with LiveKit Cloud  
-✅ **Well-Tested** - 20+ test cases, 100% pass rate  
+✅ **Well-Tested** - 19/19 test cases, 100% pass rate  
 ✅ **Documented** - Comprehensive README & code comments  
-✅ **Google Gemini + Deepgram** - Latest AI/Speech APIs  
+✅ **Groq LLM + Deepgram STT/TTS** - Fast, free, and reliable APIs  
 
 ---
