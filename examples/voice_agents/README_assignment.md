@@ -1,57 +1,38 @@
-# Intelligent Interruption Logic — README
+# LiveKit — Intelligent Interruption Handling
 
-## Purpose
-This logic layer provides deterministic heuristics to decide whether incoming user speech should interrupt an assistant that is currently speaking (TTS). It is intentionally small and synchronous so it's easy to reason about and tune.
+## Overview
+This project adds a small, state-aware layer on top of a LiveKit voice agent to distinguish passive backchanneling (for example: "yeah", "ok", "uh-huh") from active interruptions ("stop", "wait", "no"). The logic lives in the agent event loop and does not modify the low-level VAD. The result:
 
-## Concepts
-- **Filler / backchannel words** (e.g. "yeah", "ok"): these are typically not intended to interrupt the assistant while it speaks.
-- **Interrupt commands** (e.g. "stop", "wait"): always considered an interrupt when the assistant is speaking.
-- **Threshold-based content**: non-filler words in a short burst can be considered interruptive if they meet or exceed `min_words_for_interrupt`.
+- The agent keeps speaking uninterrupted when the user produces filler/backchannel words.
+- The agent stops immediately when explicit interrupt words are detected.
+- The same short filler word is treated as valid input when the agent is silent.
 
-## Files
-- `interrupt_handler.py` — the core logic. Exposes:
-  - `InterruptHandler.should_interrupt(agent_state, transcribed_text) -> bool`
-  - `InterruptHandler._tokenize(text) -> list[str]` (utility)
-  - `InterruptHandler.get_stats()` / `reset_stats()`
-  - `AgentState` enum with `SPEAKING` and `SILENT`.
+## Files added 
+- `examples/voice_agents/agent_layer.py`  
+  Example integration that prewarms VAD, wires STT/LLM/TTS, and attaches the interruption logic. It handles both interim and final transcripts and attempts manual TTS interruption when appropriate.
 
-- `interrupt_config.json` — words and threshold configuration:
-  - `filler_words` (array)
-  - `interrupt_words` (array)
-  - `min_words_for_interrupt` (integer)
+- `livekit-agents/livekit/agents/voice/interrupt_handler.py`  
+  `InterruptHandler` and `InterruptionConfig` responsible for:
+  - Loading `interrupt_config.json`
+  - Tokenizing STT text
+  - Making state-aware decisions (speak vs silent)
 
-- `agent_layer.py` — a sample integration demonstrating how to wire `InterruptHandler` into an `AgentSession`.
+- `interrupt_config.json` (project root)  
+  Configurable lists for `filler_words`, `interrupt_words`, and `min_words_for_interrupt`.
 
-## Decision policy (summary)
-1. If agent is **SILENT** → treat any final user input as input (no special handling).
-2. If agent is **SPEAKING**:
-   - If transcript contains any `interrupt_words` → **interrupt**.
-   - Else if all tokens are in `filler_words` → **ignore** (do not interrupt).
-   - Else if count(non-filler tokens) >= `min_words_for_interrupt` → **interrupt**.
-   - Else → **ignore**.
+- `.env` (add a .env inside examples folder)  
+  Holds LiveKit, GROQ and DEEPGRAM API credentials needed by the agent_layer file.
 
-Notes:
-- Interim STT transcripts are checked to allow quick manual interruption. Final transcripts are treated similarly and are more authoritative.
-- The tokenization is intentionally simple (`\b[a-z]+\b`) to avoid complicated language-specific tokenizers and keep the system fast.
+## How it works (short)
+1. The VAD triggers audio events as usual.
+2. STT provides interim and final transcripts.
+3. `InterruptHandler` inspects tokens and the current agent state:
+   - If the agent is speaking, filler-only utterances are ignored.
+   - If the agent is speaking and an explicit interrupt word or a contentful phrase (meeting the configured threshold) appears, the agent is interrupted.
+   - If the agent is silent, input is always processed.
+4. All logic runs in user-space; VAD is unchanged.
 
-## Tuning guide
-- To make the handler **more sensitive**:
-  - Lower `min_words_for_interrupt` (e.g., `1` will make single non-filler words interrupt).
-  - Add more words to `interrupt_words` (phrases like "hey", "excuse me").
+### Setup and how to run 
 
-- To make the handler **less sensitive**:
-  - Increase `min_words_for_interrupt` (e.g., `3`).
-  - Add common backchannels to `filler_words`.
-
-## Debugging / logging
-- `InterruptHandler` logs informational messages for decisions (interruption vs ignored) and debug logs for tokenization and empty transcripts.
-- Use `get_stats()` to inspect counts during tests.
-
-## Integration checklist
-1. Place `interrupt_handler.py` in the same package path used by your app (the agent_layer imports it as `livekit.agents.voice.interrupt_handler`).
-2. Ensure `interrupt_config.json` is discoverable in project root (or pass a path to `InterruptHandler(config_path=...)`).
-3. In your session loop (STT callbacks), call:
-   ```py
-   should_interrupt = interrupter.should_interrupt(current_agent_state, transcript_text)
-   if should_interrupt:
-       session.interrupt()
+1. Run this command -> uv sync --all-extras --dev
+2. Then run -> uv run examples/voice_agents/agent_layer.py console

@@ -1,6 +1,4 @@
-"""
-Intelligent Interruption Agent Demo (refactored)
-"""
+
 import logging
 import os
 from dotenv import load_dotenv
@@ -35,7 +33,7 @@ def warm_vad(job_proc: JobProcess) -> None:
 
 async def start_job(context: JobContext) -> None:
     """Main job entrypoint used by the worker runner."""
-    logger.info(f"🚀 Launching session for room: {context.room.name}")
+    logger.info(f" Launching session for room: {context.room.name}")
 
     
     await context.connect()
@@ -69,7 +67,7 @@ async def start_job(context: JobContext) -> None:
         tts=deepgram.TTS(model="aura-asteria-en"),
         vad=context.proc.userdata["vad"],
         allow_interruptions=True,
-        min_interruption_words=5,  # keep same guard vs single-word filler
+        min_interruption_words=5,  
         min_interruption_duration=0.0,
     )
 
@@ -82,13 +80,15 @@ async def start_job(context: JobContext) -> None:
         if evt.new_state == "speaking":
             speaker_state = AgentState.SPEAKING
             retry_interrupt_check = False
-            logger.info("🗣️ Assistant began speaking")
+            logger.info(" Assistant began speaking")
         elif evt.old_state == "speaking":
             speaker_state = AgentState.SILENT
-            logger.info("🤐 Assistant finished speaking")
+            logger.info(" Assistant finished speaking")
 
     @agent_session.on("user_input_transcribed")
     def _on_transcript(evt):
+
+
         """Watch STT transcripts and decide whether to manually trigger an interrupt."""
         nonlocal retry_interrupt_check
 
@@ -98,13 +98,13 @@ async def start_job(context: JobContext) -> None:
 
         # Handle interim transcripts while the assistant is speaking:
         if not evt.is_final and speaker_state == AgentState.SPEAKING:
-            logger.info(f"👂 Interim transcript: '{text}'")
+            logger.info(f" Interim transcript: '{text}'")
 
             should_interrupt = interrupter.should_interrupt(speaker_state, text)
 
             if should_interrupt:
                 # Attempt to interrupt the TTS immediately.
-                logger.info(f"⚡ Triggering manual interrupt for interim: '{text}'")
+                logger.info(f" Triggering manual interrupt for interim: '{text}'")
                 try:
                     agent_session.interrupt()
                 except Exception as exc:
@@ -114,25 +114,25 @@ async def start_job(context: JobContext) -> None:
                 if interrupter._tokenize(text):
                     pass
 
-        # Final transcripts (user finished speaking)
+        # User finished speaking
         elif evt.is_final:
-            logger.info(f"👤 Final transcript: '{text}'")
+            logger.info(f" Final transcript: '{text}'")
             should_interrupt = interrupter.should_interrupt(speaker_state, text)
 
             if should_interrupt:
-                logger.info(f"⚡ Triggering manual interrupt for final: '{text}'")
+                logger.info(f" Triggering manual interrupt for final: '{text}'")
                 try:
                     agent_session.interrupt()
                 except Exception as exc:
                     logger.warning(f"Manual interrupt (final) failed: {exc}")
             else:
-                logger.info("✅ Treated as filler/ignored while speaking")
+                logger.info(" Treated as filler/ignored while speaking")
 
-    # start the session and greet the user
+    # start session and greet the user
     await agent_session.start(agent=assistant, room=context.room)
     await agent_session.say("Hello! I'm your AI assistant. Go ahead, ask me anything!")
 
-    logger.info("✅ Session is live and ready")
+    logger.info(" Session is live and ready")
 
 
 if __name__ == "__main__":
