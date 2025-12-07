@@ -45,8 +45,8 @@ async def entrypoint(ctx: JobContext):
         vad=silero.VAD.load(),
         stt=context_aware_stt,
         llm=openai.LLM(model="gpt-4o-mini"),
-        tts=elevenlabs.TTS(),
-        # tts=openai.TTS(),
+        # tts=elevenlabs.TTS(),
+        tts=openai.TTS(),
 
         # Let the user interrupt, but our logic decides WHEN it actually matters
         allow_interruptions=True,
