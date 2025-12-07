@@ -142,6 +142,9 @@ class AudioRecognition:
 
         self._user_turn_span: trace.Span | None = None
         self._closing = asyncio.Event()
+        
+        # Flag to skip processing of current transcript (set by hooks for backchanneling)
+        self._skip_transcript_processing = False
 
     def update_options(
         self,
@@ -239,11 +242,22 @@ class AudioRecognition:
         self._audio_preflight_transcript = ""
         self._final_transcript_confidence = []
         self._user_turn_committed = False
+        self._skip_transcript_processing = False
 
         # reset stt to clear the buffer from previous user turn
         stt = self._stt
         self.update_stt(None)
         self.update_stt(stt)
+
+    def skip_current_transcript(self) -> None:
+        """Skip processing of the current transcript.
+        
+        Called by hooks when backchanneling is detected - prevents the
+        transcript from being added to the user turn and triggering responses.
+        """
+        self._skip_transcript_processing = True
+        # Also clear the interim transcript so it doesn't get accumulated
+        self._audio_interim_transcript = ""
 
     def commit_user_turn(
         self,
@@ -356,10 +370,23 @@ class AudioRecognition:
             if not transcript:
                 return
 
+            # Set interim transcript BEFORE calling hook so that current_transcript
+            # includes this transcript when the backchanneling filter checks it.
+            # This will be cleared after the hook call below.
+            self._audio_interim_transcript = transcript
+            self._skip_transcript_processing = False  # Reset flag before hook
+
             self._hooks.on_final_transcript(
                 ev,
                 speaking=self._speaking if self._vad else None,
             )
+            
+            # Check if hook signaled to skip this transcript (e.g., backchanneling)
+            if self._skip_transcript_processing:
+                self._skip_transcript_processing = False
+                self._audio_interim_transcript = ""
+                return  # Skip all further processing for this transcript
+
             extra: dict[str, Any] = {"user_transcript": transcript, "language": self._last_language}
             if self._last_speaking_time:
                 extra["transcript_delay"] = time.time() - self._last_speaking_time
@@ -441,8 +468,10 @@ class AudioRecognition:
                 )
 
         elif ev.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
-            self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
+            # Set interim transcript BEFORE calling hook so that current_transcript
+            # includes this transcript when the backchanneling filter checks it
             self._audio_interim_transcript = ev.alternatives[0].text
+            self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
 
         elif ev.type == stt.SpeechEventType.END_OF_SPEECH and self._turn_detection_mode == "stt":
             with trace.use_span(self._ensure_user_turn_span()):
