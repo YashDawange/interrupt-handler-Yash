@@ -1,0 +1,20 @@
+{
+  "filler_words": [
+    "yeah",
+    "ok",
+    "okay",
+    "hmm",
+    "right",
+    "uh-huh",
+    "uh",
+    "mm-hmm"
+  ],
+  "interrupt_words": [
+    "stop",
+    "wait",
+    "no",
+    "cancel",
+    "hold on"
+  ],
+  "min_words_for_interrupt": 2
+}
