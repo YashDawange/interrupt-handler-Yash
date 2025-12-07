@@ -1166,6 +1166,57 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
+    @utils.log_exceptions(logger=logger)
+    async def _delayed_interrupt_check(self, ev: vad.VADEvent) -> None:
+        """Wait briefly for STT transcript before deciding to interrupt.
+        
+        This handles the VAD-before-STT problem where VAD detects speech
+        before STT has transcribed it. We wait a short time for the transcript
+        to arrive, then check the backchannel filter.
+        """
+        # Wait up to 300ms for STT to provide a transcript
+        # This is a reasonable delay that won't be noticeable to users
+        max_wait_time = 0.3
+        check_interval = 0.05  # Check every 50ms
+        elapsed = 0.0
+        
+        while elapsed < max_wait_time:
+            await asyncio.sleep(check_interval)
+            elapsed += check_interval
+            
+            if self._audio_recognition is None:
+                break
+                
+            transcript = self._audio_recognition.current_transcript
+            
+            # If we have a transcript now, check the filter immediately
+            if transcript and transcript.strip():
+                # Re-check conditions - they might have changed
+                if (
+                    self._session._backchannel_filter is not None
+                    and self._current_speech is not None
+                    and not self._current_speech.interrupted
+                    and self._current_speech.allow_interruptions
+                    and self._session.agent_state == "speaking"
+                ):
+                    if self._session._backchannel_filter.should_ignore_interruption(
+                        transcript=transcript,
+                        agent_state=self._session.agent_state,
+                    ):
+                        logger.debug(
+                            "BackchannelFilter: Ignoring interruption after transcript arrived",
+                            extra={"transcript": transcript},
+                        )
+                        return  # Don't interrupt, agent continues speaking
+                
+                # Transcript arrived and filter says we should interrupt
+                break
+        
+        # Either transcript arrived and filter says interrupt, or timeout
+        # Proceed with normal interruption logic
+        if ev.speech_duration >= self._session.options.min_interruption_duration:
+            self._interrupt_by_audio_activity()
+
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
@@ -1173,6 +1224,30 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
             return
+
+        # Get current transcript for backchannel filtering
+        transcript = ""
+        if self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+
+        # Check backchannel filter if agent is speaking and filter is enabled
+        if (
+            self._session._backchannel_filter is not None
+            and self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+            and self._session.agent_state == "speaking"
+        ):
+            # Check if interruption should be ignored based on transcript
+            if self._session._backchannel_filter.should_ignore_interruption(
+                transcript=transcript,
+                agent_state=self._session.agent_state,
+            ):
+                logger.debug(
+                    "BackchannelFilter: Ignoring interruption, agent continues speaking",
+                    extra={"transcript": transcript, "agent_state": self._session.agent_state},
+                )
+                return  # Ignore the interruption, agent continues speaking
 
         if (
             self.stt is not None
@@ -1241,6 +1316,24 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
+            # Check if we need to wait for STT transcript before interrupting
+            # This handles the VAD-before-STT problem
+            if (
+                self._session._backchannel_filter is not None
+                and self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+                and self._session.agent_state == "speaking"
+                and self._audio_recognition is not None
+            ):
+                transcript = self._audio_recognition.current_transcript
+                # If no transcript yet, wait briefly for STT to catch up
+                if not transcript or not transcript.strip():
+                    # Schedule a delayed check - if transcript arrives and shows backchanneling,
+                    # we won't interrupt. If no transcript after short delay, proceed with interruption.
+                    asyncio.create_task(self._delayed_interrupt_check(ev))
+                    return
+
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:

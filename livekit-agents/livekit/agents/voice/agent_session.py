@@ -40,6 +40,7 @@ from ._utils import _set_participant_attributes
 from .agent import Agent
 from .agent_activity import AgentActivity
 from .audio_recognition import TurnDetectionMode
+from .backchannel_filter import BackchannelFilter
 from .events import (
     AgentEvent,
     AgentState,
@@ -160,6 +161,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
+        backchannel_filter: NotGivenOr[BackchannelFilter | None] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
         agent_false_interruption_timeout: NotGivenOr[float | None] = NOT_GIVEN,
@@ -247,6 +249,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Default ``False``.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
+            backchannel_filter (BackchannelFilter, optional): Filter to prevent false
+                interruptions from backchanneling words (like "yeah", "ok", "hmm") when
+                the agent is speaking. When the agent is speaking, user utterances containing
+                only backchanneling words will be ignored. However, if the utterance contains
+                command words (like "wait", "stop", "no"), the agent will interrupt.
+                When the agent is silent, all user input is treated as valid.
+                If not provided, a default BackchannelFilter is created.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
                 session to. Falls back to :pyfunc:`asyncio.get_event_loop()`.
         """
@@ -290,6 +299,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             else None,
         )
         self._conn_options = conn_options or SessionConnectOptions()
+        self._backchannel_filter = (
+            backchannel_filter if is_given(backchannel_filter) else BackchannelFilter()
+        )
         self._started = False
         self._turn_detection = turn_detection or None
 

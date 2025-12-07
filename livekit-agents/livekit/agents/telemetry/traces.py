@@ -16,12 +16,20 @@ from opentelemetry.exporter.otlp.proto.http import Compression
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import (
-    LogData,
     LoggerProvider,
     LoggingHandler,
-    LogRecord,
     LogRecordProcessor,
+    ReadWriteLogRecord,
 )
+# LogData and LogRecord were renamed/removed in newer OpenTelemetry versions
+# Use ReadWriteLogRecord as a replacement
+LogData = ReadWriteLogRecord
+# For LogRecord, we'll need to create it from ReadWriteLogRecord or use the log record directly
+try:
+    from opentelemetry.sdk._logs import LogRecord
+except ImportError:
+    # LogRecord doesn't exist, use ReadWriteLogRecord.log_record instead
+    LogRecord = None  # Will be handled in usage
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
@@ -288,18 +296,17 @@ async def _upload_session_report(
         severity: SeverityNumber = SeverityNumber.UNSPECIFIED,
         severity_text: str = "unspecified",
     ) -> None:
-        chat_logger.emit(
-            LogRecord(
-                body=body,
-                timestamp=timestamp,
-                attributes=attributes,
-                trace_id=0,
-                span_id=0,
-                severity_number=severity,
-                severity_text=severity_text,
-                trace_flags=TraceFlags.get_default(),
-            )
-        )
+        # Create a ReadWriteLogRecord instead of LogRecord (API change in OpenTelemetry)
+        log_record = ReadWriteLogRecord()
+        log_record.body = body
+        log_record.timestamp = timestamp
+        log_record.attributes = attributes
+        log_record.trace_id = 0
+        log_record.span_id = 0
+        log_record.severity_number = severity
+        log_record.severity_text = severity_text
+        log_record.trace_flags = TraceFlags.get_default()
+        chat_logger.emit(log_record)
 
     _log(
         body="session report",
