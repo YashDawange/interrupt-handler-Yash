@@ -1,4 +1,6 @@
+
 import logging
+import asyncio
 
 from dotenv import load_dotenv
 
@@ -9,55 +11,52 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     cli,
+    UserInputTranscribedEvent,
+    AgentStateChangedEvent,
+    UserStateChangedEvent,
 )
-from livekit.agents.voice import BackchannelFilter
-# VAD is optional - comment out if onnxruntime has DLL issues
-try:
-    from livekit.plugins import silero
-    VAD_AVAILABLE = True
-except ImportError:
-    VAD_AVAILABLE = False
-    print("Warning: VAD (silero) not available. Agent will work without VAD.")
+from interruption_handler import AgentSpeechState, classify_user_text
 
-# Turn detector - Using "stt" turn detection which works perfectly with backchannel filter
-# MultilingualModel requires onnxruntime which has DLL issues on Windows
-# The backchannel filter uses STT transcripts, so "stt" turn detection is ideal
-
-logger = logging.getLogger("backchannel-test-agent")
+logger = logging.getLogger("interrupt-handler-agent")
 
 load_dotenv()
+
+server = AgentServer()
 
 
 class MyAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="Your name is Kelly. You would interact with users via voice. "
-            "With that in mind, keep your responses concise and to the point. "
-            "Do not use emojis, asterisks, markdown, or other special characters in your responses. "
-            "You are curious and friendly, and have a sense of humor. "
-            "You will speak English to the user. "
-            "When explaining something, speak in longer sentences to test the backchannel filter. "
-            "For example, explain a topic in detail so the user can say 'yeah' or 'ok' while you're speaking.",
+            instructions=(
+                "Your name is Kelly. You interact with users via voice. "
+                "Keep your responses concise and to the point. "
+                "Do not use emojis, asterisks, markdown, or any special characters. "
+                "You are curious, friendly, and have a sense of humor. "
+                "You speak English to the user. "
+
+                # Behavioral constraints for backchannels vs interruptions:
+                "When you are explaining something and the user says short acknowledgement "
+                "words like 'yeah', 'ok', 'okay', 'uh-huh', 'hmm', 'right', etc., you must "
+                "IGNORE them completely and keep talking as if they were never said. "
+                "Do NOT change topic, do NOT ask follow-up questions, and do NOT react to them "
+                "while you are mid-explanation. "
+
+                "Only treat such acknowledgement words as meaningful answers when you are silent "
+                "and have asked a question like 'Are you ready?' or 'Should I continue?'. "
+                "If the user clearly says interruption commands like 'stop', 'wait', or 'no' "
+                "while you are speaking, you must stop immediately and then wait silently for "
+                "further user input."
+            ),
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
-        # according to its instructions
-        self.session.generate_reply()
-
-
-server = AgentServer()
+        # initial reply; we do not allow auto interruptions here
+        await self.session.generate_reply(allow_interruptions=False)
 
 
 def prewarm(proc: JobProcess):
-    if VAD_AVAILABLE:
-        try:
-            proc.userdata["vad"] = silero.VAD.load()
-        except Exception as e:
-            logger.warning(f"Failed to load VAD: {e}. Continuing without VAD.")
-            proc.userdata["vad"] = None
-    else:
-        proc.userdata["vad"] = None
+    # No VAD or silero here to avoid onnxruntime DLL issues
+    proc.userdata["vad"] = None
 
 
 server.setup_fnc = prewarm
@@ -65,88 +64,123 @@ server.setup_fnc = prewarm
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
-    # each log entry will include these fields
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
 
-    # Create a backchannel filter with default settings
-    # You can customize the ignore_words and command_words if needed
-    backchannel_filter = BackchannelFilter(
-        ignore_words=[
-            "yeah",
-            "ok",
-            "okay",
-            "hmm",
-            "hmmm",
-            "right",
-            "uh-huh",
-            "uh huh",
-            "aha",
-            "mhm",
-            "mm-hmm",
-            "mm hmm",
-            "yep",
-            "yup",
-            "sure",
-            "got it",
-            "gotcha",
-            "alright",
-            "all right",
-        ],
-        command_words=[
-            "wait",
-            "stop",
-            "no",
-            "hold on",
-            "pause",
-            "cancel",
-            "nevermind",
-            "never mind",
-            "don't",
-            "dont",
-            "not",
-            "wrong",
-            "incorrect",
-        ],
-    )
-
+    # --- Create AgentSession with manual interruption handling ---
     session = AgentSession(
-        # Speech-to-text (STT) is your agent's ears
+        # STT: streaming, via LiveKit Inference (Deepgram)
         stt="deepgram/nova-3",
-        # A Large Language Model (LLM) is your agent's brain
+        # LLM: use OpenAI (your env must have OPENAI_API_KEY)
         llm="openai/gpt-4.1-mini",
-        # Text-to-speech (TTS) is your agent's voice
+        # TTS: Cartesia voice
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
-        # VAD and turn detection (both are optional)
-        # Using "stt" turn detection - works perfectly with backchannel filter
+
+        # Use STT-based turn detection to get streaming transcripts
         turn_detection="stt",
-        vad=ctx.proc.userdata.get("vad"),
-        # Enable preemptive generation for better responsiveness
+
+        # We handle interruptions ourselves
+        allow_interruptions=False,
         preemptive_generation=True,
-        # Resume false interruptions
-        resume_false_interruption=True,
-        false_interruption_timeout=1.0,
-        # Enable the backchannel filter
-        backchannel_filter=backchannel_filter,
     )
 
-    # Log metrics as they are emitted
-    from livekit.agents import metrics, MetricsCollectedEvent
+    # --------------------------
+    # Conversation state
+    # --------------------------
+    agent_speech_state: AgentSpeechState = AgentSpeechState.SILENT
+    pending_interrupt: bool = False  # user started speaking while agent is speaking
 
-    usage_collector = metrics.UsageCollector()
+    # --------------------------
+    # Event handlers
+    # --------------------------
 
-    @session.on("metrics_collected")
-    def _on_metrics_collected(ev: MetricsCollectedEvent):
-        metrics.log_metrics(ev.metrics)
-        usage_collector.collect(ev.metrics)
+    @session.on("agent_state_changed")
+    def _on_agent_state_changed(ev: AgentStateChangedEvent):
+        """
+        Map detailed agent state to our simpler SPEAKING / SILENT.
+        Possible states include: 'initializing', 'idle', 'listening', 'thinking', 'speaking'.
+        """
+        nonlocal agent_speech_state
 
-    async def log_usage():
-        summary = usage_collector.get_summary()
-        logger.info(f"Usage: {summary}")
+        if ev.new_state == "speaking":
+            agent_speech_state = AgentSpeechState.SPEAKING
+        else:
+            agent_speech_state = AgentSpeechState.SILENT
 
-    # shutdown callbacks are triggered when the session is over
-    ctx.add_shutdown_callback(log_usage)
+    @session.on("user_state_changed")
+    def _on_user_state_changed(ev: UserStateChangedEvent):
+        """
+        When the user starts speaking while the agent is speaking, mark a candidate interruption.
+        """
+        nonlocal pending_interrupt, agent_speech_state
+
+        if ev.new_state == "speaking" and agent_speech_state == AgentSpeechState.SPEAKING:
+            pending_interrupt = True
+
+    @session.on("user_input_transcribed")
+    def _on_user_input_transcribed(ev: UserInputTranscribedEvent):
+        """
+        Called whenever we get user transcription.
+        We:
+          - only act on final transcripts
+          - classify them as IGNORE / INTERRUPT / RESPOND
+          - decide whether to stop speech and/or generate a reply
+        """
+        nonlocal pending_interrupt, agent_speech_state
+
+        if not ev.is_final:
+            # only decide on final text
+            return
+
+        text = (ev.transcript or "").strip()
+        if not text:
+            return
+
+        decision = classify_user_text(text, agent_speech_state)
+
+        # -----------------------
+        # Case 1: agent speaking
+        # -----------------------
+        if agent_speech_state == AgentSpeechState.SPEAKING:
+            if decision == "IGNORE":
+                # Scenario 1: Long explanation + "yeah / ok / uh-huh"
+                # => do nothing, keep speaking seamlessly
+                pending_interrupt = False
+                return
+
+            if decision == "INTERRUPT":
+                # Scenario 3 & 4: "no stop", "yeah okay but wait"
+                async def _do_hard_interrupt() -> None:
+                    nonlocal pending_interrupt
+                    # Always interrupt, even if pending_interrupt is False
+                    await session.interrupt()
+                    pending_interrupt = False
+                    # HARD STOP requirement:
+                    # Do NOT generate any reply here.
+                    # Agent should stay silent until the user speaks again.
+
+                asyncio.create_task(_do_hard_interrupt())
+                return
+
+        # -----------------------
+        # Case 2: agent silent
+        # -----------------------
+        if agent_speech_state == AgentSpeechState.SILENT and decision == "RESPOND":
+            # Scenario 2: Agent asks "Are you ready?" and goes silent, user says "yeah"
+            async def _reply() -> None:
+                await session.generate_reply(
+                    user_input=text,
+                    allow_interruptions=False,
+                )
+
+            asyncio.create_task(_reply())
+
+    # --------------------------
+    # Start the session
+    # --------------------------
+
+    await ctx.connect()
 
     await session.start(
         agent=MyAgent(),

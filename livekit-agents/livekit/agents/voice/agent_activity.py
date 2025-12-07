@@ -1174,9 +1174,10 @@ class AgentActivity(RecognitionHooks):
         before STT has transcribed it. We wait a short time for the transcript
         to arrive, then check the backchannel filter.
         """
-        # Wait up to 300ms for STT to provide a transcript
-        # This is a reasonable delay that won't be noticeable to users
-        max_wait_time = 0.3
+        # Wait up to 500ms for STT to provide a transcript
+        # This gives STT enough time to transcribe backchanneling words
+        # The delay is still imperceptible to users but ensures we have the full phrase
+        max_wait_time = 0.5
         check_interval = 0.05  # Check every 50ms
         elapsed = 0.0
         
@@ -1203,10 +1204,22 @@ class AgentActivity(RecognitionHooks):
                         transcript=transcript,
                         agent_state=self._session.agent_state,
                     ):
-                        logger.debug(
+                        logger.info(
                             "BackchannelFilter: Ignoring interruption after transcript arrived",
                             extra={"transcript": transcript},
                         )
+                        # If audio was already paused, resume it immediately
+                        if (
+                            self._paused_speech is not None
+                            and self._session.output.audio
+                            and self._session.output.audio.can_pause
+                        ):
+                            self._session.output.audio.resume()
+                            self._session._update_agent_state("speaking")
+                            self._paused_speech = None
+                            if self._false_interruption_timer:
+                                self._false_interruption_timer.cancel()
+                                self._false_interruption_timer = None
                         return  # Don't interrupt, agent continues speaking
                 
                 # Transcript arrived and filter says we should interrupt
@@ -1231,6 +1244,7 @@ class AgentActivity(RecognitionHooks):
             transcript = self._audio_recognition.current_transcript
 
         # Check backchannel filter if agent is speaking and filter is enabled
+        # This check MUST happen before any pausing or interruption logic
         if (
             self._session._backchannel_filter is not None
             and self._current_speech is not None
@@ -1243,10 +1257,26 @@ class AgentActivity(RecognitionHooks):
                 transcript=transcript,
                 agent_state=self._session.agent_state,
             ):
-                logger.debug(
+                logger.info(
                     "BackchannelFilter: Ignoring interruption, agent continues speaking",
                     extra={"transcript": transcript, "agent_state": self._session.agent_state},
                 )
+                # If audio was already paused (from a previous interruption attempt), resume it
+                if (
+                    self._paused_speech is not None
+                    and self._session.output.audio
+                    and self._session.output.audio.can_pause
+                ):
+                    self._session.output.audio.resume()
+                    self._session._update_agent_state("speaking")
+                    self._paused_speech = None
+                    # Cancel any false interruption timer
+                    if self._false_interruption_timer:
+                        self._false_interruption_timer.cancel()
+                        self._false_interruption_timer = None
+                
+                # IMPORTANT: Don't pause, don't interrupt, don't set paused_speech
+                # Just return and let the agent continue speaking
                 return  # Ignore the interruption, agent continues speaking
 
         if (
@@ -1268,6 +1298,8 @@ class AgentActivity(RecognitionHooks):
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
+            # Only pause/interrupt if the backchannel filter didn't say to ignore
+            # (The filter check above already returned early if it should be ignored)
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1354,6 +1386,34 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # Check backchannel filter before interrupting
+            # This prevents pausing when user is just backchanneling
+            # Use accumulated transcript (current_transcript) not just the new interim text
+            transcript = ""
+            if self._audio_recognition is not None:
+                transcript = self._audio_recognition.current_transcript
+            
+            if (
+                self._session._backchannel_filter is not None
+                and self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+                and self._session.agent_state == "speaking"
+                and transcript  # Only check if we have a transcript
+            ):
+                if self._session._backchannel_filter.should_ignore_interruption(
+                    transcript=transcript,
+                    agent_state=self._session.agent_state,
+                ):
+                    logger.info(
+                        "BackchannelFilter: Ignoring interruption from interim transcript",
+                        extra={"transcript": transcript},
+                    )
+                    # Don't call _interrupt_by_audio_activity() at all - just return
+                    # This prevents ANY pausing or interruption
+                    return  # Agent continues speaking, no pause
+            
+            # If filter says to interrupt (or filter not enabled), proceed with normal interruption
             self._interrupt_by_audio_activity()
 
             if (
@@ -1385,6 +1445,44 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # Check backchannel filter before interrupting (same as interim transcript)
+            transcript = ""
+            if self._audio_recognition is not None:
+                transcript = self._audio_recognition.current_transcript
+            
+            if (
+                self._session._backchannel_filter is not None
+                and self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+                and self._session.agent_state == "speaking"
+                and transcript  # Only check if we have a transcript
+            ):
+                if self._session._backchannel_filter.should_ignore_interruption(
+                    transcript=transcript,
+                    agent_state=self._session.agent_state,
+                ):
+                    logger.info(
+                        "BackchannelFilter: Ignoring interruption from final transcript",
+                        extra={"transcript": transcript},
+                    )
+                    # If audio was already paused, resume it
+                    if (
+                        self._paused_speech is not None
+                        and self._session.output.audio
+                        and self._session.output.audio.can_pause
+                    ):
+                        self._session.output.audio.resume()
+                        self._session._update_agent_state("speaking")
+                        self._paused_speech = None
+                        if self._false_interruption_timer:
+                            self._false_interruption_timer.cancel()
+                            self._false_interruption_timer = None
+                    
+                    # Don't call _interrupt_by_audio_activity() - agent continues speaking
+                    return  # Agent continues speaking, no pause
+            
+            # If filter says to interrupt (or filter not enabled), proceed with normal interruption
             self._interrupt_by_audio_activity()
 
             if (
