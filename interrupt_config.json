@@ -1,0 +1,18 @@
+{
+  "filler_words": [
+    "yeah", "yep", "yup", "yes", "ya", "yea",
+    "ok", "okay", "k",
+    "sure", "right", "correct",
+    "um", "uh", "umm", "uhh", "er", "err",
+    "hmm", "hm", "mmm", "mm", "mhm", "mm-hmm",
+    "ah", "aha", "ahem", "oh",
+    "huh", "ugh", "meh"
+  ],
+  "interrupt_words": [
+    "stop", "wait", "hold", "pause", "no", "nope",
+    "actually", "but", "however", "question",
+    "what", "why", "how", "when", "where", "who",
+    "help", "sorry", "excuse"
+  ],
+  "min_words_for_interrupt": 2
+}
