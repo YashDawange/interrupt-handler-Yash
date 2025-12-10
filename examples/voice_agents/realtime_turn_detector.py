@@ -1,10 +1,8 @@
 import logging
-
 from dotenv import load_dotenv
-from google.genai import types  # noqa: F401
-
+from google.genai import types
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, JobProcess, cli
-from livekit.plugins import deepgram, google, openai, silero  # noqa: F401
+from livekit.plugins import deepgram, google, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("realtime-turn-detector")
@@ -12,40 +10,77 @@ logger.setLevel(logging.INFO)
 
 load_dotenv()
 
-## This example demonstrates how to use LiveKit's turn detection model with a realtime LLM.
-## Since the current turn detection model runs in text space, it will need to be combined
-## with a STT model, even though the audio is going directly to the Realtime API.
-## In this example, speech is being processed in parallel by both the STT and the realtime API
-
 server = AgentServer()
 
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
     session = AgentSession(
-        allow_interruptions=True,
+        allow_interruptions=False,
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
         stt=deepgram.STT(),
-        # To use OpenAI Realtime API
         llm=openai.realtime.RealtimeModel(
             voice="alloy",
-            # it's necessary to turn off turn detection in the OpenAI Realtime API in order to use
-            # LiveKit's turn detection model
             turn_detection=None,
-            input_audio_transcription=None,  # we use Deepgram STT instead
+            input_audio_transcription=None,
         ),
-        # To use Gemini Live API
-        # llm=google.realtime.RealtimeModel(
-        #     realtime_input_config=types.RealtimeInputConfig(
-        #         automatic_activity_detection=types.AutomaticActivityDetection(
-        #             disabled=True,
-        #         ),
-        #     ),
-        #     input_audio_transcription=None,
-        # ),
     )
-    await session.start(agent=Agent(instructions="You are a helpful assistant."), room=ctx.room)
+
+    await session.start(
+        agent=Agent(instructions="You are a helpful assistant."),
+        room=ctx.room,
+    )
+
+    agent_speaking = False
+
+    IGNORE_WORDS = {"yeah", "okay", "hmm", "uh", "uh-huh", "right", "mm", "mhm", "ok"}
+    STOP_WORDS = {"stop", "wait", "no", "hold", "cancel", "pause"}
+
+    @session.event_handler("assistant_speech_started")
+    async def on_assistant_speech_started(ev):
+        nonlocal agent_speaking
+        agent_speaking = True
+
+    @session.event_handler("assistant_speech_finished")
+    async def on_assistant_speech_finished(ev):
+        nonlocal agent_speaking
+        agent_speaking = False
+
+    @session.event_handler("transcription")
+    async def on_transcription(ev):
+        nonlocal agent_speaking
+
+        text = ev.text
+        if not text:
+            return
+
+        text_lower = text.lower().strip()
+        raw_words = text_lower.split()
+        words = {w.strip(".,?!:;-—'\"") for w in raw_words if w.strip(".,?!:;-—'\"")}
+
+        has_stop_word = bool(words & STOP_WORDS)
+        only_ignore_words = words and words.issubset(IGNORE_WORDS)
+
+        if has_stop_word:
+            if agent_speaking:
+                await session.stop_output()
+                agent_speaking = False
+            await session.input_text(text)
+            return
+
+        if only_ignore_words and agent_speaking:
+            return
+
+        if only_ignore_words and not agent_speaking:
+            await session.input_text(text)
+            return
+
+        if agent_speaking:
+            await session.stop_output()
+            agent_speaking = False
+        await session.input_text(text)
+        return 
 
 
 def prewarm(proc: JobProcess):
