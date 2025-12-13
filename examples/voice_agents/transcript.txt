@@ -1,0 +1,67 @@
+BEGINNING LOGIC TESTING…
+
+
+======================================
+User says: 'yeah'
+Agent speaking? True
+======================================
+
+======================================
+User says: 'okay'
+Agent speaking? True
+======================================
+
+======================================
+User says: 'stop'
+Agent speaking? True
+======================================
+👉 [SESSION] interrupt_tts() CALLED
+🗣️ [AGENT] Okay, stopping.
+======================================
+User says: 'okay'
+Agent speaking? True
+======================================
+
+======================================
+User says: 'stop'
+Agent speaking? True
+======================================
+👉 [SESSION] interrupt_tts() CALLED
+🗣️ [AGENT] Okay, stopping.
+======================================
+
+======================================
+User says: 'stop'
+Agent speaking? True
+======================================
+👉 [SESSION] interrupt_tts() CALLED
+🗣️ [AGENT] Okay, stopping.
+User says: 'stop'
+Agent speaking? True
+======================================
+👉 [SESSION] interrupt_tts() CALLED
+🗣️ [AGENT] Okay, stopping.
+👉 [SESSION] interrupt_tts() CALLED
+🗣️ [AGENT] Okay, stopping.
+🗣️ [AGENT] Okay, stopping.
+
+======================================
+User says: 'yeah'
+Agent speaking? False
+======================================
+User says: 'yeah'
+Agent speaking? False
+User says: 'yeah'
+Agent speaking? False
+Agent speaking? False
+======================================
+🗣️ [AGENT] Great, let's continue.
+
+======================================
+User says: 'what time is it?'
+Agent speaking? False
+======================================
+🧠 [LLM] Received user query → 'what time is it?'
+
+ TEST COMPLETE.
+

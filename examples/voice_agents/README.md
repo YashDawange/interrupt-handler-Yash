@@ -1,78 +1,90 @@
-# Voice Agents Examples
+# 🎧 Intelligent Interruption Handling – Assignment Submission  
 
-This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
+**Author:** Nitya Vettical  
+**Role:** Gen-AI Agent Intern Candidate  
 
-## 📋 Table of Contents
 
-### 🚀 Getting Started
+## 📌 Overview  
 
-- [`basic_agent.py`](./basic_agent.py) - A fundamental voice agent with metrics collection
+This project implements a **state-aware interruption handling layer** for a conversational AI agent, following the exact requirements described in the assignment PDF.
 
-### 🛠️ Tool Integration & Function Calling
+The objective is to make the agent distinguish between:
 
-- [`annotated_tool_args.py`](./annotated_tool_args.py) - Using Python type annotations for tool arguments
-- [`dynamic_tool_creation.py`](./dynamic_tool_creation.py) - Creating and registering tools dynamically at runtime
-- [`raw_function_description.py`](./raw_function_description.py) - Using raw JSON schema definitions for tool descriptions
-- [`silent_function_call.py`](./silent_function_call.py) - Executing function calls without verbal responses to user
-- [`long_running_function.py`](./long_running_function.py) - Handling long running function calls with interruption support
+- **Passive acknowledgements** (e.g., “yeah”, “ok”, “hmm”)  
+- **Active interruptions** (e.g., “stop”, “wait”, “no”)  
 
-### ⚡ Real-time Models
+and apply different behaviors depending on whether the agent is **currently speaking** or **silent**.
 
-- [`weather_agent.py`](./weather_agent.py) - OpenAI Realtime API with function calls for weather information
-- [`realtime_video_agent.py`](./realtime_video_agent.py) - Google Gemini with multimodal video and voice capabilities
-- [`realtime_joke_teller.py`](./realtime_joke_teller.py) - Amazon Nova Sonic real-time model with function calls
-- [`realtime_load_chat_history.py`](./realtime_load_chat_history.py) - Loading previous chat history into real-time models
-- [`realtime_turn_detector.py`](./realtime_turn_detector.py) - Using LiveKit's turn detection with real-time models
-- [`realtime_with_tts.py`](./realtime_with_tts.py) - Combining external TTS providers with real-time models
+This implementation extends the LiveKit `Agent` class and overrides event callbacks to provide accurate, real-time conversational flow control.
 
-### 🎯 Pipeline Nodes & Hooks
 
-- [`fast-preresponse.py`](./fast-preresponse.py) - Generating quick responses using the `on_user_turn_completed` node
-- [`flush_llm_node.py`](./flush_llm_node.py) - Flushing partial LLM output to TTS in `llm_node`
-- [`structured_output.py`](./structured_output.py) - Structured data and JSON outputs from agent responses
-- [`speedup_output_audio.py`](./speedup_output_audio.py) - Dynamically adjusting agent audio playback speed
-- [`timed_agent_transcript.py`](./timed_agent_transcript.py) - Reading timestamped transcripts from `transcription_node`
-- [`inactive_user.py`](./inactive_user.py) - Handling inactive users with the `user_state_changed` event hook
-- [`resume_interrupted_agent.py`](./resume_interrupted_agent.py) - Resuming agent speech after false interruption detection
-- [`toggle_io.py`](./toggle_io.py) - Dynamically toggling audio input/output during conversations
 
-### 🤖 Multi-agent & AgentTask Use Cases
+## 🧠 Core Logic Summary  
 
-- [`restaurant_agent.py`](./restaurant_agent.py) - Multi-agent system for restaurant ordering and reservation management
-- [`multi_agent.py`](./multi_agent.py) - Collaborative storytelling with multiple specialized agents
-- [`email_example.py`](./email_example.py) - Using AgentTask to collect and validate email addresses
+### ✔ Ignore filler words while agent is speaking  
+If the user says "yeah / ok / hmm" **while TTS output is active**, the agent **ignores** the input completely.
 
-### 🔗 MCP & External Integrations
+### ✔ Interrupt immediately on meaningful commands  
+If the user says **“stop / wait / no”** during speech, the agent interrupts TTS instantly and responds.
 
-- [`web_search.py`](./web_search.py) - Integrating web search capabilities into voice agents
-- [`langgraph_agent.py`](./langgraph_agent.py) - LangGraph integration
-- [`mcp/`](./mcp/) - Model Context Protocol (MCP) integration examples
-  - [`mcp-agent.py`](./mcp/mcp-agent.py) - MCP agent integration
-  - [`server.py`](./mcp/server.py) - MCP server example
-- [`zapier_mcp_integration.py`](./zapier_mcp_integration.py) - Automating workflows with Zapier through MCP
+### ✔ Treat filler as valid input when agent is silent  
+The exact same words (“yeah / ok / hmm”) are treated normally when the agent is not speaking.
 
-### 💾 RAG & Knowledge Management
+### ✔ Forward normal queries to the LLM  
+If the agent is silent and the user provides non-filler text, it is forwarded to the LLM.
 
-- [`llamaindex-rag/`](./llamaindex-rag/) - Complete RAG implementation with LlamaIndex
-  - [`chat_engine.py`](./llamaindex-rag/chat_engine.py) - Chat engine integration
-  - [`query_engine.py`](./llamaindex-rag/query_engine.py) - Query engine used in a function tool
-  - [`retrieval.py`](./llamaindex-rag/retrieval.py) - Document retrieval
+### ✔ Semantic mixed-input handling  
+Cases like “yeah wait” are correctly treated as interruptions because an interrupt word is present.
 
-### 🎵 Specialized Use Cases
 
-- [`background_audio.py`](./background_audio.py) - Playing background audio or ambient sounds during conversations
-- [`push_to_talk.py`](./push_to_talk.py) - Push-to-talk interaction
-- [`tts_text_pacing.py`](./tts_text_pacing.py) - Pacing control for TTS requests
-- [`speaker_id_multi_speaker.py`](./speaker_id_multi_speaker.py) - Multi-speaker identification
+## 🗂 File Structure  
 
-### 📊 Tracing & Error Handling
+| File | Purpose |
+|------|---------|
+| **`nitya_interrupt_agent.py`** | Main implementation of the interruption-aware agent |
+| **`test_agent_logic.py`** | Simulation script demonstrating required behaviors |
+| **`transcript.txt`** | Clean output transcript from simulation |
+| **`README.md`** | Documentation |
 
-- [`langfuse_trace.py`](./langfuse_trace.py) - LangFuse integration for conversation tracing
-- [`error_callback.py`](./error_callback.py) - Error handling callback
-- [`session_close_callback.py`](./session_close_callback.py) - Session lifecycle management
 
-## 📖 Additional Resources
+## 🧪 Demonstration – Simulation Testing  
+The assignment PDF states that proof may be provided via **video recording or a log transcript**.  
+This submission uses a simulation script that triggers all required behaviors deterministically.
 
-- [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
-- [Agents Starter Example](https://github.com/livekit-examples/agent-starter-python)
-- [More Agents Examples](https://github.com/livekit-examples/python-agents-examples)
+Run the demo:
+
+python test_agent_logic.py
+
+
+This produces the following behaviors:
+
+1. **Agent speaking + filler word → IGNORED**  
+2. **Agent speaking + “stop” → INTERRUPT**  
+3. **Agent silent + filler word → NORMAL RESPONSE**  
+4. **Agent silent + natural query → FORWARDED TO LLM**
+
+A complete transcript is included in `transcript.txt`.
+
+## ▶️ Video Demonstration 
+
+A short screen recording accompanies this submission, showing:
+
+- The agent code  
+- The simulation test running  
+- Verbal explanation of logic  
+
+## 🧩 Design Notes  
+
+- All logic is encapsulated inside `NityaInterruptAgent`, which cleanly overrides LiveKit callback hooks.  
+- Behavior lists (`IGNORE_LIST`, `INTERRUPT_WORDS`) are configurable for evaluation.  
+- State is tracked with a simple `AgentState` class for full clarity.  
+- Code closely follows the structural expectations of the provided LiveKit assignment template.
+
+## ✔️ Status  
+
+All assignment requirements have been successfully implemented and demonstrated.
+
+Thank you for reviewing this submission. 
+
+
+
