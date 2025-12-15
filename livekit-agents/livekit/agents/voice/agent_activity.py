@@ -164,6 +164,11 @@ class AgentActivity(RecognitionHooks):
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
 
+        opts = self._session.options
+        self._backchannel_filter = opts.backchannel_filter
+        self._backchannel_words = {word.lower() for word in opts.backchannel_ignore}
+        self._interrupt_keywords = {word.lower() for word in opts.interruption_keywords}
+
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
     ) -> TurnDetectionMode | None:
@@ -1209,6 +1214,19 @@ class AgentActivity(RecognitionHooks):
 
                 self._current_speech.interrupt()
 
+    def _is_backchannel_during_speech(self, text: str) -> bool:
+        if not self._backchannel_filter or self._session.agent_state != "speaking":
+            return False
+
+        tokens = [w[0].lower() for w in split_words(text, split_character=True) if w[0]]
+        if not tokens:
+            return False
+
+        if any(tok in self._interrupt_keywords for tok in tokens):
+            return False
+
+        return all(tok in self._backchannel_words for tok in tokens)
+
     # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
@@ -1240,6 +1258,14 @@ class AgentActivity(RecognitionHooks):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
 
+        if (
+            self._backchannel_filter
+            and self._session.agent_state == "speaking"
+            and self.stt is not None
+        ):
+            # defer interruption until we have text to classify backchannels
+            return
+
         if ev.speech_duration >= self._session.options.min_interruption_duration:
             self._interrupt_by_audio_activity()
 
@@ -1248,18 +1274,21 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        text = ev.alternatives[0].text
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=text,
                 is_final=False,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
+        if (
+            text
+            and self._turn_detection not in ("manual", "realtime_llm")
+            and not self._is_backchannel_during_speech(text)
         ):
             self._interrupt_by_audio_activity()
 
@@ -1276,10 +1305,12 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        text = ev.alternatives[0].text
+
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=text,
                 is_final=True,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
@@ -1288,9 +1319,10 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
-        if self._audio_recognition and self._turn_detection not in (
-            "manual",
-            "realtime_llm",
+        if (
+            self._audio_recognition
+            and self._turn_detection not in ("manual", "realtime_llm")
+            and not self._is_backchannel_during_speech(text)
         ):
             self._interrupt_by_audio_activity()
 
