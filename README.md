@@ -373,3 +373,80 @@ The Agents framework is under active development in a rapidly evolving field. We
 </tbody>
 </table>
 <!--END_REPO_NAV-->
+
+# Changes done By Rushil Maradugula
+
+## Overview
+
+This repository contains an enhanced implementation of a LiveKit Voice Agent designed to improve conversational flow by intelligently handling user interruptions. Standard Voice Activity Detection (VAD) systems often interpret passive acknowledgments (such as "yeah" or "okay") as active interruptions, causing the agent to stop speaking abruptly.
+
+## Technical Implementation
+
+The core solution involves a custom logic layer injected into the agent's main event loop. The system operates based on the following architectural decisions:
+
+### 1. Event Interception
+
+The application listens for the `user_speech_committed` event. This event triggers immediately after the Speech-to-Text (STT) service finalizes the user's transcript but before the Large Language Model (LLM) generates a response.
+
+### 2. State Detection
+
+To determine context, the system checks the agent's current state using `session.current_agent_item`. If this item is not null, the system understands that the agent was actively speaking when the user input occurred.
+
+### 3. Transcript Sanitization
+
+User input is normalized to ensure consistent matching. Punctuation (periods, commas, exclamation marks, and question marks) is stripped, and the text is converted to lowercase. This ensures that variations such as "Yeah." and "yeah" are treated identically.
+
+### 4. Decision Logic Matrix
+
+The system evaluates the input against a configurable set of `IGNORE_WORDS` (e.g., "yeah", "ok", "uh-huh"). The behavior follows this logic:
+
+  * **Scenario A: Agent Speaking + Ignore Word**
+    If the agent is speaking and the user provides a passive acknowledgment, the system classifies this as a false interruption. The user's message is removed from the chat context (`session.chat_ctx.messages.pop()`) to prevent the LLM from responding. The agent's audio is then automatically resumed via the `resume_false_interruption` configuration.
+
+  * **Scenario B: Agent Silent + Ignore Word**
+    If the agent is silent (awaiting input) and the user says "yeah," the system treats it as a valid conversational turn. The message is passed to the LLM for a normal response.
+
+  * **Scenario C: Active Interruption**
+    If the user input contains words not present in the ignore list (e.g., "stop," "wait," or a full sentence), the system treats it as a valid interruption. The agent stops speaking and processes the new command immediately.
+
+## Configuration
+
+The list of words classified as passive acknowledgments is defined in the `IGNORE_WORDS` set located at the top of the `basic_agent.py` file. This list can be modified to include additional filler words or short phrases as needed.
+
+## Installation and Execution
+
+### Prerequisites
+
+  * Python 3.9 or higher
+  * A LiveKit Cloud project (URL, API Key, and Secret)
+  * An OpenAI API Key
+  * A Deepgram API Key (if using Deepgram for STT)
+  * A Cartesia API Key (if using Cartesia for TTS)
+
+### Setup
+
+1.  **Clone the repository:**
+    Clone this repository to your local machine.
+
+2.  **Install Dependencies:**
+    Navigate to the project directory and install the required Python packages.
+    pip install -r requirements.txt
+
+
+3.  **Environment Configuration:**
+    Create a `.env` file in the project root and populate it with your API keys:
+
+    ```
+    LIVEKIT_URL=...
+    LIVEKIT_API_KEY=...
+    LIVEKIT_API_SECRET=...
+
+    ```
+
+### Running the Agent
+
+Execute the agent using the following command from the `examples/voice_agents` directory:
+python basic_agent.py dev
+
+
+Once the agent is running, connect to the LiveKit Playground to test the interruption handling capabilities.
