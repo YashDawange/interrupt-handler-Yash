@@ -78,6 +78,9 @@ class AgentSessionOptions:
     discard_audio_if_uninterruptible: bool
     min_interruption_duration: float
     min_interruption_words: int
+    backchannel_filter: bool
+    backchannel_ignore: Sequence[str]
+    interruption_keywords: Sequence[str]
     min_endpointing_delay: float
     max_endpointing_delay: float
     max_tool_steps: int
@@ -129,6 +132,20 @@ class VoiceActivityVideoSampler:
 
 
 DEFAULT_TTS_TEXT_TRANSFORMS: list[TextTransforms] = ["filter_markdown", "filter_emoji"]
+DEFAULT_BACKCHANNEL_IGNORE: tuple[str, ...] = (
+    "yeah",
+    "ok",
+    "okay",
+    "hmm",
+    "hm",
+    "right",
+    "uh-huh",
+    "uh huh",
+    "mm-hmm",
+    "mm hmm",
+    "mhm",
+)
+DEFAULT_INTERRUPTION_KEYWORDS: tuple[str, ...] = ("stop", "wait", "no", "hold on", "cancel", "pause")
 
 
 class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
@@ -147,6 +164,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         discard_audio_if_uninterruptible: bool = True,
         min_interruption_duration: float = 0.5,
         min_interruption_words: int = 0,
+        backchannel_filter: bool = True,
+        backchannel_ignore: Sequence[str] = DEFAULT_BACKCHANNEL_IGNORE,
+        interruption_keywords: Sequence[str] = DEFAULT_INTERRUPTION_KEYWORDS,
         min_endpointing_delay: float = 0.5,
         max_endpointing_delay: float = 3.0,
         max_tool_steps: int = 3,
@@ -206,6 +226,15 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 register as an interruption. Default ``0.5`` s.
             min_interruption_words (int): Minimum number of words to consider
                 an interruption, only used if stt enabled. Default ``0``.
+            backchannel_filter (bool): When ``True``, ignore short backchannel
+                acknowledgements (e.g., "yeah", "ok", "hmm") while the agent is
+                speaking so TTS is not interrupted. Default ``True``.
+            backchannel_ignore (Sequence[str]): List of case-insensitive words or short
+                phrases treated as passive acknowledgements. Only applied while
+                the agent is speaking. Default ``DEFAULT_BACKCHANNEL_IGNORE``.
+            interruption_keywords (Sequence[str]): Words or phrases that always count
+                as active interruptions even if combined with backchannels (e.g.,
+                "wait", "stop"). Default ``DEFAULT_INTERRUPTION_KEYWORDS``.
             min_endpointing_delay (float): Minimum time-in-seconds the agent
                 must wait after a potential end-of-utterance signal (from VAD
                 or an EOU model) before it declares the user’s turn complete.
@@ -271,6 +300,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             discard_audio_if_uninterruptible=discard_audio_if_uninterruptible,
             min_interruption_duration=min_interruption_duration,
             min_interruption_words=min_interruption_words,
+            backchannel_filter=backchannel_filter,
+            backchannel_ignore=tuple(backchannel_ignore),
+            interruption_keywords=tuple(interruption_keywords),
             min_endpointing_delay=min_endpointing_delay,
             max_endpointing_delay=max_endpointing_delay,
             max_tool_steps=max_tool_steps,
