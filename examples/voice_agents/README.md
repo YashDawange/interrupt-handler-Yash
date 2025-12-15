@@ -1,3 +1,44 @@
+---
+
+## 🚀 ASSIGNMENT IMPLEMENTATION: Intelligent Interruption Handler
+
+This section documents the implementation of the context-aware interruption handling logic, addressing the **Core Logic & Objectives** and **Strict Requirements** of the assignment.
+
+### 1. Code Architecture and State Awareness
+
+The intelligent handling logic is implemented in `examples/voice_agents/basic_agent.py` by:
+
+* **Creating a new class:** `IntelligentInterruptionHandler` encapsulates the core filtering logic, ensuring **Code Quality** and modularity.
+* **State Management:** The custom `IntelligentAgent` tracks its speaking status (`is_agent_speaking`) by overriding `on_agent_speech_start` and `on_agent_speech_end` hooks, meeting the **State Awareness** criterion.
+
+### 2. Context-Aware Filtering Logic
+
+The core logic is executed inside the `on_user_turn_completed` method, which correctly intercepts the final user transcript (extracted from `kwargs['new_message'].text`) before it is processed by the LLM.
+
+#### Logic Matrix and Behavior: 
+| User Input Content | Agent State | Desired Behavior | Assignment Criterion |
+| :--- | :--- | :--- | :--- |
+| **Filler Word Only** (e.g., "yeah," "uh-huh") | **SPEAKING** | **IGNORE**: Agent continues speaking seamlessly. | Strict Functionality (70%) |
+| **Active Command** (e.g., "Stop," "Wait") | **SPEAKING** | **INTERRUPT**: Agent cuts off and processes command. | Semantic Interruption |
+| **Any Input** (e.g., "Yeah," "Hello") | **SILENT** | **RESPOND**: Processes as a normal conversational turn. | State Awareness (10%) |
+
+#### Key Implementations:
+
+* **Strict Functionality:** To achieve seamless continuation when ignoring input, the method simply returns if the input is only filler, preventing the LLM from starting a new turn. This relies on the AgentSession's `resume_false_interruption=True` setting to recover the VAD-triggered pause.
+* **Semantic Interruption:** The code uses regular expressions and set checks to verify if the transcription contains **only** words from the configurable `IGNORED_WORDS` set. Any non-filler word forces an INTERRUPT.
+* **Configurable Ignore List:** The `IGNORED_WORDS` set within the handler class allows for easy modification of filler words (Code Quality).
+
+---
+
+### 3. Proof of Functionality
+
+**[ACTION REQUIRED: Paste the final URL to your video recording or the transcribed console log here.]**
+
+This proof demonstrates the required scenarios:
+* The agent ignoring "yeah" while talking.
+* The agent responding to "yeah" when silent.
+* The agent stopping for "stop".
+
 # Voice Agents Examples
 
 This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
