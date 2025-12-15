@@ -104,6 +104,7 @@ class IntelligentAgent(Agent):
         or as a message object attribute.
         """
         
+        
         # 1. Safely extract the transcript string from the keyword arguments
         # The transcription text is typically found inside the 'new_message' keyword argument
         # passed by the framework.
