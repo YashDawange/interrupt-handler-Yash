@@ -1,0 +1,27 @@
+livekit-agents
+langchain
+langchain-core
+langchain-community
+# Uncomment based on provider usage:
+langchain-openai
+langchain-google-genai
+langchain-ollama
+pytest
+nltk
+# Core ML / Transformers
+torch
+transformers
+tokenizers
+accelerate
+
+safetensors
+# Async runtime and utilities
+aiofiles
+
+python-dotenv
+
+rich
+
+numpy
+
+livekit-agents[openai,silero,deepgram,cartesia,turn-detector]
