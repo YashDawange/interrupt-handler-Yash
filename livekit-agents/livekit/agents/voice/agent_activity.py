@@ -1185,6 +1185,15 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        # Check if agent is speaking and user input contains only filler words
+        if self._session.agent_state == "speaking" and self._audio_recognition is not None:
+            text = self._audio_recognition.current_transcript.strip().lower()
+            if text:
+                words = split_words(text, split_character=True)
+                if all(word.lower() in opt.filler_words for word in words):
+                    # Agent is speaking and user said only filler words, don't interrupt
+                    return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
