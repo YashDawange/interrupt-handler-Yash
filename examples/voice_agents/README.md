@@ -7,6 +7,8 @@ This directory contains a comprehensive collection of voice-based agent examples
 ### 🚀 Getting Started
 
 - [`basic_agent.py`](./basic_agent.py) - A fundamental voice agent with metrics collection
+- [`interruption_filter.py`](./interruption_filter.py) - Smart interruption filter for backchanneling detection
+  - 📖 [**Smart Interruption Filter Documentation**](./SMART_INTERRUPTION_FILTER.md) - Comprehensive guide to the interruption filtering approach
 
 ### 🛠️ Tool Integration & Function Calling
 
