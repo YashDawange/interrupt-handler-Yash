@@ -47,21 +47,25 @@ session = AgentSession(
 ## Test Scenarios
 
 ### Scenario 1: Passive Acknowledgment (No Interruption)
+
 - **Agent**: "The history of computing began with..." (speaking)
 - **User**: "Yeah" or "Okay"
 - **Result**: Agent continues speaking seamlessly
 
 ### Scenario 2: Active Interruption
+
 - **Agent**: "One, two, three..." (speaking)
 - **User**: "No stop"
 - **Result**: Agent interrupts immediately
 
 ### Scenario 3: Mixed Input
+
 - **Agent**: Speaking
 - **User**: "Yeah okay but wait"
 - **Result**: Agent interrupts because "wait" is not a filler word
 
 ### Scenario 4: Silent Agent Response
+
 - **Agent**: Silent, waiting for input
 - **User**: "Yeah"
 - **Result**: Agent processes "Yeah" as valid input and responds
@@ -88,8 +92,8 @@ session = AgentSession(
 ### Key Changes
 
 1. **AgentSessionOptions**: Added `filler_words` field
-2. **AgentSession.__init__**: Added `filler_words` parameter with default list
-3. **AgentActivity._interrupt_by_audio_activity**: Added filler word checking logic
+2. **AgentSession.**init****: Added `filler_words` parameter with default list
+3. **AgentActivity.\_interrupt_by_audio_activity**: Added filler word checking logic
 
 ### Timing Considerations
 
