@@ -5,6 +5,7 @@ import contextvars
 import heapq
 import json
 import time
+import string
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
@@ -75,6 +76,12 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+
+import re
+
+NORMALIZE_RE = re.compile(r"[^\w\s]")
+
+
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -1184,6 +1191,22 @@ class AgentActivity(RecognitionHooks):
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
+            
+        if self.stt is not None and self._audio_recognition is not None and opt.ignore_words:
+            text = self._audio_recognition.current_transcript
+            if not text:
+                return
+
+            clean_text = text.lower().translate(str.maketrans("", "", string.punctuation))
+            words = clean_text.split()
+    
+            if not words:
+                return
+
+            ignore_set = {w.lower() for w in opt.ignore_words}
+    
+            if all(w in ignore_set for w in words):
+                return  
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
@@ -1364,6 +1387,12 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+        def normalize_text(text: str) -> str:
+            text = text.lower()
+            text = NORMALIZE_RE.sub("", text)   # remove punctuation
+            text = re.sub(r"\s+", " ", text).strip()  # normalize spaces
+            return text
+
 
         if (
             self.stt is not None
@@ -1371,13 +1400,29 @@ class AgentActivity(RecognitionHooks):
             and self._current_speech is not None
             and self._current_speech.allow_interruptions
             and not self._current_speech.interrupted
-            and self._session.options.min_interruption_words > 0
-            and len(split_words(info.new_transcript, split_character=True))
-            < self._session.options.min_interruption_words
         ):
-            self._cancel_preemptive_generation()
-            # avoid interruption if the new_transcript is too short
-            return False
+            if self._session.options.ignore_words:
+                normalized_words = normalize_text(info.new_transcript)
+                words = normalized_words.split()
+                ignore_set = {
+                    normalize_text(w)
+                    for w in self._session.options.ignore_words
+                }
+                word_set = set(words)
+
+                if word_set and word_set <= ignore_set:
+                    self._cancel_preemptive_generation()
+                    return False
+
+
+            if (
+                self._session.options.min_interruption_words > 0
+                and len(split_words(info.new_transcript, split_character=True))
+                < self._session.options.min_interruption_words
+            ):
+                self._cancel_preemptive_generation()
+                # avoid interruption if the new_transcript is too short
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
