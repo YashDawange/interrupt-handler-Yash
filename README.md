@@ -1,3 +1,110 @@
+# NIKSHAY SUBMISSION README SECTION : 
+
+---
+
+## Intelligent Interruption Handling (LiveKit Voice Agent)
+
+### What problem was solved?
+
+LiveKit’s default Voice Activity Detection (VAD) is overly sensitive to short listener acknowledgements such as “yeah”, “ok”, “hmm”, or “uh-huh”.  
+When a user says these while the agent is speaking, the framework treats them as interruptions and abruptly cuts off the agent’s audio.
+
+This breaks natural conversational flow, especially during long explanations, where users commonly give passive feedback to indicate they are listening.
+
+The goal of this change is to make interruption handling **context-aware**, allowing the agent to distinguish between:
+- Passive acknowledgements (backchanneling)
+- Intentional interruptions or commands
+
+---
+
+### How interruption handling works
+
+This solution introduces an **intelligent logic layer** inside the agent event loop, without modifying LiveKit’s low-level VAD implementation.
+
+The core idea is to **delay the interruption decision until Speech-to-Text (STT) provides semantic context**, while tracking whether the agent is currently speaking.
+
+#### Key components
+
+1. **Agent state awareness**  
+   The agent listens to `AgentStateChangedEvent` and tracks whether it is in the `"speaking"` state.  
+   Filtering logic is applied only when the agent is actively speaking.
+
+2. **Configurable word lists**  
+   Two word sets are defined:
+   - Backchannel words (e.g. `yeah`, `ok`, `hmm`, `uh-huh`)
+   - Strong interrupt words (e.g. `stop`, `wait`, `no`, `cancel`)
+
+   Both lists can be overridden using environment variables:
+   - `BACKCHANNEL_WORDS`
+   - `INTERRUPT_WORDS`
+
+3. **STT-based validation (no VAD changes)**  
+   Automatic framework interruptions are disabled.  
+   User audio is still sent to Speech-to-Text even while the agent is speaking.  
+   The final transcript is analyzed before deciding whether to interrupt.
+
+4. **Semantic interruption detection**  
+   - If the agent is speaking and the transcript contains only backchannel words, the input is ignored completely.
+   - If the transcript contains any strong interrupt word, the agent is interrupted immediately.
+   - Mixed sentences (for example: “yeah okay but wait”) are treated as interruptions.
+
+This ensures the agent never pauses, stutters, or restarts audio on passive acknowledgements.
+
+---
+
+### Behavior summary
+
+| User Input               | Agent State | Result                                   |
+|--------------------------|-------------|------------------------------------------|
+| yeah / ok / hmm          | Speaking    | Ignored, agent continues speaking        |
+| stop / wait / no         | Speaking    | Agent interrupts immediately             |
+| yeah / ok / hmm          | Silent      | Treated as a valid response              |
+| yeah okay but wait       | Speaking    | Agent interrupts (semantic interrupt)    |
+
+---
+
+### How to run the agent
+
+1. Install dependencies:
+
+pip install -r requirements.txt
+
+
+2. Set required environment variables
+
+Set the API keys required by LiveKit Agents for:
+- Speech-to-Text (STT)
+- Large Language Model (LLM)
+- Text-to-Speech (TTS)
+
+These depend on the providers you are using (e.g. Deepgram, OpenAI / Gemini, Cartesia).
+
+3. Run the basic voice agent:
+
+python examples/voice_agents/basic_agent.py
+
+
+Optional configuration using environment variables:
+
+export BACKCHANNEL_WORDS="yeah,ok,okay,hmm,uh-huh"
+export INTERRUPT_WORDS="stop,wait,no,cancel"
+
+
+---
+
+### Proof of correctness
+
+The submission includes a short demo video or log transcript demonstrating:
+
+- The agent ignoring “yeah / ok” while speaking
+- The agent responding to “yeah” when silent
+- The agent immediately stopping on “stop”
+
+This covers all required test scenarios defined in the challenge description.
+
+
+
+
 <!--BEGIN_BANNER_IMAGE-->
 
 <picture>
