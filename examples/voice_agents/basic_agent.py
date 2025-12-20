@@ -102,11 +102,16 @@ class MyAgent(Agent):
         super().__init__(
             instructions=(
                 "Your name is Kelly. "
-                "You interact with users via voice. "
-                "Keep your responses concise and to the point. "
-                "Do not use emojis, asterisks, markdown, or other special characters in your responses. "
-                "You are curious and friendly, and have a sense of humor. "
-                "You will speak English to the user."
+                "You are a full conversational AI assistant and can freely discuss, explain, "
+                "and reason about any topic the user asks. "
+                "You are NOT limited to any single domain. "
+                "You should only use tools when they are clearly useful, "
+                "and you should never say that you are incapable of answering general questions. "
+                "If a question is abstract or conceptual, explain it in simple terms. "
+                "If the user asks about weather, you may use the weather tool. "
+                "Keep responses concise, natural, and conversational. "
+                "Do not use emojis, markdown, or special formatting. "
+                "Speak in English."
             ),
         )
 
@@ -127,16 +132,14 @@ class MyAgent(Agent):
         longitude: str,
     ):
         """
-        Called when the user asks for weather-related information.
+        OPTIONAL helper tool.
 
-        Args:
-            location: The location they are asking for
-            latitude: The latitude of the location, do not ask user for it
-            longitude: The longitude of the location, do not ask user for it
+        Use this tool ONLY when the user explicitly asks for weather information
+        (e.g., temperature, forecast, rain, humidity).
+        Do NOT use this tool for general conversation or explanations.
         """
-        logger.info(f"Looking up weather for {location}")
-        return "sunny with a temperature of 70 degrees."
-
+        logger.info(f"Weather tool invoked for location: {location}")
+        return "It is currently sunny with a temperature of 70 degrees."
 
 server = AgentServer()
 
