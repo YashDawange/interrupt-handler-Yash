@@ -25,6 +25,17 @@ logger = logging.getLogger("basic-agent")
 
 load_dotenv()
 
+IGNORE_WORDS = [
+    "ah", "aha", "hmm", "uh", "um", "mm",
+    "mhm", "mhmm", "mmhmm", "uh-huh",
+    "ok", "okay", "alright", "sure",
+    "yeah", "yep", "yes",
+    "oh", "wow", "nice", "cool",
+    "really", "right", "exactly",
+    "got", "it", "i", "see",
+    "makes", "sense", "understood",
+    "go", "on",
+]
 
 class MyAgent(Agent):
     def __init__(self) -> None:
@@ -85,7 +96,7 @@ async def entrypoint(ctx: JobContext):
         stt="deepgram/nova-3",
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
+        llm="google/gemini-2.5-flash",
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
@@ -100,6 +111,8 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        interrupt_ignore_words=IGNORE_WORDS,
+        min_interruption_words=0,
     )
 
     # log metrics as they are emitted, and total usage after session is over

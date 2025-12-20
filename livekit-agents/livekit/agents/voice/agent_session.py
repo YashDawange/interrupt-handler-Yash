@@ -507,7 +507,12 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 # JobContext is not available in evals
                 pass
 
-            self._session_span = current_span = tracer.start_span("agent_session")
+           
+            if hasattr(tracer, "start_span"):
+                self._session_span = current_span = tracer.start_span("agent_session")
+            else:
+                self._session_span = current_span = None
+
 
             self._recorded_events = []
             self._room_io = None

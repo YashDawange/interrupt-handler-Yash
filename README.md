@@ -1,4 +1,32 @@
 <!--BEGIN_BANNER_IMAGE-->
+---
+
+## Assignment: Context-aware interruption handling
+
+This repository includes an example demonstrating context-aware interruption handling for voice agents.
+
+### Goal
+
+Ensure that short acknowledgement words such as “yeah”, “ok”, or “hmm” do **not** interrupt the agent while it is speaking, while still allowing explicit interruption commands like “stop” or “wait” to work immediately.
+
+### Behavior implemented
+
+- Agent speaking + “yeah / ok / hmm” → continues speaking
+- Agent silent + “yeah” → responds normally
+- Agent speaking + “stop / wait” → stops immediately
+- Agent speaking + “yeah okay but wait” → stops (mixed input contains a real command)
+
+### How it works
+
+LiveKit’s Voice Activity Detection (VAD) can trigger before speech-to-text (STT), which may cause false interruptions.  
+This implementation uses LiveKit’s built-in false-interruption recovery and STT validation to determine intent before stopping speech.
+
+Passive acknowledgements are ignored only while the agent is speaking, ensuring seamless explanations without restarts or stuttering.
+
+### Running the demo agent
+
+```bash
+python examples/voice_agents/basic_agent.py
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="/.github/banner_dark.png">
