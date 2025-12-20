@@ -49,6 +49,7 @@ _DEFAULT_BACKCHANNEL_WORDS = {
     "sure",
     "aha",
     "got it", 
+    "correct"
 }
 
 _DEFAULT_INTERRUPT_WORDS = {
@@ -173,10 +174,13 @@ async def entrypoint(ctx: JobContext):
         preemptive_generation=True,
 
         # 🚫 Disable automatic interruptions from the framework.
-        allow_interruptions=False,
+        allow_interruptions=True,
 
         # ✅ Still send user audio to STT even if we can't auto-interrupt.
-        discard_audio_if_uninterruptible=False,
+        discard_audio_if_uninterruptible=True,
+        
+        min_interruption_duration=0.6,   # seconds
+        min_interruption_words=2,
     )
 
 
