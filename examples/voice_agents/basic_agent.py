@@ -17,13 +17,20 @@ from livekit.agents import (
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+# importing interupt words 
+# importing from the local module defining acknowledgement/filler words
+from intelligent_interuption import INTERRUPT_IGNORE_WORDS
+
+# quick hashset for quick lookup 
+ignore_set = set(w.lower() for w in INTERRUPT_IGNORE_WORDS)
+
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
 
 logger = logging.getLogger("basic-agent")
 
-load_dotenv()
+load_dotenv(".env.local")
 
 
 class MyAgent(Agent):
@@ -100,6 +107,7 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        ignore_words = ignore_set
     )
 
     # log metrics as they are emitted, and total usage after session is over
