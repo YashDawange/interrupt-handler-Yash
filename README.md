@@ -112,6 +112,49 @@ if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
 
+Assignment Implementation: Smart Voice Interruption
+This project implements a Modular Interruption System that allows the agent to distinguish between "listening noises" and actual commands.
+
+How the Logic Works
+The agent's "ears" are customized to be less sensitive to background acknowledgments, making the conversation feel more natural:
+
+Modular Filtering (interruption_filter.py):
+
+Passive Backchannels: A pre-defined set of words like "yeah," "mhm," and "okay" are classified as passive. If the user says only these words while the agent is talking, the agent is instructed to keep speaking.
+
+Active Commands: Specific priority words like "stop," "wait," or "hold on" are flagged for immediate action.
+
+Custom STT Node (base_agent.py):
+
+The agent overrides the default Speech-to-Text node to intercept transcripts.
+
+Fast-Path Processing: By checking interim results, the agent can trigger an interruption in milliseconds if a "stop" command is detected, rather than waiting for the user to finish their sentence.
+
+Event Swallowing: If a final transcript is identified as a backchannel, the event is "swallowed," meaning the LLM never sees it and the agent's voice track remains uninterrupted.
+
+How to Run the Agent
+
+1. Install Dependencies
+pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]"
+
+2. Environment Configuration Create a .env file in the root directory with the following:
+LIVEKIT_URL=wss://your-project-url.livekit.cloud
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+
+# AI Provider Keys
+OPENAI_API_KEY=your_openai_key
+DEEPGRAM_API_KEY=your_deepgram_key
+CARTESIA_API_KEY=your_cartesia_key
+3. Execution Run the worker in development mode for the best testing experience:
+python3 base_agent.py dev
+
+4. Testing Connect via the LiveKit Agents Playground. To verify the logic:
+
+Say "Yeah, okay" while the agent is mid-sentence. (The agent should not stop).
+
+Say "Stop!" while the agent is mid-sentence. (The agent should immediately stop).
+
 You'll need the following environment variables for this example:
 
 - DEEPGRAM_API_KEY
