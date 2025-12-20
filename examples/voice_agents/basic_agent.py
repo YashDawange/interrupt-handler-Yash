@@ -48,6 +48,7 @@ _DEFAULT_BACKCHANNEL_WORDS = {
     "right",
     "sure",
     "aha",
+    "got it", 
 }
 
 _DEFAULT_INTERRUPT_WORDS = {
@@ -58,6 +59,7 @@ _DEFAULT_INTERRUPT_WORDS = {
     "cancel",
     "pause",
     "enough",
+    "hold on",
 }
 
 def _parse_word_list(env_name: str, default: set[str]) -> set[str]:
