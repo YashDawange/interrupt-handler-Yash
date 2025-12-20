@@ -507,7 +507,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 # JobContext is not available in evals
                 pass
 
-            # ---- PATCH: tracer may be DummyTracer in dev mode ----
+           
             if hasattr(tracer, "start_span"):
                 self._session_span = current_span = tracer.start_span("agent_session")
             else:

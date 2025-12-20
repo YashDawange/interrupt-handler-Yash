@@ -15,27 +15,37 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 logger = logging.getLogger("interrupt-demo")
 load_dotenv()
 
-IGNORE_WORDS = [
-    "absolutely", "ah", "aha", "alright", "cool",
-    "exactly", "go", "on", "got", "it", "hmm", "i", "see",
-    "makes", "sense", "mhm", "mhmm", "mm", "hmm", "mmhmm",
-    "nice", "oh", "ok", "okay", "really", "right", "sure",
-    "uh", "uh-huh", "um", "understood", "wow", "yeah",
-    "yep", "yes"
-]
+IGNORE WORDS = {
+    "ah", "aha", "hmm", "uh", "um", "mm",
+    "mhm", "mhmm", "mmhmm", "uh-huh",
+
+    "ok", "okay", "alright", "sure",
+    "yeah", "yep", "yes",
+
+    "oh", "wow", "nice", "cool",
+    "really", "right", "exactly",
+
+    "got", "it", "i", "see",
+    "makes", "sense", "understood",
+
+    "go", "on"
+}
+
 
 class DemoAgent(Agent):
     def __init__(self):
         super().__init__(
             instructions=(
-                "You are explaining something continuously. "
-                "If the user gives short acknowledgements like yeah or hmm, keep talking. "
-                "If the user says stop or wait, stop immediately."
+                "Your name is Kelly. You would interact with users via voice."
+            "with that in mind keep your responses concise and to the point."
+            "do not use emojis, asterisks, markdown, or other special characters in your responses."
+            "You are curious and friendly, and have a sense of humor."
+            "you will speak english to the user"
             )
         )
 
     async def on_enter(self):
-        # Start speaking immediately (important for demos)
+        
         self.session.generate_reply()
 
 server = AgentServer()
@@ -50,12 +60,12 @@ server.setup_fnc = prewarm
 async def entrypoint(ctx: JobContext):
     session = AgentSession(
         stt="deepgram/nova-3",
-        llm="google/gemini-2.5-flash",   # or openai/gpt-4o-mini
+        llm="google/gemini-2.5-flash",   
         tts="cartesia/sonic-2",
         vad=ctx.proc.userdata["vad"],
         turn_detection=MultilingualModel(),
 
-        # 🔑 THESE 5 LINES ARE THE SOLUTION
+      
         preemptive_generation=True,
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
