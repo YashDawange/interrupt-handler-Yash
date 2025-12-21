@@ -1,0 +1,19 @@
+# Requirements for Intelligent Interrupt Handler
+# 
+# These are the minimum dependencies needed to run the intelligent interrupt agent.
+# Make sure to also install the livekit-agents package from the parent repository.
+
+# Core LiveKit Agents with necessary plugins
+livekit-agents>=1.0
+
+# Plugins for voice agent functionality
+livekit-plugins-silero>=0.7     # VAD (Voice Activity Detection)
+livekit-plugins-deepgram>=0.7   # STT (Speech-to-Text)
+livekit-plugins-openai>=0.10    # LLM
+livekit-plugins-cartesia>=0.4   # TTS (Text-to-Speech)
+
+# Environment variable loading
+python-dotenv>=1.0
+
+# Testing (optional, but recommended)
+pytest>=7.0
