@@ -1,4 +1,20 @@
+"""
+Basic Voice Agent with Intelligent Interruption Handling
+
+This agent demonstrates the Temporal-Semantic Fusion (TSF) approach for handling
+user interruptions. It ignores backchanneling ("yeah", "ok") while speaking but
+responds to active commands ("stop", "wait").
+
+Usage:
+    python basic_agent.py dev     # Development mode with hot reload
+    python basic_agent.py console # Terminal testing mode
+    python basic_agent.py start   # Production mode
+"""
+
 import logging
+import asyncio
+import string
+import os
 
 from dotenv import load_dotenv
 
@@ -10,6 +26,7 @@ from livekit.agents import (
     JobProcess,
     MetricsCollectedEvent,
     RunContext,
+    UserInputTranscribedEvent,
     cli,
     metrics,
     room_io,
@@ -23,23 +40,92 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("basic-agent")
 
+# ============================================================================
+# INTELLIGENT INTERRUPTION HANDLING (TSF - Temporal-Semantic Fusion)
+# ============================================================================
+
+# Configurable list of backchannel words to ignore when agent is speaking
+# Can be overridden via IGNORE_WORDS environment variable (comma-separated)
+DEFAULT_IGNORE_WORDS = {
+    "yeah", "ok", "okay", "hmm", "aha", "right", "uh-huh",
+    "yep", "yup", "sure", "got it", "i see", "mhm", "uh huh",
+    "mm", "mmm", "mhmm", "yes", "yea", "ya"
+}
+
+def get_ignore_words():
+    """Get ignore words from environment or use defaults."""
+    env_words = os.getenv("IGNORE_WORDS")
+    if env_words:
+        return {word.strip().lower() for word in env_words.split(",")}
+    return DEFAULT_IGNORE_WORDS
+
+def is_backchannel(text: str, ignore_words: set) -> bool:
+    """Check if text consists entirely of backchannel words."""
+    # Sanitize: lowercase, strip, remove punctuation
+    text = text.lower().strip()
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    if not text:
+        return True
+    words = text.split()
+    return all(word in ignore_words for word in words)
+
+def setup_interruption_handler(session: AgentSession):
+    """
+    Set up intelligent interruption handling for an AgentSession.
+    
+    This implements TSF (Temporal-Semantic Fusion):
+    - Temporal Gate: Check if agent is speaking
+    - Semantic Analysis: Classify input as backchannel or command
+    - Decision: Ignore backchannels, interrupt on commands
+    """
+    ignore_words = get_ignore_words()
+    
+    @session.on("user_input_transcribed")
+    def on_user_input_transcribed(event: UserInputTranscribedEvent):
+        # TEMPORAL GATE: If agent is NOT speaking, all input is valid
+        if session.agent_state != "speaking":
+            logger.info(f"Agent silent - processing input: '{event.transcript}'")
+            return
+        
+        transcript = event.transcript
+        
+        # SEMANTIC ANALYSIS: Is this a backchannel or a command?
+        if is_backchannel(transcript, ignore_words):
+            # BACKCHANNEL: Ignore - agent continues speaking
+            logger.info(f"Backchannel ignored: '{transcript}'")
+        else:
+            # COMMAND: Trigger interruption
+            logger.info(f"Interrupt triggered: '{transcript}'")
+            asyncio.create_task(session.interrupt(force=True))
+
 load_dotenv()
 
 
 class MyAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="Your name is Kelly. You would interact with users via voice."
-            "with that in mind keep your responses concise and to the point."
-            "do not use emojis, asterisks, markdown, or other special characters in your responses."
-            "You are curious and friendly, and have a sense of humor."
-            "you will speak english to the user",
+            instructions="Your name is Kelly. You would interact with users via voice. "
+            "With that in mind keep your responses concise and to the point. "
+            "Do not use emojis, asterisks, markdown, or other special characters in your responses. "
+            "You are curious and friendly, and have a sense of humor. "
+            "You will speak english to the user. "
+            "If the user says 'stop' or 'wait', acknowledge that you were interrupted. "
+            "If the user says 'yeah' or 'ok' while you are silent, treat it as confirmation and continue the conversation.",
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
-        # according to its instructions
-        self.session.generate_reply()
+        # Start with a longer message to demonstrate interruption handling
+        await self.session.say(
+            "Hello! I'm Kelly, your voice assistant with intelligent interruption handling. "
+            "While I'm speaking, you can say 'yeah', 'ok', or 'hmm' to show you're listening, "
+            "and I will continue without stopping. "
+            "However, if you say 'stop' or 'wait', I will pause immediately. "
+            "Now, let me tell you a bit about myself. "
+            "I'm designed to be helpful, concise, and friendly. "
+            "I can help you with various tasks like looking up the weather or just having a conversation. "
+            "Feel free to ask me anything!",
+            allow_interruptions=False  # Disable auto-interruption; we handle it manually via TSF
+        )
 
     # all functions annotated with @function_tool will be passed to the LLM when this
     # agent is active
@@ -116,6 +202,15 @@ async def entrypoint(ctx: JobContext):
 
     # shutdown callbacks are triggered when the session is over
     ctx.add_shutdown_callback(log_usage)
+
+    # ========================================================================
+    # SET UP INTELLIGENT INTERRUPTION HANDLER (TSF)
+    # ========================================================================
+    # This registers the user_input_transcribed event handler that:
+    # - Ignores "yeah", "ok", "hmm" while agent is speaking (backchannels)
+    # - Triggers interruption for "stop", "wait" (commands)
+    # - Processes all input normally when agent is silent
+    setup_interruption_handler(session)
 
     await session.start(
         agent=MyAgent(),
