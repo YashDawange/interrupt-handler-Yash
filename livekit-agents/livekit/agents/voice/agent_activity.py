@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interruption_policy import InterruptionPolicy
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -141,6 +142,11 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        if(self._session.options.backchannel_words is not None):
+            self._interrupt_policy: InterruptionPolicy = InterruptionPolicy(backchannels_override=self._session.options.backchannel_words)
+        else:
+            self._interrupt_policy: InterruptionPolicy = InterruptionPolicy()
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1239,9 +1245,12 @@ class AgentActivity(RecognitionHooks):
         if self._turn_detection in ("manual", "realtime_llm"):
             # ignore vad inference done event if turn_detection is manual or realtime_llm
             return
+      
+        if ev.speech_duration < self._session.options.min_interruption_duration:
+            return
 
-        if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+        if self._session.agentstate == "speaking":
+            self._interrupt_policy.change_state_pending()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1261,15 +1270,17 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            self._interrupt_policy.change_state_pending()
+            if(self._interrupt_policy.should_interrupt_now(ev)):
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1292,15 +1303,17 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            self._interrupt_policy.change_state_pending()
+            if(self._interrupt_policy.should_interrupt_now(ev)):
+                self._interrupt_by_audio_activity()
 
-            if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
-            ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
 
         self._interrupt_paused_speech_task = asyncio.create_task(
             self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
@@ -1344,6 +1357,9 @@ class AgentActivity(RecognitionHooks):
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool:
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
+        
+        if not self._interrupt_policy.should_commit_turn():
+            return False 
 
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
