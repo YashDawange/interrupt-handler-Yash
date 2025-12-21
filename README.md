@@ -373,3 +373,57 @@ The Agents framework is under active development in a rapidly evolving field. We
 </tbody>
 </table>
 <!--END_REPO_NAV-->
+---
+
+## Assignment: Voice Agent Interruption Handling
+
+### Overview
+
+This implementation improves interruption handling for a voice agent by preventing
+unintentional interruptions caused by short acknowledgement phrases during agent speech.
+
+### Behavior
+
+The agent distinguishes between passive acknowledgements and explicit interruption
+commands based on its speaking state.
+
+- While the agent is speaking:
+  - Passive acknowledgements such as "yeah", "ok", or "hmm" are ignored.
+  - Explicit command phrases such as "stop", "wait", or "cancel" immediately interrupt
+    the agent.
+- When the agent is not speaking:
+  - All user input, including short acknowledgements, is handled normally.
+
+### Implementation Notes
+
+Agent speaking state is tracked using session events, and interruption logic is applied
+at the transcription level.
+
+```python
+FILLER_WORDS = {"yeah", "ok", "okay", "hmm", "uh", "uh-huh", "right"}
+COMMAND_WORDS = {"stop", "wait", "pause", "cancel", "no"}
+
+@session.on("agent_speaking_start")
+def _on_agent_speaking_start():
+    nonlocal agent_is_speaking
+    agent_is_speaking = True
+
+@session.on("agent_speaking_end")
+def _on_agent_speaking_end():
+    nonlocal agent_is_speaking
+    agent_is_speaking = False
+
+@session.on("user_transcription")
+async def _on_user_transcription(text: str):
+    clean_text = text.lower().strip()
+    words = clean_text.split()
+
+    if agent_is_speaking:
+        if any(cmd in clean_text for cmd in COMMAND_WORDS):
+            await session.interrupt()
+            return
+
+        if all(word in FILLER_WORDS for word in words):
+            return
+
+    await session.handle_user_input(text)
