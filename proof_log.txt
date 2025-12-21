@@ -1,0 +1,186 @@
+ 00:16:11.772 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:16:12.940 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.31, "prompt_tokens": 66, 
+"prompt_cached_tokens": 0, "completion_tokens": 10, "tokens_per_second": 7.55}
+    00:16:13.439 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:16:13.618 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    00:16:13.755 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.4961877999958233, "audio_duration": 1.9}      
+    00:16:15.368 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:16:17.216 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.35}
+    00:16:18.673 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.5}
+    00:16:18.675 INFO   intellig…interrupt [RESPOND] 'Tell me a long story.'  
+    00:16:18.677 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "Tell me a long story.", "language": "en", "transcript_delay": 0.6584796905517578}
+    00:16:18.680 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.66, "transcription_delay": 0.66}
+    00:16:18.684 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:16:20.021 DEBUG  livekit.agents     executing tool {"function": "tell_long_story", "arguments": "{}", "speech_id": "speech_1977f6524d71"}
+    00:16:20.026 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.34, "prompt_tokens": 89, 
+"prompt_cached_tokens": 0, "completion_tokens": 11, "tokens_per_second": 8.18}
+    00:16:20.031 DEBUG  livekit.agents     tools execution completed {"speech_id": "speech_1977f6524d71"}
+    00:16:21.744 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:16:22.963 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.01, "prompt_tokens": 180, 
+"prompt_cached_tokens": 0, "completion_tokens": 169, "tokens_per_second": 60.53}
+    00:16:23.625 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:16:26.638 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.0}
+    00:16:30.426 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.8}
+    00:16:31.562 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.1}
+    00:16:31.564 INFO   intellig…interrupt [IGNORED] 'Yeah.'  
+    00:16:31.566 DEBUG  livekit.agents     received user transcript {"user_transcript": "Yeah.", "language": "en", "transcript_delay": 0.6450085639953613}       
+    00:16:33.135 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.3901158000007854, "audio_duration": 43.61}    
+    00:16:35.725 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.2}
+    00:16:35.726 INFO   intellig…interrupt [IGNORED] 'Yeah. Yeah.'  
+    00:16:35.727 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "Yeah. Yeah.", "language": "en", "transcript_delay": 0.6046226024627686}
+    00:16:39.625 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.9}
+    00:16:39.627 INFO   intellig…interrupt [IGNORED] 'Okay.'  
+    00:16:39.628 DEBUG  livekit.agents     received user transcript {"user_transcript": "Okay.", "language": "en", "transcript_delay": 4.50578761100769}
+    00:16:44.606 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.9}
+    00:16:46.918 INFO   intellig…interrupt [INTERRUPT] 'Stop.' - Found interrupt command words: ['stop']  
+    00:16:46.960 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:16:47.019 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.6, "transcription_delay": 0.0}
+    00:16:47.027 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:16:47.121 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.55}
+    00:16:47.123 INFO   intellig…interrupt [RESPOND] 'Stop.'  
+    00:16:47.125 DEBUG  livekit.agents     received user transcript {"user_transcript": "Stop.", "language": "en"}
+    00:16:48.833 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.75}
+    00:16:49.475 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:16:49.847 INFO   intellig…interrupt [INTERRUPT] 'Count' - Contains substantive content: ['count']  
+    00:16:49.850 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.87, "prompt_tokens": 0, 
+"prompt_cached_tokens": 0, "completion_tokens": 0, "tokens_per_second": 0.0}
+    00:16:49.852 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:16:51.621 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.8}
+    00:16:51.622 INFO   intellig…interrupt [RESPOND] 'Count from one to hundred in'  
+    00:16:51.623 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "Count from one to hundred in", "language": "en", "transcript_delay": 0.0029997825622558594}        
+    00:16:53.622 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.5, "transcription_delay": 0.0}
+    00:16:53.629 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:16:53.769 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.1}
+    00:16:53.771 INFO   intellig…interrupt [RESPOND] 'like, one, two, three, four.'  
+    00:16:53.772 DEBUG  livekit.agents     received user transcript {"user_transcript": "like, one, two, three, four.", "language": "en"}
+    00:16:55.175 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.08, "prompt_tokens": 462, 
+"prompt_cached_tokens": 0, "completion_tokens": 49, "tokens_per_second": 31.63}
+    00:16:55.180 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:16:58.121 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.3626194000025862, "audio_duration": 10.87}    
+    00:16:58.766 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:17:02.561 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.8}
+    00:17:06.070 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:06.616 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.0}
+    00:17:09.624 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.5, "transcription_delay": 0.0}
+    00:17:09.630 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:09.759 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.2}
+    00:17:09.760 INFO   intellig…interrupt [RESPOND] 'Like, you'  
+    00:17:09.762 DEBUG  livekit.agents     received user transcript {"user_transcript": "Like, you", "language": "en"}
+    00:17:13.861 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.1}
+    00:17:13.862 INFO   intellig…interrupt [RESPOND] 'read it in in English, like, two, three, four, five.'  
+    00:17:13.864 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "read it in in English, like, two, three, four, five.", "language": "en", "transcript_delay":       
+0.644977331161499}
+    00:17:14.442 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.24, "prompt_tokens": 528, 
+"prompt_cached_tokens": 0, "completion_tokens": 295, "tokens_per_second": 61.28}
+    00:17:14.741 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:17:14.970 INFO   intellig…interrupt [INTERRUPT] 'Up to a' - Contains substantive content: ['up', 'to', 'a']  
+    00:17:14.972 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:15.122 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.5, "transcription_delay": 0.0}
+    00:17:15.128 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:15.332 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.5}
+    00:17:15.334 INFO   intellig…interrupt [RESPOND] 'Up to hundred.'  
+    00:17:15.335 DEBUG  livekit.agents     received user transcript {"user_transcript": "Up to hundred.", "language": "en"}
+    00:17:16.899 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.15, "prompt_tokens": 849, 
+"prompt_cached_tokens": 0, "completion_tokens": 60, "tokens_per_second": 33.77}
+    00:17:17.385 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:17:20.328 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:17:20.928 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.47996579999744426, "audio_duration": 14.44}   
+    00:17:24.232 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.9}
+    00:17:24.234 INFO   intellig…interrupt [IGNORED] 'Okay.'  
+    00:17:24.235 DEBUG  livekit.agents     received user transcript {"user_transcript": "Okay.", "language": "en", "transcript_delay": 0.6140913963317871}       
+    00:17:25.331 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.1}
+    00:17:25.332 INFO   intellig…interrupt [IGNORED] 'Okay.'  
+    00:17:25.335 DEBUG  livekit.agents     received user transcript {"user_transcript": "Okay.", "language": "en", "transcript_delay": 1.7139074802398682}       
+    00:17:26.329 INFO   intellig…interrupt [INTERRUPT] 'Mhmm.' - Contains substantive content: ['mhmm']  
+    00:17:26.330 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:26.521 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.2}
+    00:17:26.523 INFO   intellig…interrupt [RESPOND] 'Mhmm.'  
+    00:17:26.524 DEBUG  livekit.agents     received user transcript {"user_transcript": "Mhmm.", "language": "en", "transcript_delay": 0.6024308204650879}       
+    00:17:26.525 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.6, "transcription_delay": 0.6}
+    00:17:26.531 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:31.366 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.25, "prompt_tokens": 927, 
+"prompt_cached_tokens": 0, "completion_tokens": 297, "tokens_per_second": 61.37}
+    00:17:31.527 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:17:31.616 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:17:36.440 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.9}
+    00:17:41.238 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.8}
+    00:17:41.258 INFO   intellig…interrupt [INTERRUPT] 'Which' - Contains substantive content: ['which']  
+    00:17:41.260 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:41.650 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.4}
+    00:17:41.651 INFO   intellig…interrupt [RESPOND] 'Oh, wait.'  
+    00:17:41.654 DEBUG  livekit.agents     received user transcript {"user_transcript": "Oh, wait.", "language": "en", "transcript_delay": 0.7331161499023438}   
+    00:17:41.656 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.73, "transcription_delay": 0.73}
+    00:17:41.661 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:43.049 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.29, "prompt_tokens": 1235, 
+"prompt_cached_tokens": 1152, "completion_tokens": 10, "tokens_per_second": 7.18}
+    00:17:43.233 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.6}
+    00:17:43.234 INFO   intellig…interrupt [RESPOND] 'Repeat the last'  
+    00:17:43.235 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "Repeat the last", "language": "en", "transcript_delay": 0.013222694396972656}
+    00:17:43.429 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:17:43.927 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.3759780000036699, "audio_duration": 2.32}     
+    00:17:44.226 INFO   intellig…interrupt [INTERRUPT] 'ten' - Contains substantive content: ['ten']  
+    00:17:44.227 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:44.424 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.2}
+    00:17:44.425 INFO   intellig…interrupt [RESPOND] 'ten.'  
+    00:17:44.427 DEBUG  livekit.agents     received user transcript {"user_transcript": "ten.", "language": "en", "transcript_delay": 0.707298994064331}
+    00:17:44.428 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.71, "transcription_delay": 0.71}
+    00:17:44.434 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:46.124 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.03, "prompt_tokens": 1257, 
+"prompt_cached_tokens": 1152, "completion_tokens": 49, "tokens_per_second": 28.93}
+    00:17:46.479 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:17:49.049 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.425804500002414, "audio_duration": 10.82}     
+    00:17:49.452 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:17:54.452 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:17:54.455 INFO   intellig…interrupt [INTERRUPT] 'This call' - Contains substantive content: ['this', 'call']  
+    00:17:54.456 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:54.647 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.2}
+    00:17:54.649 INFO   intellig…interrupt [RESPOND] 'It's called'  
+    00:17:54.650 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "It's called", "language": "en", "transcript_delay": 0.6304712295532227}
+    00:17:54.659 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.64, "transcription_delay": 0.64}
+    00:17:54.665 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:56.580 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.51, "prompt_tokens": 1315, 
+"prompt_cached_tokens": 1280, "completion_tokens": 28, "tokens_per_second": 14.58}
+    00:17:56.967 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:17:57.478 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.8}
+    00:17:57.480 INFO   intellig…interrupt [INTERRUPT] 'Count from fifty to sixty.' - Contains substantive content: ['count', 'from', 'fifty', 'to', 'sixty']    
+    00:17:57.481 DEBUG  livekit.agents     received user transcript  
+                                         {"user_transcript": "Count from fifty to sixty.", "language": "en", "transcript_delay": 0.7595973014831543}
+    00:17:57.484 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:17:57.485 INFO   livekit.agents     EOU metrics {"end_of_utterance_delay": 0.76, "transcription_delay": 0.76}
+    00:17:57.492 DEBUG  intellig…interrupt Agent state: listening -> thinking  
+    00:17:59.713 INFO   livekit.agents     LLM metrics  
+                                         {"model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.53, "prompt_tokens": 1356, 
+"prompt_cached_tokens": 1280, "completion_tokens": 54, "tokens_per_second": 24.27}
+    00:17:59.917 DEBUG  intellig…interrupt Agent state: thinking -> speaking  
+    00:18:02.376 INFO   livekit.agents     TTS metrics  
+                                         {"model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.32395099999848753, "audio_duration": 9.89}    
+    00:18:02.428 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    00:18:07.217 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.7}
+    00:18:09.769 DEBUG  intellig…interrupt Agent state: speaking -> listening  
+    00:18:11.452 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.3}
+    00:18:12.352 INFO   livekit.agents     STT metrics {"model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.9}
+    00:18:12.355 INFO   intellig…interrupt [RESPOND] 'Okay. Thank you for help.'  
+    00:18:12.356 DEBUG  livekit.agents     received user transcript  

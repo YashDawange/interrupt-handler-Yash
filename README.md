@@ -110,7 +110,10 @@ OK
 ### 📹 Proof Video
 
 **video Link:**
-[view](https://drive.google.com/file/d/1sWpD5jmh0bwUhIAElUHD7BNK0rMSnabc/view)
+[view](https://drive.google.com/file/d/1DfLqZf1cbgqltRhDvrMJDpYtN81Be_QQ/view)
+
+### 📹 Proof Logs
+placed inside the **`proof_log.txt` file in root directory**
 
 ---
 
