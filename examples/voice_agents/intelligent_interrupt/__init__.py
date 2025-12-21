@@ -1,46 +1,50 @@
 """
-Intelligent Interruption Handling Module
+Intelligent Interrupt Module for LiveKit Voice Agents
 
-This module provides context-aware interruption filtering for LiveKit voice agents.
-It distinguishes between passive acknowledgements and active interruptions based
-on the agent's current speaking state.
+This module provides context-aware interruption handling that distinguishes
+between passive acknowledgements ("yeah", "ok") and active interruptions
+("stop", "wait").
 
-Example Usage:
-    from intelligent_interrupt import InterruptFilter, InterruptFilterConfig
+Quick Start:
+    from intelligent_interrupt import attach_interrupt_handlers, get_session_options
     
-    # Create filter with custom config
-    config = InterruptFilterConfig(
-        ignore_words=frozenset(["yeah", "ok", "hmm"]),
-        interrupt_words=frozenset(["stop", "wait", "no"])
+    # Create session with recommended options
+    session = AgentSession(
+        llm=llm, stt=stt, tts=tts, vad=vad,
+        **get_session_options(),
     )
-    filter = InterruptFilter(config)
     
-    # Analyze user input
-    analysis = filter.analyze("yeah okay", agent_speaking=True)
-    print(analysis.decision)  # "ignore"
-    
-    analysis = filter.analyze("stop please", agent_speaking=True)
-    print(analysis.decision)  # "interrupt"
+    # Add interrupt handling - one line!
+    attach_interrupt_handlers(session)
 """
 
-from .interrupt_filter import (
+from __future__ import annotations
+
+# Core filter components
+from .filter import (
     InterruptFilter,
     InterruptFilterConfig,
     InterruptAnalysis,
-    InterruptDecision,
+)
+
+# Word lists
+from .wordlists import (
     DEFAULT_IGNORE_WORDS,
     DEFAULT_INTERRUPT_WORDS,
-    get_default_filter,
-    set_default_filter,
+)
+
+# Session integration
+from .session_integration import (
+    get_session_options,
+    attach_interrupt_handlers,
 )
 
 __all__ = [
+    # Core filter
     "InterruptFilter",
-    "InterruptFilterConfig",
+    "InterruptFilterConfig", 
     "InterruptAnalysis",
-    "InterruptDecision",
+    # Word lists
     "DEFAULT_IGNORE_WORDS",
     "DEFAULT_INTERRUPT_WORDS",
-    "get_default_filter",
-    "set_default_filter",
-]
+    # Session integration

@@ -6,12 +6,13 @@ Or simply: python test_interrupt_filter.py
 """
 
 import unittest
-from interrupt_filter import (
-    InterruptFilter,
-    InterruptFilterConfig,
-    DEFAULT_IGNORE_WORDS,
-    DEFAULT_INTERRUPT_WORDS,
-)
+
+try:
+    from .filter import InterruptFilter, InterruptFilterConfig
+    from .wordlists import DEFAULT_IGNORE_WORDS, DEFAULT_INTERRUPT_WORDS
+except ImportError:
+    from filter import InterruptFilter, InterruptFilterConfig
+    from wordlists import DEFAULT_IGNORE_WORDS, DEFAULT_INTERRUPT_WORDS
 
 
 class TestInterruptFilter(unittest.TestCase):

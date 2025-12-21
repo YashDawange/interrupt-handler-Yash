@@ -1,70 +1,173 @@
 # Intelligent Interruption Handling for LiveKit Voice Agents
 
-## Overview
+> **Assignment Solution**: Distinguish between passive acknowledgements ("yeah", "ok", "hmm") and active interruptions ("stop", "wait", "no") in a LiveKit voice agent.
 
-This implementation solves the challenge of distinguishing between **passive acknowledgements** ("yeah", "ok", "hmm") and **active interruptions** ("stop", "wait", "no") in a LiveKit voice agent.
+---
 
-### The Problem
+## 📋 Table of Contents
 
-LiveKit's default Voice Activity Detection (VAD) triggers interruptions at the **audio level** before any transcript is available. This means:
-- User says "yeah" → VAD detects voice → Agent pauses/stops → Transcript arrives too late
-- The agent cannot distinguish between "yeah" (filler) and "stop" (command) until after the pause
+1. [How to Run & Test](#how-to-run--test)
+2. [Problem Statement](#problem-statement)
+3. [Final Solution](#final-solution)
+4. [Easy Word List Configuration](#easy-word-list-configuration)
+5. [Modularity & Easy Integration](#modularity--easy-integration)
+6. [Performance Optimization](#performance-optimization)
+7. [Failed Approaches We Tried](#failed-approaches-we-tried)
+8. [Complete Code Reference](#complete-code-reference)
 
-### The Solution
+---
 
-This implementation uses a **dual-layer approach**:
+## How to Run & Test
 
-1. **Audio Layer**: Use `min_interruption_words=2` to prevent single-word utterances from triggering audio-level interrupts
-2. **Transcript Layer**: Process **interim transcripts** to detect interrupt command words early and manually trigger interrupts
+### Prerequisites
 
-This prevents pauses on filler words while still allowing fast interrupts on command words.
+- **Python 3.10 or higher**
+- **uv** (Python package manager)
 
-## Logic Matrix
+Verify Python installation:
 
-| User Input | Agent State | Behavior |
-|------------|-------------|----------|
-| "Yeah / Ok / Hmm" | Speaking | **IGNORE** - No pause, agent continues |
-| "Stop / Wait / No" | Speaking | **INTERRUPT** - Agent stops immediately |
-| "Yeah / Ok / Hmm" | Silent | **RESPOND** - Treats as valid input |
-| Any input | Silent | **RESPOND** - Normal conversation |
+```bash
+python --version
+```
 
-## How It Works
+---
 
-### The Timing Challenge
+### Step 1: Create Virtual Environment & Install Dependencies
+
+Create a virtual environment:
+
+```bash
+uv venv
+```
+
+Activate the virtual environment:
+
+**Windows**
+
+```bash
+./venv/Scripts/activate
+```
+
+**macOS / Linux**
+
+```bash
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+uv pip install -r requirements.txt
+```
+
+---
+
+### Step 2: Set Up Environment Variables
+
+Create a `.env` file inside the `/examples/` directory and add your API keys:
+
+```env
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+
+OPENAI_API_KEY=your_openai_key
+```
+
+> ⚠️ Make sure the `.env` file is placed inside the **`examples/` directory**, not the project root.
+
+---
+
+### Step 3: Run the Agent
+
+*(Ensure the virtual environment is activated)*
+
+```bash
+cd examples/voice_agents/intelligent_interrupt
+python agent.py console
+```
+
+---
+
+### Step 4: Run Unit Tests
+
+*(Ensure the virtual environment is activated)*
+
+```bash
+cd examples/voice_agents/intelligent_interrupt
+python test_interrupt_filter.py
+```
+
+**Expected Output:**
+
+```text
+Ran 36 tests in 0.008s
+OK
+```
+
+---
+
+### 📹 Proof Video
+
+**video Link:**
+[view](https://drive.google.com/file/d/1sWpD5jmh0bwUhIAElUHD7BNK0rMSnabc/view)
+
+---
+
+## Problem Statement
+
+### The Challenge
+
+When building voice agents with LiveKit, the default behavior triggers an interruption whenever the user speaks while the agent is talking. This creates a poor user experience because:
+
+- **User says "yeah"** → Agent pauses/stops → But "yeah" was just acknowledgement, not a command
+- **User says "ok"** → Agent stops → But user was just confirming they're listening
+- **User says "hmm"** → Agent interrupts → But user was just thinking along
+
+The assignment requires building an intelligent system that can:
+
+1. **IGNORE** passive acknowledgements ("yeah", "ok", "hmm", "uh-huh") when the agent is speaking
+2. **INTERRUPT** immediately when the user gives an active command ("stop", "wait", "no")
+3. **RESPOND** normally when the agent is silent
+
+### The Core Difficulty
+
+LiveKit's Voice Activity Detection (VAD) operates at the **audio level**, detecting voice before any transcript is available:
 
 ```
-Timeline without our solution:
+Standard LiveKit Timeline (The Problem):
 ─────────────────────────────────────────────────────────────
 0ms     User says "yeah"
 50ms    VAD detects voice activity
-100ms   Agent PAUSES (too early!)
+100ms   Agent PAUSES (too early! transcript not available yet)
 600ms   Transcript "yeah" arrives
-700ms   Filter says "ignore" - but pause already happened!
-─────────────────────────────────────────────────────────────
-
-Timeline WITH our solution:
-─────────────────────────────────────────────────────────────
-0ms     User says "yeah"
-50ms    VAD detects voice activity
-100ms   min_interruption_words=2 → single word ignored at audio level
-        Agent CONTINUES speaking (no pause!)
-600ms   Final transcript "yeah" arrives
-610ms   Filter confirms "ignore" - already handled correctly
-─────────────────────────────────────────────────────────────
-
-Timeline for "stop" command:
-─────────────────────────────────────────────────────────────
-0ms     User says "stop"
-50ms    VAD detects voice activity  
-100ms   min_interruption_words=2 → single word ignored at audio level
-150ms   INTERIM transcript "sto..." arrives
-200ms   INTERIM transcript "stop" arrives
-210ms   Filter detects command word → MANUAL INTERRUPT triggered!
-220ms   Agent stops immediately
+700ms   We could filter here, but agent already paused!
 ─────────────────────────────────────────────────────────────
 ```
 
-### Architecture Diagram
+By the time we know **what** the user said, the agent has already stopped. This is the fundamental timing problem we needed to solve.
+
+---
+
+## Final Solution
+
+### The Key Insight
+
+We discovered a powerful combination of settings that solves the problem:
+
+```python
+session = AgentSession(
+    allow_interruptions=True,   # ✅ Keeps STT active during agent speech
+    min_interruption_words=999, # ✅ Blocks all automatic audio-level interrupts
+)
+```
+
+**Why This Works:**
+- `allow_interruptions=True` → STT remains active, we receive transcripts during agent speech
+- `min_interruption_words=999` → User would need 999 words for auto-interrupt (effectively disabled)
+- We manually trigger interrupts based on transcript analysis!
+
+### The Complete Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -75,10 +178,10 @@ Timeline for "stop" command:
 │  │                      AUDIO LAYER                              │   │
 │  │  ┌─────────┐     ┌──────────────────────┐                    │   │
 │  │  │   VAD   │────▶│ min_interruption_    │                    │   │
-│  │  │ Silero  │     │ words = 2            │                    │   │
+│  │  │ Silero  │     │ words = 999          │                    │   │
 │  │  └─────────┘     │                      │                    │   │
-│  │                  │ Single words like    │                    │   │
-│  │                  │ "yeah" → NO PAUSE    │                    │   │
+│  │                  │ All audio-level      │                    │   │
+│  │                  │ interrupts BLOCKED   │                    │   │
 │  │                  └──────────────────────┘                    │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                              │                                       │
@@ -89,9 +192,9 @@ Timeline for "stop" command:
 │  │  ┌─────────────┐     ┌─────────────────┐     ┌────────────┐  │   │
 │  │  │   STT       │────▶│ InterruptFilter │────▶│  Decision  │  │   │
 │  │  │ (Deepgram)  │     │                 │     │            │  │   │
-│  │  │             │     │ Analyzes both:  │     │ • ignore   │  │   │
-│  │  │ • interim   │     │ • Agent state   │     │ • interrupt│  │   │
-│  │  │ • final     │     │ • Word content  │     │ • respond  │  │   │
+│  │  │             │     │ O(1) Set-based  │     │ • ignore   │  │   │
+│  │  │ • interim   │     │ word matching   │     │ • interrupt│  │   │
+│  │  │ • final     │     │                 │     │ • respond  │  │   │
 │  │  └─────────────┘     └─────────────────┘     └─────┬──────┘  │   │
 │  │                                                     │         │   │
 │  │                    ┌────────────────────────────────┘         │   │
@@ -108,516 +211,525 @@ Timeline for "stop" command:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Innovation: Interim Transcript Processing
+### Timeline With Our Solution
 
-Most implementations only process **final** transcripts. We process **interim** transcripts for faster interrupt detection:
+```
+FOR FILLER WORDS ("yeah"):
+─────────────────────────────────────────────────────────────
+0ms     User says "yeah"
+50ms    VAD detects voice
+100ms   min_interruption_words=999 → No auto-interrupt
+        Agent CONTINUES speaking ✅
+600ms   Transcript "yeah" arrives
+610ms   InterruptFilter → "ignore" → Agent continues ✅
+─────────────────────────────────────────────────────────────
 
+FOR COMMAND WORDS ("stop"):
+─────────────────────────────────────────────────────────────
+0ms     User says "stop"
+50ms    VAD detects voice
+100ms   min_interruption_words=999 → No auto-interrupt
+200ms   Interim transcript "stop" arrives
+210ms   InterruptFilter → "interrupt" → Manual interrupt!
+220ms   Agent stops immediately ✅
+─────────────────────────────────────────────────────────────
+```
+
+### Decision Logic Matrix
+
+| User Says | Agent State | Filter Decision | Agent Action |
+|-----------|-------------|-----------------|--------------|
+| "yeah" | Speaking | **IGNORE** | Continues speaking |
+| "ok" | Speaking | **IGNORE** | Continues speaking |
+| "hmm" | Speaking | **IGNORE** | Continues speaking |
+| "stop" | Speaking | **INTERRUPT** | Stops immediately |
+| "wait" | Speaking | **INTERRUPT** | Stops immediately |
+| "no" | Speaking | **INTERRUPT** | Stops immediately |
+| "yeah but wait" | Speaking | **INTERRUPT** | Stops (command word detected) |
+| "tell me more" | Speaking | **INTERRUPT** | Stops (substantive content) |
+| "yeah" | Silent | **RESPOND** | Processes as input |
+| Any input | Silent | **RESPOND** | Normal conversation |
+
+---
+
+
+## Easy Word List Configuration
+
+### 🎯 The Main Advantage: Simple Word List Updates
+
+One of the **key benefits** of our modular design is how easy it is to update word lists. No code changes required!
+
+### Method 1: Edit `wordlists.py` Directly
+
+Open `wordlists.py` and modify the word sets:
+
+```python
+# wordlists.py
+
+# Add words to IGNORE (passive acknowledgements)
+DEFAULT_IGNORE_WORDS: frozenset[str] = frozenset([
+    # Your custom words here
+    "yeah", "yes", "yep", "yup", "ya",
+    "ok", "okay", "k",
+    "hmm", "hm", "uh-huh", "mm-hmm",
+    "right", "alright", "sure",
+    "cool", "nice", "great",
+    "um", "uh", "er",
+    
+    # ← ADD NEW IGNORE WORDS HERE
+    "gotcha", "totally", "absolutely",
+])
+
+# Add words to INTERRUPT (active commands)
+DEFAULT_INTERRUPT_WORDS: frozenset[str] = frozenset([
+    "stop", "wait", "hold", "pause",
+    "no", "nope", "cancel", "quit",
+    "actually", "but", "however",
+    "question", "help", "what",
+    
+    # ← ADD NEW INTERRUPT WORDS HERE
+    "emergency", "urgent", "critical",
+])
+```
+
+### Method 2: Environment Variables (No Code Changes!)
+
+Set word lists via environment variables - perfect for deployment:
+
+```bash
+# .env file or system environment
+IGNORE_WORDS=yeah,ok,hmm,right,sure,gotcha,totally
+INTERRUPT_WORDS=stop,wait,no,cancel,emergency,urgent
+```
+
+Then load them:
+
+```python
+config = InterruptFilterConfig.from_env()
+filter = InterruptFilter(config)
+```
+
+### Method 3: Runtime Configuration
+
+Pass custom words when creating the filter:
+
+```python
+from intelligent_interrupt import InterruptFilter, InterruptFilterConfig
+
+# Create custom configuration
+config = InterruptFilterConfig(
+    ignore_words=frozenset([
+        "yeah", "ok", "hmm", "uh-huh",
+        "sounds good", "makes sense",  # Multi-word phrases work too!
+    ]),
+    interrupt_words=frozenset([
+        "stop", "wait", "cancel",
+        "hold on", "one second",  # Multi-word phrases work too!
+    ]),
+)
+
+filter = InterruptFilter(config)
+```
+
+### Method 4: Domain-Specific Word Lists
+
+Create specialized word lists for different use cases:
+
+```python
+# For a medical agent
+config = InterruptFilterConfig.for_domain(
+    "medical",
+    additional_ignore=frozenset(["uh-huh", "i understand"]),
+    additional_interrupt=frozenset(["emergency", "pain", "help me"]),
+)
+
+# For a customer service agent
+config = InterruptFilterConfig.for_domain(
+    "customer_service",
+    additional_ignore=frozenset(["thanks", "thank you"]),
+    additional_interrupt=frozenset(["manager", "supervisor", "complaint"]),
+)
+```
+
+### Default Word Lists Reference
+
+#### Ignore Words (Passive Acknowledgements)
+```python
+"yeah", "yes", "yep", "yup", "ya",      # Affirmative
+"ok", "okay", "k",                       # Confirmation
+"hmm", "hm", "uh-huh", "mm-hmm", "mhm",  # Thinking sounds
+"right", "alright", "sure", "aha", "ah", # Agreement
+"i see", "got it", "gotcha",             # Understanding
+"cool", "nice", "great",                 # Positive reactions
+"um", "uh", "er",                        # Filler sounds
+```
+
+#### Interrupt Words (Active Commands)
+```python
+"stop", "wait", "hold", "pause",         # Stop commands
+"no", "nope", "cancel", "quit",          # Negation
+"actually", "but", "however",            # Correction
+"question", "ask", "excuse", "sorry",    # Attention
+"repeat", "again", "help", "what",       # Requests
+"hang on", "one second",                 # Pause requests
+```
+
+---
+
+## Modularity & Easy Integration
+
+### 🔌 Plug-and-Play Design
+
+Our solution is designed to integrate into **any LiveKit voice agent** with just **2 lines of code**:
+
+```python
+from intelligent_interrupt import attach_interrupt_handlers, get_session_options
+
+# Create session with recommended settings
+session = AgentSession(
+    llm=llm, stt=stt, tts=tts, vad=vad,
+    **get_session_options(),  # ← Line 1: Apply settings
+)
+
+# One-line integration!
+attach_interrupt_handlers(session)  # ← Line 2: Attach handlers
+```
+
+**That's it!** Your agent now has intelligent interrupt handling.
+
+### Module Structure
+
+```
+intelligent_interrupt/
+├── __init__.py              # Public API - clean exports
+├── filter.py                # Core logic - InterruptFilter class
+├── wordlists.py             # Configuration - editable word lists
+├── session_integration.py   # Integration - plug-and-play setup
+├── agent.py                 # Example - working demonstration
+├── test_interrupt_filter.py # Testing - 36 unit tests
+└── README.md                # Documentation
+```
+
+### File Responsibilities
+
+| File | Purpose | What You Can Modify |
+|------|---------|---------------------|
+| `wordlists.py` | Word configuration | **Add/remove words here!** |
+| `filter.py` | Core filtering logic | Decision logic if needed |
+| `session_integration.py` | LiveKit integration | Session settings |
+| `agent.py` | Example agent | Use as template |
+| `__init__.py` | Public exports | Add new exports |
+
+### Integration Examples
+
+#### Example 1: Basic Integration
+```python
+from intelligent_interrupt import attach_interrupt_handlers, get_session_options
+
+session = AgentSession(**get_session_options())
+attach_interrupt_handlers(session)
+```
+
+#### Example 2: With Custom Filter
+```python
+from intelligent_interrupt import InterruptFilter, InterruptFilterConfig
+
+config = InterruptFilterConfig(
+    ignore_words=frozenset(["yeah", "ok"]),
+    interrupt_words=frozenset(["stop", "emergency"]),
+)
+custom_filter = InterruptFilter(config)
+attach_interrupt_handlers(session, interrupt_filter=custom_filter)
+```
+
+#### Example 3: With Logging Enabled
+```python
+attach_interrupt_handlers(session, log_decisions=True)
+# Logs: [INTERRUPT] 'stop' - Found interrupt command words: ['stop']
+# Logs: [IGNORE] 'yeah' - Only filler words detected: ['yeah']
+```
+
+---
+
+
+## Performance Optimization
+
+### 🚀 O(1) Set-Based Lookup
+
+We optimized the word matching from **O(n × m)** regex to **O(1)** set-based lookup for maximum performance.
+
+### Before: Regex Approach (Slower)
+
+```python
+# Original implementation - O(n × m) complexity
+self._ignore_pattern = re.compile(
+    r'\b(' + '|'.join(re.escape(w) for w in words) + r')\b',
+    re.IGNORECASE
+)
+
+def find_matches(self, text):
+    # Scans entire text for pattern matches
+    return [m.group() for m in self._ignore_pattern.finditer(text)]
+```
+
+**Problems with Regex:**
+- Scans entire text character by character
+- Pattern complexity grows with word list size
+- Performance degrades with longer transcripts
+
+### After: Set-Based Lookup (Faster) ✅
+
+```python
+# Optimized implementation - O(1) per word
+def _build_lookup_sets(self) -> None:
+    # Pre-compute lowercase sets for instant lookup
+    self._ignore_set = {w.lower() for w in self.config.ignore_words}
+    self._interrupt_set = {w.lower() for w in self.config.interrupt_words}
+
+def _find_ignore_words(self, text: str, words: list[str]) -> list[str]:
+    matched = []
+    for word in words:
+        if word in self._ignore_set:  # O(1) hash lookup!
+            matched.append(word)
+    return matched
+```
+
+**Why Sets Are Faster:**
+- Hash-based lookup: O(1) average case
+- No text scanning required
+- Performance independent of word list size
+
+### Performance Comparison
+
+| Method | Complexity | 36 Tests Runtime |
+|--------|------------|------------------|
+| Regex | O(n × m) | ~0.015s |
+| **Set Lookup** | **O(1)** | **0.008s** |
+
+### How It Works Internally
+
+```python
+# 1. Build lookup sets once (at initialization)
+self._ignore_set = {"yeah", "ok", "hmm", "uh-huh", ...}
+self._interrupt_set = {"stop", "wait", "no", "cancel", ...}
+
+# 2. Split transcript into words
+words = transcript.lower().split()  # ["yeah", "sounds", "good"]
+
+# 3. O(1) lookup for each word
+for word in words:
+    if word in self._ignore_set:    # Hash lookup: O(1)
+        # Found ignore word
+    if word in self._interrupt_set:  # Hash lookup: O(1)
+        # Found interrupt word
+
+# 4. Multi-word phrases checked separately (small set)
+for phrase in self._ignore_phrases:
+    if phrase in text:  # "i see", "got it", etc.
+        # Found phrase
+```
+
+---
+
+## Failed Approaches We Tried
+
+### ❌ Approach 1: Disabling Interruptions Entirely
+
+**What We Tried:**
+```python
+session = AgentSession(
+    allow_interruptions=False,  # Disable all interrupts
+)
+```
+
+**Why It Failed:**
+- When `allow_interruptions=False`, LiveKit **completely disables STT** during agent speech
+- We never receive transcripts while the agent is talking
+- Cannot analyze user input = Cannot make intelligent decisions
+
+**Lesson Learned:** We need transcripts to make decisions, so STT must stay active.
+
+---
+
+### ❌ Approach 2: Post-Transcript Filtering Only
+
+**What We Tried:**
 ```python
 @session.on("user_input_transcribed")
-def on_user_input_transcribed(ev: UserInputTranscribedEvent):
-    transcript = ev.transcript.strip()
-    is_final = ev.is_final  # False for interim, True for final
-    
-    # Process INTERIM transcripts for early interrupt detection!
-    if not is_final and agent._is_speaking:
-        analysis = filter.analyze(transcript, agent_speaking=True)
-        if analysis.decision == "interrupt":
-            # Don't wait for final - interrupt NOW
-            session.current_speech.interrupt(force=True)
+def on_transcript(ev):
+    if ev.is_final:  # Only process final transcripts
+        analysis = filter.analyze(ev.transcript)
+        # ... handle result
 ```
 
-## Configuration Reference
+**Why It Failed:**
+- Final transcripts arrive 600-800ms after user speaks
+- By then, VAD has already triggered the interrupt
+- Agent pauses before we can decide to ignore
 
-### AgentSession Parameters
-
-```python
-session = AgentSession(
-    # Speech-to-Text provider
-    stt="deepgram/nova-3",
-    
-    # Language Model
-    llm="openai/gpt-4.1-mini",
-    
-    # Text-to-Speech provider  
-    tts="cartesia/sonic-2",
-    
-    # Voice Activity Detection
-    vad=silero.VAD.load(),
-    
-    # ═══════════════════════════════════════════════════════════
-    # CRITICAL INTERRUPT HANDLING SETTINGS
-    # ═══════════════════════════════════════════════════════════
-    
-    # Enable interruption handling
-    allow_interruptions=True,
-    
-    # CRITICAL: Require 2+ words before audio-level interrupt triggers
-    # This prevents single filler words from pausing the agent
-    min_interruption_words=2,
-    
-    # Minimum speech duration to consider as interrupt (seconds)
-    min_interruption_duration=0.5,
-    
-    # Time to wait for transcript before deciding on interrupt
-    false_interruption_timeout=1.0,
-    
-    # Auto-resume if interrupt was "false" (noise, etc.)
-    resume_false_interruption=True,
-    
-    # ═══════════════════════════════════════════════════════════
-    # ENDPOINTING SETTINGS (when to consider user done speaking)
-    # ═══════════════════════════════════════════════════════════
-    
-    min_endpointing_delay=0.5,
-    max_endpointing_delay=3.0,
-)
-```
-
-### Configuration Parameter Details
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `allow_interruptions` | bool | `True` | Master switch for interrupt handling |
-| `min_interruption_words` | int | `0` | **KEY**: Min words before audio interrupt triggers. Set to `2` to prevent single-word pauses |
-| `min_interruption_duration` | float | `0.0` | Min seconds of speech before interrupt considered |
-| `false_interruption_timeout` | float | `0.0` | Seconds to wait for transcript before confirming interrupt |
-| `resume_false_interruption` | bool | `False` | Auto-resume if interrupt was noise/accidental |
-
-### InterruptFilter Configuration
-
-```python
-from dataclasses import dataclass, field
-from typing import FrozenSet
-
-@dataclass
-class InterruptFilterConfig:
-    """Configuration for the interrupt filter."""
-    
-    # Words to IGNORE when agent is speaking
-    ignore_words: FrozenSet[str] = field(default_factory=lambda: frozenset([
-        "yeah", "yes", "yep", "yup", "ya",
-        "ok", "okay", "k",
-        "hmm", "hm", "hmm-hmm", "hmmm",
-        "uh-huh", "uh huh", "uhuh", "uhhuh",
-        "mm-hmm", "mm hmm", "mmhmm", "mhm",
-        "right", "alright", "sure", "aha", "ah",
-        "i see", "got it", "gotcha",
-        "cool", "nice", "great",
-        "um", "uh", "er",
-    ]))
-    
-    # Words that ALWAYS trigger interrupt (even single word)
-    interrupt_words: FrozenSet[str] = field(default_factory=lambda: frozenset([
-        "stop", "wait", "hold", "pause",
-        "no", "nope", "cancel", "quit",
-        "actually", "but", "however",
-        "question", "ask",
-        "excuse", "sorry",
-        "repeat", "again",
-        "help", "what",
-    ]))
-```
-
-### Environment Variable Configuration
-
-```bash
-# .env file
-
-# LiveKit connection
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_API_KEY=your_api_key
-LIVEKIT_API_SECRET=your_api_secret
-
-# API Keys for providers
-DEEPGRAM_API_KEY=your_deepgram_key
-OPENAI_API_KEY=your_openai_key
-CARTESIA_API_KEY=your_cartesia_key
-
-# Custom word lists (optional, comma-separated)
-IGNORE_WORDS=yeah,ok,hmm,right,sure,gotcha
-INTERRUPT_WORDS=stop,wait,no,cancel,pause,hold
-```
+**Lesson Learned:** We need to process **interim** transcripts for faster detection.
 
 ---
 
-## Integration Guide: Add to Any LiveKit Voice Agent
+### ❌ Approach 3: VAD Sensitivity Adjustment
 
-This section shows how to add intelligent interrupt handling to **any** existing LiveKit voice agent.
+**What We Tried:**
+- Adjusting VAD sensitivity thresholds
+- Trying different `min_interruption_duration` values
 
-### Step 1: Copy the InterruptFilter Class
+**Why It Failed:**
+- VAD operates on audio amplitude, not content
+- Can't distinguish "yeah" from "stop" at audio level
+- Reducing sensitivity causes missed legitimate interrupts
 
-Copy this self-contained filter class into your project:
+**Lesson Learned:** Content analysis requires transcripts, not audio tuning.
+
+---
+
+### ❌ Approach 4: Simple Word Count Filtering
+
+**What We Tried:**
+```python
+if len(transcript.split()) == 1:
+    # Single word = probably filler, ignore
+    return "ignore"
+```
+
+**Why It Failed:**
+- "stop" is one word but should interrupt
+- "yeah okay sure" is three words but should be ignored
+- Word count doesn't correlate with intent
+
+**Lesson Learned:** We need semantic understanding, not just counting.
+
+---
+
+### ✅ Final Solution: The Winning Approach
+
+After trying and failing with the above approaches, we discovered the winning combination:
 
 ```python
-# interrupt_filter.py
-import re
-from dataclasses import dataclass, field
-from typing import Literal, FrozenSet
+session = AgentSession(
+    allow_interruptions=True,   # ✅ Keep STT active
+    min_interruption_words=999, # ✅ Block audio-level interrupts
+)
+```
 
-InterruptDecision = Literal["ignore", "interrupt", "respond"]
+This:
+1. Keeps STT running during agent speech (we get transcripts!)
+2. Blocks automatic VAD interrupts (agent doesn't pause prematurely)
+3. Lets us manually trigger interrupts based on content analysis
 
-DEFAULT_IGNORE_WORDS = frozenset([
-    "yeah", "yes", "yep", "yup", "ya", "ok", "okay", "k",
-    "hmm", "hm", "uh-huh", "mm-hmm", "mhm", "right", "alright",
-    "sure", "aha", "ah", "i see", "got it", "gotcha",
-    "cool", "nice", "great", "um", "uh", "er",
-])
+---
 
-DEFAULT_INTERRUPT_WORDS = frozenset([
-    "stop", "wait", "hold", "pause", "no", "nope", "cancel",
-    "quit", "actually", "but", "however", "question", "ask",
-    "excuse", "sorry", "repeat", "again", "help", "what",
-])
+## Complete Code Reference
 
-@dataclass
-class InterruptAnalysis:
-    decision: InterruptDecision
-    transcript: str
-    agent_was_speaking: bool
-    matched_ignore_words: list = field(default_factory=list)
-    matched_interrupt_words: list = field(default_factory=list)
-    reason: str = ""
+### Core Classes
 
-@dataclass  
-class InterruptFilterConfig:
-    ignore_words: FrozenSet[str] = field(default_factory=lambda: DEFAULT_IGNORE_WORDS)
-    interrupt_words: FrozenSet[str] = field(default_factory=lambda: DEFAULT_INTERRUPT_WORDS)
-
+#### InterruptFilter
+```python
 class InterruptFilter:
-    def __init__(self, config: InterruptFilterConfig = None):
+    def __init__(self, config: InterruptFilterConfig | None = None):
         self.config = config or InterruptFilterConfig()
-        self._ignore_pattern = re.compile(
-            r'\b(' + '|'.join(re.escape(w) for w in self.config.ignore_words) + r')\b',
-            re.IGNORECASE
-        )
-        self._interrupt_pattern = re.compile(
-            r'\b(' + '|'.join(re.escape(w) for w in self.config.interrupt_words) + r')\b',
-            re.IGNORECASE
-        )
-    
-    def _normalize(self, text: str) -> str:
-        return ' '.join(re.sub(r'[.,!?;:]+', ' ', text).split())
-    
-    def _is_only_filler(self, text: str) -> bool:
-        remaining = self._ignore_pattern.sub('', self._normalize(text))
-        return len(remaining.strip()) == 0
+        self._build_lookup_sets()  # O(1) optimization
     
     def analyze(self, transcript: str, agent_speaking: bool) -> InterruptAnalysis:
-        normalized = self._normalize(transcript)
-        ignore_matches = [m.group() for m in self._ignore_pattern.finditer(normalized)]
-        interrupt_matches = [m.group() for m in self._interrupt_pattern.finditer(normalized)]
-        
-        # Agent is silent → always respond
-        if not agent_speaking:
-            return InterruptAnalysis(
-                decision="respond", transcript=transcript, agent_was_speaking=False,
-                matched_ignore_words=ignore_matches, matched_interrupt_words=interrupt_matches,
-                reason="Agent is silent, treating as valid input"
-            )
-        
-        # Agent is speaking + command word → interrupt
-        if interrupt_matches:
-            return InterruptAnalysis(
-                decision="interrupt", transcript=transcript, agent_was_speaking=True,
-                matched_ignore_words=ignore_matches, matched_interrupt_words=interrupt_matches,
-                reason=f"Found interrupt command: {interrupt_matches}"
-            )
-        
-        # Agent is speaking + only filler → ignore
-        if self._is_only_filler(normalized):
-            return InterruptAnalysis(
-                decision="ignore", transcript=transcript, agent_was_speaking=True,
-                matched_ignore_words=ignore_matches, matched_interrupt_words=interrupt_matches,
-                reason=f"Only filler words: {ignore_matches}"
-            )
-        
-        # Agent is speaking + substantive content → interrupt
-        return InterruptAnalysis(
-            decision="interrupt", transcript=transcript, agent_was_speaking=True,
-            matched_ignore_words=ignore_matches, matched_interrupt_words=interrupt_matches,
-            reason="Contains substantive content"
-        )
+        """Analyze transcript and return decision with reasoning."""
+        # Returns: "ignore", "interrupt", or "respond"
+    
+    def should_interrupt(self, transcript: str, agent_speaking: bool) -> bool:
+        """Simple boolean check."""
+        return self.analyze(transcript, agent_speaking).should_interrupt
 ```
 
-### Step 2: Modify Your AgentSession Configuration
+#### InterruptAnalysis
+```python
+@dataclass
+class InterruptAnalysis:
+    decision: InterruptDecision      # "ignore" | "interrupt" | "respond"
+    transcript: str                   # The analyzed text
+    agent_was_speaking: bool          # Agent state when analyzed
+    matched_ignore_words: list[str]   # Filler words found
+    matched_interrupt_words: list[str] # Command words found
+    reason: str                       # Human-readable explanation
+```
 
-Update your `AgentSession` to use these settings:
+#### InterruptFilterConfig
+```python
+@dataclass
+class InterruptFilterConfig:
+    ignore_words: frozenset[str]     # Words to ignore
+    interrupt_words: frozenset[str]  # Words that trigger interrupt
+    case_sensitive: bool = False
+    partial_match: bool = True
+```
+
+### Session Integration Functions
 
 ```python
-from livekit.agents import AgentSession
+def get_session_options() -> dict:
+    """Get recommended session settings."""
+    return {
+        "allow_interruptions": True,
+        "min_interruption_words": 999,
+    }
 
-session = AgentSession(
-    stt="deepgram/nova-3",
-    llm="openai/gpt-4.1-mini", 
-    tts="cartesia/sonic-2",
-    vad=your_vad,
-    
-    # ═══════════════════════════════════════════════════════════
-    # ADD THESE SETTINGS FOR INTELLIGENT INTERRUPT HANDLING
-    # ═══════════════════════════════════════════════════════════
-    allow_interruptions=True,
-    min_interruption_words=2,      # KEY: Prevents single-word pauses
-    min_interruption_duration=0.5,
-    false_interruption_timeout=1.0,
-    resume_false_interruption=True,
-)
-```
-
-### Step 3: Track Agent Speaking State
-
-Add state tracking to your agent:
-
-```python
-class MyAgent(Agent):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._is_speaking = False
-        self._interrupt_filter = InterruptFilter()
-```
-
-### Step 4: Add Event Handlers
-
-Hook up the event handlers in your entrypoint:
-
-```python
-@server.rtc_session()
-async def entrypoint(ctx: JobContext):
-    # ... create session and agent ...
-    
-    # Track speaking state
-    @session.on("agent_state_changed")
-    def on_state_changed(ev):
-        agent._is_speaking = (ev.new_state == "speaking")
-    
-    # Handle transcripts with intelligent filtering
-    handled_interrupt = {"value": False}
-    
-    @session.on("user_input_transcribed")
-    def on_transcript(ev):
-        if not ev.transcript.strip():
-            return
-            
-        transcript = ev.transcript.strip()
-        is_speaking = agent._is_speaking
-        
-        # Reset on final transcript
-        if ev.is_final:
-            handled_interrupt["value"] = False
-        
-        # Analyze the transcript
-        analysis = agent._interrupt_filter.analyze(transcript, agent_speaking=is_speaking)
-        
-        # INTERIM transcripts: detect command words early and interrupt
-        if not ev.is_final and is_speaking and analysis.decision == "interrupt":
-            if not handled_interrupt["value"]:
-                current = session.current_speech
-                if current and not current.interrupted:
-                    current.interrupt(force=True)
-                    handled_interrupt["value"] = True
-        
-        # FINAL transcripts: log decisions
-        if ev.is_final:
-            if analysis.decision == "ignore":
-                print(f"[IGNORED] '{transcript}'")
-            elif analysis.decision == "interrupt":
-                print(f"[INTERRUPT] '{transcript}'")
-            else:
-                print(f"[RESPOND] '{transcript}'")
-```
-
-### Complete Integration Example
-
-Here's a minimal complete example:
-
-```python
-"""my_agent_with_interrupts.py - Complete integration example"""
-from livekit.agents import Agent, AgentSession, AgentServer, JobContext, cli
-from livekit.agents.voice import AgentStateChangedEvent, UserInputTranscribedEvent
-from livekit.plugins import silero
-from interrupt_filter import InterruptFilter  # Copy from Step 1
-
-server = AgentServer()
-
-@server.rtc_session()
-async def entrypoint(ctx: JobContext):
-    # Initialize filter and state
-    interrupt_filter = InterruptFilter()
-    is_speaking = {"value": False}
-    handled_interrupt = {"value": False}
-    
-    # Create session with smart interrupt settings
-    session = AgentSession(
-        stt="deepgram/nova-3",
-        llm="openai/gpt-4.1-mini",
-        tts="cartesia/sonic-2",
-        vad=silero.VAD.load(),
-        allow_interruptions=True,
-        min_interruption_words=2,
-        min_interruption_duration=0.5,
-        false_interruption_timeout=1.0,
-        resume_false_interruption=True,
-    )
-    
-    agent = Agent(instructions="You are a helpful assistant.")
-    
-    # Track speaking state
-    @session.on("agent_state_changed")
-    def on_state(ev: AgentStateChangedEvent):
-        is_speaking["value"] = (ev.new_state == "speaking")
-    
-    # Intelligent interrupt handling
-    @session.on("user_input_transcribed")
-    def on_transcript(ev: UserInputTranscribedEvent):
-        if not ev.transcript.strip():
-            return
-        
-        transcript = ev.transcript.strip()
-        speaking = is_speaking["value"]
-        
-        if ev.is_final:
-            handled_interrupt["value"] = False
-        
-        analysis = interrupt_filter.analyze(transcript, agent_speaking=speaking)
-        
-        # Early interrupt detection via interim transcripts
-        if not ev.is_final and speaking and analysis.decision == "interrupt":
-            if not handled_interrupt["value"]:
-                current = session.current_speech
-                if current and not current.interrupted:
-                    current.interrupt(force=True)
-                    handled_interrupt["value"] = True
-    
-    await session.start(agent=agent, room=ctx.room)
-
-if __name__ == "__main__":
-    cli.run_app(server)
-```
-
----
-
-## Installation & Setup
-
-### Prerequisites
-
-1. Python 3.9+
-2. LiveKit Cloud account or self-hosted LiveKit server
-3. API keys for STT, LLM, and TTS providers
-
-### Setup Steps
-
-```bash
-# 1. Clone repository
-git clone https://github.com/YOUR-USERNAME/agents-assignment.git
-cd agents-assignment
-
-# 2. Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -e ./livekit-agents
-pip install livekit-plugins-silero livekit-plugins-deepgram
-pip install livekit-plugins-openai livekit-plugins-cartesia
-pip install python-dotenv
-
-# 4. Create .env file with your API keys
-cp .env.example .env
-# Edit .env with your keys
-
-# 5. Run the agent
-cd examples/voice_agents
-python intelligent_interrupt_agent.py dev  # Production mode
-# OR
-python intelligent_interrupt_agent.py console  # Local testing mode
-```
-
----
-
-## Testing
-
-### Unit Tests
-
-```bash
-cd examples/voice_agents/intelligent_interrupt
-python test_interrupt_filter.py
-```
-
-Expected: `Ran 36 tests in 0.007s - OK`
-
-### Manual Test Scenarios
-
-| Test | Action | Expected Result |
-|------|--------|-----------------|
-| **Filler Ignored** | Ask for story, say "yeah" while speaking | Agent continues, no pause |
-| **Command Interrupts** | Ask to count to 50, say "stop" | Agent stops immediately |
-| **Silent Response** | Wait for agent to finish, say "yeah" | Agent responds to you |
-| **Mixed Input** | Say "yeah wait a second" while speaking | Agent stops (contains "wait") |
-
----
-
-## File Structure
-
-```
-examples/voice_agents/
-├── intelligent_interrupt_agent.py     # Main agent (run this)
-└── intelligent_interrupt/
-    ├── __init__.py                    # Module exports
-    ├── interrupt_filter.py            # Core filter logic
-    ├── test_interrupt_filter.py       # Unit tests  
-    └── README.md                      # This documentation
+def attach_interrupt_handlers(
+    session: AgentSession,
+    interrupt_filter: InterruptFilter | None = None,
+    log_decisions: bool = True,
+) -> dict:
+    """Attach intelligent interrupt handling to a session."""
+    # Attaches event handlers for state tracking and transcript analysis
 ```
 
 ---
 
 ## Troubleshooting
 
-### Agent still pauses on "yeah"
+### Agent Still Pauses on "yeah"
 
-1. Verify `min_interruption_words=2` is set in AgentSession
-2. Check that the word count is being evaluated (single words should be blocked at audio level)
-3. Review logs for `[IGNORED]` messages
+Check that you're using the correct session options:
+```python
+session = AgentSession(
+    allow_interruptions=True,       # Must be True
+    min_interruption_words=999,     # Must be high
+)
+```
 
-### "stop" command not working
+### Transcripts Not Arriving
 
-1. Ensure you're processing **interim** transcripts (not just final)
-2. Verify "stop" is in `interrupt_words` list
-3. Check that `session.current_speech.interrupt(force=True)` is being called
-4. Look for `[EARLY INTERRUPT]` in logs
+Ensure STT is configured and `allow_interruptions=True`:
+```python
+session = AgentSession(
+    stt="deepgram/nova-3",
+    allow_interruptions=True,  # Required for STT during speech
+)
+```
 
-### High latency on interrupts
+### Interrupt Commands Not Working
 
-1. Use a streaming STT provider (Deepgram Nova recommended)
-2. Check network latency to STT service
-3. Reduce `false_interruption_timeout` if too high
-
-### Agent ignores all input while speaking
-
-1. Ensure `allow_interruptions=True`
-2. Check that `min_interruption_words` is not set too high (2 is recommended)
-3. Verify the transcript event handler is connected
+Verify event handlers are attached:
+```python
+attach_interrupt_handlers(session, log_decisions=True)
+# Check logs for decision output
+```
 
 ---
 
-## Architecture Notes
+## Summary
 
-### Why This Approach?
+Our solution solves the LiveKit intelligent interruption challenge through:
 
-1. **No VAD Modification**: The assignment requires a logic layer, not VAD kernel changes
-2. **Dual-Layer Design**: Audio layer blocks single words, transcript layer handles semantics
-3. **Interim Processing**: Faster interrupt detection than waiting for final transcripts
-4. **Configurable**: Word lists can be customized without code changes
+1. **Smart Configuration**: `allow_interruptions=True` + `min_interruption_words=999`
+2. **Content Analysis**: O(1) set-based word matching
+3. **Manual Interrupts**: `session.current_speech.interrupt(force=True)`
+4. **Modular Design**: Easy integration and word list configuration
 
-### Performance Characteristics
-
-| Metric | Value |
-|--------|-------|
-| Filler word handling | No pause (blocked at audio level) |
-| Command detection latency | ~150-300ms (via interim transcripts) |
-| False positive rate | Low (command words are specific) |
-| Configuration | Environment variables or code |
+**Result**: Natural conversation flow where filler words are ignored and command words trigger immediate interruption.
 
 ---
 
 ## License
 
-Part of the LiveKit Agents framework. See main repository for license information.
+Part of the LiveKit Agents project. See [LICENSE](../../../LICENSE) for details.
