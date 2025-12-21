@@ -40,6 +40,7 @@ from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils.misc import is_given
 from ._utils import _set_participant_attributes
+from .config import IGNORE_WORDS
 from .agent import (
     Agent,
     ModelSettings,
@@ -1193,6 +1194,21 @@ class AgentActivity(RecognitionHooks):
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
+            # SEMANTIC INTERRUPTION LOGIC
+            if self._audio_recognition:
+                current_transcript = self._audio_recognition.current_transcript.strip().lower()
+                # Remove punctuation except hyphens
+                import string
+                punct = string.punctuation.replace('-', '')
+                current_transcript = current_transcript.translate(str.maketrans('', '', punct))
+                
+                if not current_transcript:
+                    return
+
+                if current_transcript in IGNORE_WORDS:
+                    logger.info(f"Ignoring interruption for backchannel word: {current_transcript}")
+                    return
+
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1378,6 +1394,34 @@ class AgentActivity(RecognitionHooks):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
             return False
+
+        # SEMANTIC INTERRUPTION CHECK FOR FINAL TRANSCRIPT
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ):
+            cleaned_transcript = info.new_transcript.strip().lower()
+            import string
+            punct = string.punctuation.replace('-', '')
+            cleaned_transcript = cleaned_transcript.translate(str.maketrans('', '', punct))
+            
+            if cleaned_transcript in IGNORE_WORDS:
+                logger.info(f"Ignoring end of turn for backchannel word: {cleaned_transcript}")
+                # We need to make sure we don't treat this as a turn that requires a response
+                # But we might want to log it or add it to history? 
+                # For now, let's return False to skip processing this as a turn
+                
+                # However, if we return False, we might want to resume any paused speech?
+                # But here we are in on_end_of_turn. 
+                # If _interrupt_by_audio_activity ALREADY paused it (because it didn't catch it early enough),
+                # we should probably resume it. 
+                # Since _interrupt_by_audio_activity logic handled "interim" transcripts, hopefully it didn't interrupt.
+                # But if it did, we have a problem. The instructions say "Stream must remain fluid".
+                # If we paused, we already broke fluidity.
+                # So the key is _interrupt_by_audio_activity NOT pausing.
+                
+                return False
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(
