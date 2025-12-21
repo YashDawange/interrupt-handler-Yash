@@ -646,10 +646,17 @@ class AudioRecognition:
         audio_input: AsyncIterable[rtc.AudioFrame],
         task: asyncio.Task[None] | None,
     ) -> None:
+        print(f"DEBUG: _stt_task started with stt_node={stt_node}")
         if task is not None:
             await aio.cancel_and_wait(task)
 
-        node = stt_node(audio_input, ModelSettings())
+        try:
+            node = stt_node(audio_input, ModelSettings())
+            print(f"DEBUG: stt_node called, returned {node}")
+        except Exception as e:
+            print(f"DEBUG: stt_node call failed: {e}")
+            raise
+
         if asyncio.iscoroutine(node):
             node = await node
 
@@ -658,6 +665,7 @@ class AudioRecognition:
 
         if isinstance(node, AsyncIterable):
             async for ev in node:
+                print(f"DEBUG: _stt_task received event {ev}")
                 assert isinstance(ev, stt.SpeechEvent), (
                     f"STT node must yield SpeechEvent, got: {type(ev)}"
                 )

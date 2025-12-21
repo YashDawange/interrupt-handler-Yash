@@ -946,17 +946,23 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         return handle
 
-    def interrupt(self, *, force: bool = False) -> asyncio.Future[None]:
+    async def interrupt(self, *, force: bool = True) -> None:
         """Interrupt the current speech generation.
 
+        Args:
+            force: If True (default), interrupt even when the current speech
+                was marked as non-interruptible. This is useful for semantic
+                interruption flows that intentionally disable automatic VAD
+                pauses but still need a hard stop.
+
         Returns:
-            An asyncio.Future that completes when the interruption is fully processed
-            and chat context has been updated.
+            None. Await until the interruption is fully processed and chat context
+            has been updated.
         """
         if self._activity is None:
             raise RuntimeError("AgentSession isn't running")
 
-        return self._activity.interrupt(force=force)
+        await self._activity.interrupt(force=force)
 
     def clear_user_turn(self) -> None:
         # clear the transcription or input audio buffer of the user turn

@@ -41,6 +41,7 @@ agents that can see, hear, and understand.
 - **MCP support**: Native support for MCP. Integrate tools provided by MCP servers with one loc.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
+- **Intelligent Interruption Handling**: Temporal-Semantic Fusion (TSF) approach to filter backchanneling from real interruptions.
 
 ## Installation
 
@@ -213,6 +214,87 @@ async def test_no_availability() -> None:
         )
 
 ```
+
+### Intelligent Interruption Handling (TSF)
+
+Voice agents often face a challenge: users say things like "yeah", "ok", or "hmm" while listening—these are **backchannels**, not interruptions. The Temporal-Semantic Fusion (TSF) approach intelligently filters these from real commands like "stop" or "wait".
+
+#### How It Works
+
+1. **Temporal Gate**: Checks if the agent is currently speaking
+2. **Semantic Analysis**: Analyzes the transcript to determine if it's a backchannel
+3. **Decision Matrix**: Either ignores the input or triggers an interruption
+
+#### Quick Start
+
+```python
+from interruption_handler import setup_interruption_handler
+
+# In your entrypoint:
+session = AgentSession(
+    stt=deepgram.STT(),
+    llm=openai.LLM(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+)
+
+# Set up intelligent interruption handling
+handler = setup_interruption_handler(session)
+
+# Optional: Add callbacks for monitoring
+handler.on_backchannel = lambda text: print(f"Ignored: {text}")
+handler.on_interrupt = lambda text: print(f"Interrupted: {text}")
+```
+
+#### Configuring Ignore Words
+
+The default ignore list includes: `yeah`, `ok`, `okay`, `hmm`, `aha`, `right`, `uh-huh`, `yep`, `yup`, `sure`, `got it`, `i see`, `mm`, `mhm`, `uh huh`.
+
+You can customize via environment variable:
+
+```bash
+export IGNORE_WORDS="yeah,ok,hmm,uh-huh,sure"
+```
+
+Or programmatically:
+
+```python
+from interruption_handler import InterruptionHandler
+
+handler = InterruptionHandler(
+    session,
+    ignore_words={"yeah", "ok", "custom_word"}
+)
+handler.register()
+```
+
+#### Running the Demo Agent
+
+```bash
+# Set environment variables
+export LIVEKIT_URL=wss://your-livekit-server.com
+export LIVEKIT_API_KEY=your_api_key
+export LIVEKIT_API_SECRET=your_api_secret
+export DEEPGRAM_API_KEY=your_deepgram_key
+export OPENAI_API_KEY=your_openai_key
+
+# Run in development mode
+python agent.py dev
+
+# Or run in console mode for testing
+python agent.py console
+```
+
+#### Running Tests
+
+```bash
+pytest tests/test_interruption_logic.py -v
+```
+
+The test suite covers:
+- **Backchannel Ignore**: Verifies "Yeah" is ignored while agent speaks
+- **Active Interruption**: Verifies "Stop" triggers interruption while agent speaks
+- **Mixed Interruption**: Verifies "Yeah but wait" triggers interruption (contains non-backchannel words)
 
 ## Examples
 

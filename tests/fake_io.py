@@ -15,9 +15,13 @@ class FakeAudioInput(AudioInput):
         self._sample_rate = 16000
 
     async def __anext__(self) -> rtc.AudioFrame:
-        return await self._audio_ch.__anext__()
+        print("DEBUG: FakeAudioInput.__anext__ called")
+        frame = await self._audio_ch.__anext__()
+        print("DEBUG: FakeAudioInput.__anext__ returning frame")
+        return frame
 
     def push(self, frame: rtc.AudioFrame | float) -> None:
+        print(f"DEBUG: FakeAudioInput.push called with {type(frame)}")
         if not isinstance(frame, rtc.AudioFrame):
             num_samples = int(self._sample_rate * frame + 0.5)
             audio_frame = rtc.AudioFrame(

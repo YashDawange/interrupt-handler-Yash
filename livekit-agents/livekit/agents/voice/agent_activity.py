@@ -577,6 +577,7 @@ class AgentActivity(RecognitionHooks):
                 logger.exception("failed to update the instructions")
 
         await self._resume_scheduling_task()
+        print("DEBUG: Creating AudioRecognition")
         self._audio_recognition = AudioRecognition(
             self._session,
             hooks=self,
@@ -737,6 +738,7 @@ class AgentActivity(RecognitionHooks):
             self._agent._activity = None
 
     def push_audio(self, frame: rtc.AudioFrame) -> None:
+        print(f"DEBUG: AgentActivity.push_audio called. Started: {self._started}")
         if not self._started:
             return
 

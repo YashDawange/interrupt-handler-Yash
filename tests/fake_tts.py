@@ -212,6 +212,7 @@ class FakeSynthesizeStream(SynthesizeStream):
             start_time = time.perf_counter()
             self._mark_started()
             if not (resp := self._tts.fake_response_map.get(input_text)):
+                print(f"FakeTTS: input_text='{input_text}' not found in map. Keys: {list(self._tts.fake_response_map.keys())}")
                 resp = FakeTTSResponse(
                     input=input_text,
                     audio_duration=self._tts._fake_audio_duration or 0.0,
