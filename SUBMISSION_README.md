@@ -1,5 +1,6 @@
 # Context-Aware Interruption Handler for LiveKit Agents
 This repository implements a Context-Aware Interruption Handling mechanism for LiveKit Voice Agents. It addresses the challenge of "backchanneling", where agents mistake passive listening cues (e.g., "Yeah", "Uh-huh") for active interruptions, ensuring a seamless conversational flow without stuttering.
+
 # Problem
 Standard LiveKit agents rely heavily on Voice Activity Detection (VAD) to handle interruptions. While fast, VAD is semantically blind; it detects sound, not intent. This creates a race condition between the VAD and the Speech-to-Text (STT) modules:
 - <u>False Positives:</u> If a user provides passive feedback (e.g., "Mhmm"), the VAD triggers an immediate interruption, pausing the agent.
