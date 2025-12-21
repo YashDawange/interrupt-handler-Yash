@@ -81,6 +81,7 @@ class AgentSessionOptions:
     min_endpointing_delay: float
     max_endpointing_delay: float
     max_tool_steps: int
+    backchannel_words: list[str] | None
     user_away_timeout: float | None
     false_interruption_timeout: float | None
     resume_false_interruption: bool
@@ -150,6 +151,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         min_endpointing_delay: float = 0.5,
         max_endpointing_delay: float = 3.0,
         max_tool_steps: int = 3,
+        backchannel_words: list[str] | None = None,
         video_sampler: NotGivenOr[_VideoSampler | None] = NOT_GIVEN,
         user_away_timeout: float | None = 15.0,
         false_interruption_timeout: float | None = 2.0,
@@ -214,6 +216,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 will wait before terminating the turn. Default ``3.0`` s.
             max_tool_steps (int): Maximum consecutive tool calls per LLM turn.
                 Default ``3``.
+            backchannel_words (list[str]): Backchanneling words to ignore 
+                Default None.
             video_sampler (_VideoSampler, optional): Uses
                 :class:`VoiceActivityVideoSampler` when *NOT_GIVEN*; that sampler
                 captures video at ~1 fps while the user is speaking and ~0.3 fps
@@ -274,6 +278,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             min_endpointing_delay=min_endpointing_delay,
             max_endpointing_delay=max_endpointing_delay,
             max_tool_steps=max_tool_steps,
+            backchannel_words=backchannel_words,
             user_away_timeout=user_away_timeout,
             false_interruption_timeout=false_interruption_timeout,
             resume_false_interruption=resume_false_interruption,
