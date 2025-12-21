@@ -59,7 +59,12 @@ python -m venv .venv
 source .venv/bin/activate # On Windows: .venv\Scripts\activate
 ```
 
-3. Configure Environment Variables Create a `.env` file in `examples/voice_agents/` and add your keys:
+3. Create a `.env` file in `examples/voice_agents/` and add your keys:
+```text
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+```
 
 4. Install the example requirements:
 ```bash
