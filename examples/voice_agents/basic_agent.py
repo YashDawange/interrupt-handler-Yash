@@ -24,6 +24,8 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 logger = logging.getLogger("basic-agent")
 
 load_dotenv()
+FILLER_WORDS = {"yeah", "ok", "okay", "hmm", "uh", "uh-huh", "right"}
+COMMAND_WORDS = {"stop", "wait", "pause", "cancel", "no"}
 
 
 class MyAgent(Agent):
@@ -80,6 +82,8 @@ async def entrypoint(ctx: JobContext):
         "room": ctx.room.name,
     }
     session = AgentSession(
+       
+
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
         # See all available models at https://docs.livekit.io/agents/models/stt/
         stt="deepgram/nova-3",
@@ -101,7 +105,7 @@ async def entrypoint(ctx: JobContext):
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
     )
-
+    agent_is_speaking = False
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
 
@@ -109,6 +113,36 @@ async def entrypoint(ctx: JobContext):
     def _on_metrics_collected(ev: MetricsCollectedEvent):
         metrics.log_metrics(ev.metrics)
         usage_collector.collect(ev.metrics)
+        
+    @session.on("agent_speaking_start")
+    def _on_agent_speaking_start():
+        nonlocal agent_is_speaking
+        agent_is_speaking = True
+        
+    @session.on("agent_speaking_end")
+    def _on_agent_speaking_end():
+       nonlocal agent_is_speaking
+       agent_is_speaking = False
+    
+    @session.on("user_transcription")
+    async def _on_user_transcription(text: str):
+       nonlocal agent_is_speaking
+
+       clean_text = text.lower().strip()
+       words = clean_text.split()
+
+       if agent_is_speaking:
+          if any(cmd in clean_text for cmd in COMMAND_WORDS):
+            await session.interrupt()
+            return
+
+          if all(word in FILLER_WORDS for word in words):
+            return
+
+       await session.handle_user_input(text)
+
+       
+    
 
     async def log_usage():
         summary = usage_collector.get_summary()
