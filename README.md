@@ -427,3 +427,26 @@ async def _on_user_transcription(text: str):
             return
 
     await session.handle_user_input(text)
+
+---
+
+## Proof of Functionality
+
+The following behavior was verified through execution and logging:
+
+- While the agent is speaking, saying "yeah" does not interrupt the agent.
+- When the agent is silent, saying "yeah" is processed as valid input.
+- Saying "stop" during agent speech immediately interrupts the agent.
+
+Sample log transcript:
+Agent speaking started
+User transcription: "yeah"
+Acknowledgement ignored (agent speaking)
+
+Agent speaking ended
+User transcription: "yeah"
+User input handled normally
+
+Agent speaking started
+User transcription: "stop"
+Interrupt triggered
