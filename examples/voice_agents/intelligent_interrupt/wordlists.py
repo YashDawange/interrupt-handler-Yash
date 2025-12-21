@@ -12,23 +12,41 @@ from typing import Iterable
 # ============================================================================
 
 DEFAULT_IGNORE_WORDS: frozenset[str] = frozenset([
-    # Affirmative responses
-    "yeah", "yes", "yep", "yup", "ya",
-    "ok", "okay", "k",
-    
-    # Humming / Thinking sounds
-    "hmm", "hm", "hmm-hmm", "hmmm",
-    "uh-huh", "uh huh", "uhuh", "uhhuh",
-    "mm-hmm", "mm hmm", "mmhmm", "mhm",
-    
-    # Agreement words
-    "right", "alright",
-    "sure", "aha", "ah",
-    "i see", "got it", "gotcha",
+    # Affirmative / short acknowledgements
+    "yes", "yeah", "yep", "yup", "ya",
+    "ok", "okay", "k", "kk",
+    "right", "alright", "sure",
     "cool", "nice", "great",
-    
-    # Common filler sounds
-    "um", "uh", "er",
+    "aha", "ah", "oh",
+    "i see", "got it", "gotcha",
+
+    # Humming / thinking sounds (very common in speech)
+    "hmm", "hm", "hmmm", "hmmmm",
+    "mm", "mmm", "mmmm",
+    "mhm", "mhmm", "mmhmm",
+    "mm-hmm", "mm hmm",
+    "hmm-hmm", "hm-hm",
+
+    # Agreement sounds
+    "uh-huh", "uh huh", "uhuh", "uhhuh",
+    "uh-hm", "uh hm",
+
+    # Hesitation / filler sounds
+    "um", "umm", "ummm",
+    "uh", "uhh", "uhhh",
+    "er", "err", "errr",
+    "ahh", "ahhh",
+    "ohh", "ohhh",
+
+    # Casual conversational fillers
+    "you know",
+    "i see",
+    "sort of",
+    "kind of",
+
+    # Common STT artifacts / trailing fillers
+    "huh",
+    "eh",
 ])
 
 
