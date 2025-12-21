@@ -1,4 +1,5 @@
 import logging
+import asyncio
 
 from dotenv import load_dotenv
 
@@ -13,10 +14,13 @@ from livekit.agents import (
     cli,
     metrics,
     room_io,
+    UserInputTranscribedEvent,
 )
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+from interruption_handler import InterruptionHandler
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -79,6 +83,9 @@ async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
+    
+    int_handler = InterruptionHandler()
+    
     session = AgentSession(
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
         # See all available models at https://docs.livekit.io/agents/models/stt/
@@ -93,6 +100,10 @@ async def entrypoint(ctx: JobContext):
         # See more at https://docs.livekit.io/agents/build/turns
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
+        # We disable default interruptions to implement custom logic
+        allow_interruptions=False,
+        # Ensure we still process audio even if uninterruptible, so we can detect commands
+        discard_audio_if_uninterruptible=False,
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
         preemptive_generation=True,
@@ -101,6 +112,21 @@ async def entrypoint(ctx: JobContext):
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
     )
+
+    @session.on("user_input_transcribed")
+    def on_user_input_transcribed(ev: UserInputTranscribedEvent):
+        # We only care about interruptions if the agent is speaking
+        if session.agent_state == "speaking":
+            if int_handler.should_interrupt(ev.transcript):
+                logger.info(f"Interrupting speech due to command: {ev.transcript}")
+                # "Unlock" the current speech handle so it can be interrupted
+                if session.current_speech:
+                    session.current_speech.allow_interruptions = True
+                
+                # Trigger the interruption
+                session.interrupt()
+            else:
+                logger.info(f"Ignoring passive acknowledgement: {ev.transcript}")
 
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()

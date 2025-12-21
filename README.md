@@ -321,6 +321,28 @@ async def test_no_availability() -> None:
 
 </table>
 
+## Smart Interruption Logic Implementation
+
+This repository contains an implementation of "Smart Interruption Logic" for LiveKit Voice Agents.
+The logic allows the agent to distinguish between passive acknowledgements (like "yeah", "ok") and active interruptions ("stop", "wait").
+
+### Key Features
+1. **Configurable Ignore List**: A `InterruptionHandler` class filters out words defined in an ignore list.
+2. **State-Based Filtering**: The interruption logic only activates when the agent is speaking.
+3. **Semantic Interruption**: Handles mixed inputs (e.g. "Yeah wait") by triggering interruption if any non-ignore word is present.
+4. **No VAD Modification**: Implemented using the `user_input_transcribed` event loop without modifying the low-level VAD kernel.
+
+### How it works
+- The `AgentSession` is configured with `allow_interruptions=False` to prevent default VAD-based interruptions.
+- A custom event listener on `user_input_transcribed` checks the interim and final transcripts.
+- If the agent is speaking and the user input contains a command (or non-ignored word), `session.interrupt()` is called manually.
+- The default `AgentActivity` logic is leveraged to handle the rest of the flow, with `allow_interruptions` dynamically enabled on the current speech handle to permit the manual interruption.
+
+### Files Modified
+- `examples/voice_agents/basic_agent.py`: Integrated `InterruptionHandler` and custom event logic.
+- `examples/voice_agents/interruption_handler.py`: Logic implementation.
+
+
 ## Running your agent
 
 ### Testing in terminal
