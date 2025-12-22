@@ -79,8 +79,8 @@ async def entrypoint(ctx: JobContext):
         if agent_speaking:
             await session.stop_output()
             agent_speaking = False
+
         await session.input_text(text)
-        return 
 
 
 def prewarm(proc: JobProcess):
