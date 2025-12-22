@@ -1,3 +1,99 @@
+# Context-Aware, Event-Driven Voice Agent with Custom Logic Layer
+This project implements a voice agent with a specialized **Logic Layer** to ignore backchannelling words ("yeah","ok","right")
+
+---
+## Technical Implementation (How It Works)
+To achieve smart interruption, I had to bypass the standard framework behavior and build a custom event loop.
+### 1. Disabling Default Interruption (Critical Step)
+LiveKit's agents stop speaking the moment VAD (Voice Activity Detection) hears sound. I disabled this to gain full control:
+* **`allow_interruptions=False`**: I set this to prevent the framework from automatically cutting off the agent when sound is detected.
+
+### 2. Preserving the Audio Stream
+By default, if interruptions are disabled, the framework might discard incoming user speech.
+* **`discard_audio_if_uninterruptible=False`**: I explicitly set this to `False`.
+* **Why?** This ensures that even though the agent keeps talking, it **still listens**. The audio is processed and transcribed, allowing my custom logic layer to analyze the text in real-time.
+
+### 3. Context Awareness (State Management)
+To decide *when* to interrupt, the agent needs to know its own state. I implemented a state tracker using `session.userdata`:
+* **Event:** `agent_state_changed`
+* **Action:** I capture this event to update `session.userdata["agent_speaking"]`.
+* **Why?** This ensures we only process interruptions when the agent is actually talking.
+
+### 4. The Logic Layer
+I decoupled the decision logic into `interruption_logic.py` to handle complex interaction patterns without cluttering the main agent loop.
+
+#### A. State-Based Filtering (Context Awareness)
+The agent tracks its own lifecycle events to apply filtering **only** when necessary.
+* **Mechanism:** I monitor `agent_state_changed` to toggle a `session.userdata["agent_speaking"]` flag.
+* **Result:** The ignore list is strictly enforced *only* when the agent is speaking. When silent, all inputs (even "Yeah") are processed as valid user answers .
+
+#### B. Semantic Interruption Handling (Mixed Inputs)
+The logic layer is designed to handle **Mixed Inputs**  where a user might combine a filler word with a real command.
+* **Logic:** The system uses "Negative Filtering." It does not check if the input *is* an interruption; rather, it checks if the input is *exclusively* a backchannel word.
+* **Example:** If the user says `"Yeah okay but wait"`, the system detects words outside the ignore list ("but", "wait"), correctly identifies this as a valid command, and triggers an interruption.
+
+### 5. Event-Driven Decision Loop
+The core intelligence lives in the **`user_input_transcribed`** event handler:
+1.  **Capture Event:** The handler traps the transcript before the LLM processes it.
+2.  **Logic Check:** It consults the `should_interrupt()` function.
+3.  **Execution:** 
+    * **Backchannel:** continues speaking.
+    * **Valid Interruption:** Manually triggers `session.interrupt(force=True)` to stop audio immediately.
+---
+### Logic Compliance Matrix (Assignment Objectives)
+This agent satisfies all requirements from the assignment's Core Logic Table:
+
+| User Input | Agent State | Desired Behavior | My Implementation |
+| :--- | :--- | :--- | :--- |
+| **"Yeah / Ok"** | **Speaking** | **IGNORE** | Detected as Backchannel → **Continue Speaking** |
+| **"Stop / Wait"** | **Speaking** | **INTERRUPT** | Detected as Valid Input → **Force Interruption** |
+| **"Yeah / Ok"** | **Silent** | **RESPOND** | Logic Layer Exits Early → **Standard Response** |
+| **"Hello"** | **Silent** | **RESPOND** | Logic Layer Exits Early → **Standard Response** |
+---
+### Integrity of VAD Kernel
+* **Constraint Compliance:** In strict adherence to the assignment requirements, I did **not** modify the low-level VAD kernel. All interruption logic is handled purely at the application level via the `user_input_transcribed` event loop, ensuring the core LiveKit infrastructure remains untouched.
+---
+##  Code Quality & Modularity
+- **Modular Design:** Decoupled the interruption logic into a separate file (`interruption_logic.py`) to keep the main agent loop clean and maintainable.
+- **Configurability:** Implemented `IGNORE_WORDS` as an environment variable in `.env`. This allows for easy tuning of the backchannel list without modifying the source code, fulfilling the "Code Quality" assignment requirement.
+---
+## Setup & Configuration
+
+### Step 1: Clone and Install
+First, clone the repository and install the dependencies :
+```bash
+git clone <your-repository-url>
+pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0" python-dotenv
+```
+### Step 2: Configure Environment 
+Create your local environment file by copying the example provided:
+```bash
+cp .env.example .env
+```
+Open the new .env file and populate it with your API keys (LiveKit, OpenAI, Deepgram, Cartesia).
+### Step 3: Configure Ignore List
+The agent's sensitivity is controlled via the `IGNORE_WORDS` variable in your .env file.
+
+Customizable: You can provide a `comma-separated string of words` to ignore (e.g., IGNORE_WORDS="yeah, uh-huh, ok").
+
+Fail-Safe Default: If this variable is missing or empty, the agent automatically falls back to a hardcoded default list to ensure the backchanneling logic always functions correctly.
+
+### Step 4: Start the agent
+you can mention the path accordingly, in this repo the basic_agent.py exists in examples/voice_agents
+```bash
+python3 basic_agent.py dev
+```
+### Step 5: Connect to Playground
+Once the agent is running, open the [LiveKit Agent Playground](https://agents-playground.livekit.io/) to test the voice interaction.
+
+---
+## Video Proof
+[Watch the Demo Recording](https://drive.google.com/file/d/1AnPolDkpWZRb2Tgbd2CVLdYY38ZkPweB/view?usp=sharing)
+## Key Files
+* **`interruption_logic.py` (New):** Contains the core decision logic and processing for the ignore list. Decoupled from the main agent to ensure modularity.
+* **`basic_agent.py` (Modified):** Updated the event loop to integrate the logic layer and disable default interruption behaviors.
+* **`.env` (Config):** Stores the configurable `IGNORE_WORDS` list.
+
 <!--BEGIN_BANNER_IMAGE-->
 
 <picture>
