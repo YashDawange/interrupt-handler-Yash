@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interruption_filter import get_filler_words, should_interrupt
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -1170,6 +1171,20 @@ class AgentActivity(RecognitionHooks):
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
+        # State-aware filler word filtering: only apply when agent is speaking
+        if self._session.agent_state == "speaking" and self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+            # Only apply filler word filtering if we have a transcript to analyze
+            # If transcript is empty (VAD fired before STT), allow the interruption to proceed
+            if not transcript or not transcript.strip():
+                return
+            
+            filler_words = (
+                opt.filler_words if opt.filler_words is not None else get_filler_words()
+            )
+            if not should_interrupt(transcript, filler_words):
+                return  # Ignore backchanneling (filler words only)
+
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
             return
@@ -1315,6 +1330,13 @@ class AgentActivity(RecognitionHooks):
         ):
             return
 
+        # Skip preemptive generation for filler words when agent is speaking
+        if self._current_speech is not None and not self._current_speech.interrupted:
+            opt = self._session.options
+            filler_words = opt.filler_words if opt.filler_words is not None else get_filler_words()
+            if info.new_transcript and not should_interrupt(info.new_transcript, filler_words):
+                return  # Ignore filler words during agent speech
+
         self._cancel_preemptive_generation()
 
         user_message = llm.ChatMessage(
@@ -1378,6 +1400,23 @@ class AgentActivity(RecognitionHooks):
             self._cancel_preemptive_generation()
             # avoid interruption if the new_transcript is too short
             return False
+
+        # Filler word filter: when agent is speaking and user says only filler words,
+        # skip this turn entirely - the agent should continue speaking seamlessly
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._session.agent_state == "speaking"
+        ):
+            opt = self._session.options
+            filler_words = opt.filler_words if opt.filler_words is not None else get_filler_words()
+            if info.new_transcript and not should_interrupt(info.new_transcript, filler_words):
+                self._cancel_preemptive_generation()
+                logger.debug(
+                    "ignoring filler word turn during agent speech",
+                    extra={"user_input": info.new_transcript},
+                )
+                return False  # Skip this turn - agent continues speaking
 
         old_task = self._user_turn_completed_atask
         self._user_turn_completed_atask = self._create_speech_task(

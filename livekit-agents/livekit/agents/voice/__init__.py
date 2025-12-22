@@ -1,6 +1,7 @@
 from . import io, run_result
 from .agent import Agent, AgentTask, ModelSettings
 from .agent_session import AgentSession, VoiceActivityVideoSampler
+from .interruption_filter import get_filler_words, load_filler_words, should_interrupt
 from .events import (
     AgentEvent,
     AgentFalseInterruptionEvent,
@@ -51,6 +52,9 @@ __all__ = [
     "_ParticipantAudioOutput",
     "_ParticipantTranscriptionOutput",
     "_ParticipantStreamTranscriptionOutput",
+    "should_interrupt",
+    "get_filler_words",
+    "load_filler_words",
 ]
 
 # Cleanup docs of unexported modules

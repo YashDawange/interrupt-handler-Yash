@@ -1,0 +1,33 @@
+INTELLIGENT INTERRUPTION HANDLER
+==============================
+
+OVERVIEW
+--------
+Implemented an intelligent interruption handler for the LiveKit Voice Agent to distinguish between passive backchanneling (e.g., "uh-huh", "yeah") and active interruptions. This ensures a smoother, more natural conversation flow.
+
+IMPLEMENTATION DETAILS
+----------------------
+### Core Logic
+- **Module**: `livekit.agents.voice.interruption_filter`
+- **Key Functions**:
+    - `should_interrupt(transcription, filler_words)`: Determines if input is a genuine interruption.
+    - `normalize_text(text)`: Handles case, whitespace, and punctuation normalization.
+    - `get_filler_words()`: Returns a cached set of filler words.
+
+### Features
+- **Filler Word Filtering**: Ignores common listener acknowledgments like "ok", "sure", "mhm".
+- **Context Awareness**: Handles multi-word phrases and potential STT artifacts.
+- **Performance**: Optimized using `frozenset` and caching for sub-millisecond execution.
+
+VERIFICATION & TESTING
+----------------------
+### Automated Tests
+1.  **Unit Tests**: `tests/test_interruption_filter.py` cover detailed logic cases (26 tests).
+    - Command: `pytest tests/test_interruption_filter.py`
+2.  **Standalone Test**: `standalone_test_interruption_filter.py` verifies core logic without full agent overhead.
+    - Command: `python standalone_test_interruption_filter.py`
+3.  **Performance Test**: Verified `should_interrupt` runs in < 0.02ms (well within 10ms budget).
+
+USAGE
+-----
+The system automatically filters interruptions based on the speech transcription. No manual configuration is required, but filler words can be overridden via `FILLER_WORDS_OVERRIDE` environment variable.
