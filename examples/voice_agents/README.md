@@ -7,14 +7,16 @@ This directory contains a comprehensive collection of voice-based agent examples
 ### 🚀 Getting Started
 
 - [`basic_agent.py`](./basic_agent.py) - A fundamental voice agent with metrics collection
+- [`interruption_filter.py`](./interruption_filter.py) - Custom speech interruption logic
+  -  [**Interruption Documentation**](./interruptionREADME.md)
 
 ### 🛠️ Tool Integration & Function Calling
 
 - [`annotated_tool_args.py`](./annotated_tool_args.py) - Using Python type annotations for tool arguments
 - [`dynamic_tool_creation.py`](./dynamic_tool_creation.py) - Creating and registering tools dynamically at runtime
 - [`raw_function_description.py`](./raw_function_description.py) - Using raw JSON schema definitions for tool descriptions
-- [`silent_function_call.py`](./silent_function_call.py) - Executing function calls without verbal responses to user
-- [`long_running_function.py`](./long_running_function.py) - Handling long running function calls with interruption support
+- [`silent_function_call.py`](./silent_function_call.py) - Executing function calls without verbal responses to the user
+- [`long_running_function.py`](./long_running_function.py) - Handling long-running function calls with interruption support
 
 ### ⚡ Real-time Models
 
