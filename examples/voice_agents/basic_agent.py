@@ -1,5 +1,5 @@
 import logging
-
+import os
 from dotenv import load_dotenv
 
 from livekit.agents import (
@@ -18,6 +18,9 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+# Custom logic layer for assignment
+from interruption_logic import InterruptionManager
+
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
 
@@ -25,6 +28,13 @@ logger = logging.getLogger("basic-agent")
 
 load_dotenv()
 
+# --- Configuration ---
+# We load the "Ignore List" from the environment for flexibility.
+def get_ignore_words():
+    env_words = os.getenv("IGNORE_WORDS", "yeah,ok,okay,hmm,uh,um,right,yep,aha,uh-huh")
+    return set(w.strip().lower() for w in env_words.split(","))
+
+IGNORE_WORDS = get_ignore_words()
 
 class MyAgent(Agent):
     def __init__(self) -> None:
@@ -79,6 +89,8 @@ async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }
+    # Initialize Logic Layer
+    interrupt_manager = InterruptionManager(IGNORE_WORDS)
     session = AgentSession(
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
         # See all available models at https://docs.livekit.io/agents/models/stt/
@@ -100,6 +112,8 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
+        allow_interruptions=False, # Disable automatic interruptionsm from framweork
+        discard_audio_if_uninterruptible=False,# Still send audio to STT even if uninterruptible
     )
 
     # log metrics as they are emitted, and total usage after session is over
@@ -109,6 +123,34 @@ async def entrypoint(ctx: JobContext):
     def _on_metrics_collected(ev: MetricsCollectedEvent):
         metrics.log_metrics(ev.metrics)
         usage_collector.collect(ev.metrics)
+
+    # Track internal state to know when the agent is speaking
+    session.userdata = {"agent_speaking": False}    
+
+    @session.on("agent_state_changed")
+    def _on_agent_state(ev):
+        session.userdata["agent_speaking"] = (ev.new_state == "speaking")
+
+    @session.on("user_input_transcribed")
+    def _on_user_input(ev):
+        # We wait for the final transcript 
+        if not ev.is_final:
+            return
+
+        transcript = ev.transcript or ""
+        
+        # Use Logic Layer to decide
+        should_stop = interrupt_manager.should_interrupt(
+            transcript, 
+            session.userdata["agent_speaking"]
+        )
+        # We whitelist "backchannel" words (ignore list). 
+        # ANY other input is treated as a valid interruption to ensure the agent stops for questions, commands, or comments.
+        if should_stop:
+            logger.info(f"VALID INTERRUPTION: '{transcript}'")
+            session.interrupt(force=True)
+        elif session.userdata["agent_speaking"]:
+            logger.info(f"IGNORING BACKCHANNEL: '{transcript}'")
 
     async def log_usage():
         summary = usage_collector.get_summary()
