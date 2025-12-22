@@ -32,6 +32,14 @@ from livekit.agents.llm.tool_context import ToolError
 from livekit.plugins import cartesia, deepgram, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+# Requirement: Configurable Ignore List
+IGNORE_LIST = ["yeah", "ok", "okay", "hmm", "right", "uh-huh", "got it"]
+
+def is_backchannel(text: str) -> bool:
+    """Requirement: Distinguish passive acknowledgement"""
+    clean_text = text.lower().strip().replace(".", "").replace("!", "").replace("?", "")
+    return clean_text in IGNORE_LIST
+
 load_dotenv()
 
 
@@ -618,7 +626,7 @@ class RewardsTask(BaseBankTask):
 SubmenuTaskType = DepositAccountsTask | CreditCardsTask | LoansTask | RewardsTask
 
 
-@server.rtc_session(agent_name=BANK_IVR_DISPATCH_NAME)
+@server.rtc_session()
 async def bank_ivr_session(ctx: JobContext) -> None:
     ctx.log_context_fields = {"room": ctx.room.name}
 
@@ -627,12 +635,24 @@ async def bank_ivr_session(ctx: JobContext) -> None:
 
     session: AgentSession[SessionState] = AgentSession(
         vad=silero.VAD.load(),
-        llm=openai.LLM(model="gpt-4.1"),
-        stt=deepgram.STT(model="nova-3"),
-        tts=cartesia.TTS(),
+        llm=openai.LLM(model="llama-3.3-70b-versatile"), 
+        stt=deepgram.STT(model="nova-2"),
+        tts=openai.TTS(base_url="https://api.openai.com/v1"),
         turn_detection=MultilingualModel(),
         userdata=state,
+        will_interrupt_user=False,
     )
+    @session.on("user_transcription_finished")
+    def on_transcription(ev):
+        user_text = ev.alternatives[0].text
+        
+        if session.agent_speaking:
+            if is_backchannel(user_text):
+                logger.info(f"Ignoring passive acknowledgement: {user_text}")
+                return 
+            else:
+                logger.info(f"Active interruption detected: {user_text}")
+                session.stop_speaking()
 
     usage_collector = metrics.UsageCollector()
 
