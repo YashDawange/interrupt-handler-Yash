@@ -15,8 +15,10 @@ from livekit.agents import (
     room_io,
 )
 from livekit.agents.llm import function_tool
-from livekit.plugins import silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit.plugins import groq, silero
+
+# Import the intelligent interruption handler
+from interruption_handler import InterruptionHandler
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -85,13 +87,13 @@ async def entrypoint(ctx: JobContext):
         stt="deepgram/nova-3",
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
+        llm=groq.LLM(model="llama-3.3-70b-versatile"),
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
-        turn_detection=MultilingualModel(),
+        turn_detection="vad",  # Use VAD instead of MultilingualModel to avoid model downloads
         vad=ctx.proc.userdata["vad"],
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
@@ -127,6 +129,10 @@ async def entrypoint(ctx: JobContext):
             ),
         ),
     )
+
+    # Initialize intelligent interruption handler
+    interruption_handler = InterruptionHandler(session)
+    logger.info("Intelligent interruption handler initialized")
 
 
 if __name__ == "__main__":
