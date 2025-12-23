@@ -1,0 +1,138 @@
+PS D:\Users\Kartavya\.vscode\.vscode\LiveKit-Assesment\Agents_LiveKit-assignment> python manual_agent.py dev
+    11:56:41.999 DEV    livekit.agents     Watching D:\Users\Kartavya\.vscode\.vscode\LiveKit-Assesment\Agents_LiveKit-assignment  
+    11:56:45.201 DEBUG  asyncio            Using proactor: IocpProactor  
+    11:56:45.218 INFO   livekit.agents     starting worker {"version": "1.3.9", "rtc-version": "1.0.23"}
+    11:56:45.230 INFO   livekit.agents     HTTP server listening on :63028  
+    11:56:45.511 INFO   livekit.agents     registered worker  
+                                         {"agent_name": "", "id": "AW_ZCevwVHktdGc", "url":      
+"wss://agentskartavyarustagidtu-vqlqzf1z.livekit.cloud", "region": "India South", "protocol": 16}
+    11:56:51.593 INFO   livekit.agents     received job request  
+                                         {"job_id": "AJ_BJgrcdZp2uFP", "dispatch_id": "AD_FZUHqQfVBej5", "room": 
+"sbx-1taktp-87zDBRMcUcAV7gufhcVo6d", "room_id": "RM_qUwVfx9y8Moa", "agent_name": "", "resuming": false, "enable_recording": false}
+    11:56:51.660 DEBUG  livekit.agents     received assignment  
+                                         {"agent_name": "", "room_id": "RM_qUwVfx9y8Moa", "room": "sbx-1taktp-87zDBRMcUcAV7gufhcVo6d", 
+"job_id": "AJ_BJgrcdZp2uFP", "dispatch_id": "AD_FZUHqQfVBej5", "enable_recording": false}
+    11:56:51.685 INFO   livekit.agents     initializing job runner {"tid": 14984}
+    11:56:51.695 INFO   livekit.agents     job runner initialized {"tid": 14984, "elapsed_time": 0.0}
+    11:56:51.705 DEBUG  asyncio            Using proactor: IocpProactor
+    11:56:52.996 INFO   manual-agent       User connected: programmable-instance  
+    11:56:54.517 INFO   manual-agent       Audio stream connected! Ready.  
+    11:56:54.527 INFO   manual-agent       🤖 Starting story in 1 second...  
+    11:56:54.540 DEBUG  livekit.agents     http_session(): creating a new httpclient ctx  
+    11:56:56.682 DEBUG  livekit.….deepgram Established new Deepgram STT WebSocket connection:  
+                                           {"headers": {"dg-project-id": "f97da363-3bba-4e47-8ab0-18453e19d177", "dg-request-id": 
+"caecde6b-b0ff-45cc-b755-62b326039c13", "Date": "Tue, 23 Dec 2025 06:26:55 GMT"}}
+    11:56:56.931 INFO   manual-agent       🤖 AGENT: 'In the beginning,'  
+    11:56:58.734 INFO   manual-agent       🤖 AGENT: 'there was nothing.'  
+    11:56:59.546 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:56:59.925 INFO   manual-agent       🤖 AGENT: 'No stars,'  
+    11:57:00.895 INFO   manual-agent       🤖 AGENT: 'no planets,'  
+    11:57:02.063 INFO   manual-agent       🤖 AGENT: 'no galaxies,'  
+    11:57:03.275 INFO   manual-agent       🤖 AGENT: 'no matter,'  
+    11:57:04.207 INFO   manual-agent       🤖 AGENT: 'and no energy.'  
+    11:57:05.167 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:05.898 INFO   manual-agent       🤖 AGENT: 'It was a complete and utter void.'  
+    11:57:07.998 INFO   manual-agent       🤖 AGENT: 'But this silence would not last forever.  
+    
+                                           According to the Big Bang Theory,'
+    11:57:13.440 INFO   manual-agent       🤖 AGENT: 'the universe began as a singularity – an infinitely hot and dense point – around      
+                                           13.'
+    11:57:13.804 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'Stop.'  
+    11:57:13.903 INFO   manual-agent       👂 HEARD: 'Stop.'  
+    11:57:14.171 INFO   manual-agent       🤖 AGENT: 'I was about to take you on a cosmic journey through the ages,'  
+    11:57:17.873 INFO   manual-agent       🤖 AGENT: 'but I'll take a pause instead.'  
+    11:57:19.684 INFO   manual-agent       🤖 AGENT: 'Would you like to start the journey or try a different scenario?'  
+    11:57:24.996 INFO   manual-agent       ✅ Agent finished. Waiting for user input.  
+    11:57:26.362 INFO   manual-agent       👂 HEARD: 'Yeah. Yeah. Keep on going.'  
+    11:57:26.632 INFO   manual-agent       🤖 AGENT: 'Let's begin our epic story of the universe,'  
+    11:57:30.582 INFO   manual-agent       🤖 AGENT: 'a tale that spans over 13.'  
+    11:57:31.262 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:32.761 INFO   manual-agent       🤖 AGENT: '8 billion years.  
+    
+                                           In the very beginning,'
+    11:57:33.657 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:33.682 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'Stop'  
+    11:57:34.092 INFO   manual-agent       👂 HEARD: 'Stuck.'  
+    11:57:34.337 INFO   manual-agent       🤖 AGENT: 'It seems like progress has come to a standstill.'  
+    11:57:37.359 INFO   manual-agent       🤖 AGENT: 'Don't worry,'  
+    11:57:38.067 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:38.388 INFO   manual-agent       🤖 AGENT: 'I'll give you a gentle nudge to get things moving again.'  
+    11:57:39.047 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:41.457 INFO   manual-agent       🤖 AGENT: 'Here's a brief reminder of where we were:
+    
+                                           We were about to explore the vast expanse of the universe's history,'
+    11:57:42.137 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:42.669 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'Your'  
+    11:57:43.663 INFO   manual-agent       👂 HEARD: 'Yeah. Yeah. Keep going.'  
+    11:57:43.906 INFO   manual-agent       🤖 AGENT: 'It seems you're stuck,'  
+    11:57:44.004 INFO   manual-agent       🛡️ [SOFT INTERRUPT] Ignored: 'Yeah.'   
+    11:57:44.576 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:45.039 INFO   manual-agent       🤖 AGENT: 'but I'm ready to push forward.  
+    
+                                           Let's begin at the dawn of time.'
+    11:57:45.716 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:48.051 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'You can go. You'  
+    11:57:48.500 INFO   manual-agent       👂 HEARD: 'You can go. You can go.'  
+    11:57:48.779 INFO   manual-agent       🤖 AGENT: 'Let's begin the journey through the history of the universe.  
+    
+                                           In the beginning,'
+    11:57:49.467 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:54.127 INFO   manual-agent       🤖 AGENT: 'there was only an infinite void,'  
+    11:57:54.826 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:56.175 INFO   manual-agent       🤖 AGENT: 'known as the Singularity.'  
+    11:57:56.888 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:57:57.748 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'So'  
+    11:57:57.752 INFO   manual-agent       👂 HEARD: 'Stop.'  
+    11:57:58.016 INFO   manual-agent       🤖 AGENT: 'You seem to be having a bit of fun with the conversation flow.'  
+    11:57:58.686 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:01.105 INFO   manual-agent       🤖 AGENT: 'Let's get back to the story.'  
+    11:58:01.786 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:02.844 INFO   manual-agent       🤖 AGENT: 'I was supposed to start taking you on a cosmic journey through the history of the     
+                                           universe.
+    
+                                           In the beginning,'
+    11:58:03.566 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:08.992 INFO   manual-agent       🤖 AGENT: 'there was only darkness and emptiness.'  
+    11:58:09.668 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:11.450 INFO   manual-agent       🤖 AGENT: 'This was around 13.'  
+    11:58:12.123 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:12.313 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'Wheat.'  
+    11:58:12.321 INFO   manual-agent       👂 HEARD: 'Wheat.'  
+    11:58:12.636 INFO   manual-agent       🤖 AGENT: 'It seems like you've given me mixed signals.'  
+    11:58:13.327 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:15.056 INFO   manual-agent       🤖 AGENT: 'As I take a break,'  
+    11:58:15.737 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:16.308 INFO   manual-agent       🛑 [HARD INTERRUPT] Stopping for: 'Wheat.'  
+    11:58:16.774 INFO   manual-agent       👂 HEARD: 'Wheat. Wheat.'  
+    11:58:16.985 INFO   manual-agent       🤖 AGENT: 'It seems like we've taken some unexpected turns.'  
+    11:58:17.668 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:20.087 INFO   manual-agent       🤖 AGENT: 'Let's get back to the story about the history of the universe.  
+    
+                                           As the cosmos unfolded,'
+    11:58:20.777 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:22.682 INFO   manual-agent       🛡️ [SOFT INTERRUPT] Ignored: 'Mhmm.'   
+    11:58:23.144 INFO   manual-agent       🛡️ [SOFT INTERRUPT] Ignored: 'Yep.'   
+    11:58:25.457 INFO   manual-agent       🤖 AGENT: 'the laws of physics were born from the singularity,'  
+    11:58:26.157 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:28.653 INFO   manual-agent       🤖 AGENT: 'a tiny,'  
+    11:58:29.326 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:29.671 INFO   manual-agent       🤖 AGENT: 'infinitely hot and dense point that sparked the Big Bang around 13.'  
+    11:58:30.376 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:35.117 INFO   manual-agent       🤖 AGENT: '8 billion years ago.'  
+    11:58:35.814 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:37.172 INFO   manual-agent       🤖 AGENT: 'The universe expanded rapidly,'  
+    11:58:37.854 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:39.628 INFO   manual-agent       🤖 AGENT: 'and the first subatomic particles – protons,'  
+    11:58:40.324 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:42.706 INFO   manual-agent       🤖 AGENT: 'neutrons,'  
+    11:58:43.407 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:43.774 INFO   manual-agent       🤖 AGENT: 'and electrons – began to form.       
+    
+                                           As the universe continued to expand and cool,'
+    11:58:44.461 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:48.930 INFO   manual-agent       🤖 AGENT: 'these subatomic particles coalesced into the first atomic nuclei,'  
+    11:58:49.628 DEBUG  livekit.agents     flush audio emitter due to slow audio generation  
+    11:58:52.454 DEBUG  livekit.agents     shutting down job task {"reason": "", "user_initiated": false}
+    11:58:52.471 DEBUG  livekit.agents     http_session(): closing the httpclient ctx  
+    11:58:52.488 DEBUG  livekit.agents     job exiting  
+                                         {"reason": "", "tid": 14984, "job_id": "AJ_BJgrcdZp2uFP", "room_id": "RM_qUwVfx9y8Moa"}
