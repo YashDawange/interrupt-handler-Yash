@@ -85,10 +85,6 @@ FEATURES:
 ✓ Comprehensive logging for debugging and monitoring
 ✓ Extensible architecture for adding new rules or vocabularies
 
-Author: [Your Name]
-Date: [Current Date]
-Purpose: Voice Assistant Assignment - Acknowledgment Filtering Implementation
-Version: 1.0.0
 ==================================================================================
 """
 
