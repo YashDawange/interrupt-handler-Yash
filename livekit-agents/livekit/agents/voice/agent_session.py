@@ -62,6 +62,11 @@ if TYPE_CHECKING:
     from ..llm import mcp
     from .transcription.filters import TextTransforms
 
+from livekit.agents.utils.interrupt_filter import (
+    is_passive_ack,
+    is_real_interruption,
+)
+
 
 @dataclass
 class SessionConnectOptions:
@@ -129,6 +134,17 @@ class VoiceActivityVideoSampler:
 
 
 DEFAULT_TTS_TEXT_TRANSFORMS: list[TextTransforms] = ["filter_markdown", "filter_emoji"]
+
+PASSIVE_ACKS = {
+    "yeah", "ok", "okay", "hmm", "uh-huh", "right", "mm-hmm"
+}
+
+INTERRUPT_WORDS = {
+    "stop", "wait", "no", "hold on", "cancel"
+}
+
+
+
 
 
 class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
@@ -357,6 +373,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # ivr activity
         self._ivr_activity: IVRActivity | None = None
+
+        # interruption gating (semantic backchannel handling)
+        self._pending_interrupt: bool = False
+        self._pending_interrupt_started_at: float | None = None
+
 
     def emit(self, event: EventTypes, arg: AgentEvent) -> None:  # type: ignore
         self._recorded_events.append(arg)
@@ -954,9 +975,18 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             and chat context has been updated.
         """
         if self._activity is None:
-            raise RuntimeError("AgentSession isn't running")
+         raise RuntimeError("AgentSession isn't running")
+
+        # Semantic interruption gating:
+        # If the agent is currently speaking, delay interruption until transcript is validated
+        if self.agent_state == "speaking" and not force:
+           self._pending_interrupt = True
+           self._pending_interrupt_started_at = time.time()
+           # Return a dummy future so callers don't break
+           return asyncio.get_event_loop().create_future()
 
         return self._activity.interrupt(force=force)
+        
 
     def clear_user_turn(self) -> None:
         # clear the transcription or input audio buffer of the user turn
@@ -1212,11 +1242,42 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         self.emit("user_state_changed", UserStateChangedEvent(old_state=old_state, new_state=state))
 
     def _user_input_transcribed(self, ev: UserInputTranscribedEvent) -> None:
-        if self.user_state == "away" and ev.is_final:
-            # reset user state from away to listening in case VAD has a miss detection
-            self._update_user_state("listening")
+        # Restore from away state
+      if self.user_state == "away" and ev.is_final:
+        self._update_user_state("listening")
 
+      # ⚠️ DO NOT interfere unless agent is speaking
+      if self.agent_state != "speaking":
         self.emit("user_input_transcribed", ev)
+        return
+
+    # From here on: agent IS speaking
+
+      if not ev.is_final:
+        # let partials pass through untouched
+        self.emit("user_input_transcribed", ev)
+        return
+
+      text = (ev.text or "").strip().lower()
+      speech = self.current_speech
+
+    # 🟢 Passive acknowledgement → ignore completely
+      if text in PASSIVE_ACKS:
+        if speech:
+            speech.allow_interruptions = False
+        return
+
+    # 🔴 Real / semantic interruption
+      if any(word in text for word in INTERRUPT_WORDS):
+        if speech:
+            speech.allow_interruptions = True
+        self.interrupt(force=True)
+        return
+
+    # Anything else → normal flow
+      self.emit("user_input_transcribed", ev)
+         
+     
 
     def _conversation_item_added(self, message: llm.ChatMessage) -> None:
         self._chat_ctx.insert(message)

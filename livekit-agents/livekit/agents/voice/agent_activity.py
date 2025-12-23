@@ -789,9 +789,12 @@ class AgentActivity(RecognitionHooks):
             allow_interruptions = NOT_GIVEN
 
         handle = SpeechHandle.create(
-            allow_interruptions=allow_interruptions
-            if is_given(allow_interruptions)
-            else self.allow_interruptions
+            # 🔥 CRITICAL: disable interruptions by default
+            allow_interruptions=(
+              allow_interruptions
+              if is_given(allow_interruptions)
+              else False
+    )
         )
         self._session.emit(
             "speech_created",
