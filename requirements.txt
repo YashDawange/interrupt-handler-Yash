@@ -1,0 +1,25 @@
+# ============================================================
+# Intelligent Interruption Handler for LiveKit Voice Agents
+# Python 3.11+ required
+# ============================================================
+
+# Core LiveKit packages
+livekit>=0.20.0
+livekit-agents>=0.12.0
+
+# LiveKit plugins (providers)
+livekit-plugins-silero>=0.7.0       # VAD - Voice Activity Detection (local)
+livekit-plugins-deepgram>=0.6.0     # STT - Speech-to-Text
+livekit-plugins-openai>=0.10.0      # LLM - Language Model
+livekit-plugins-cartesia>=0.4.0     # TTS - Text-to-Speech
+livekit-plugins-elevenlabs>=0.8.0   # TTS - Alternative provider
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Async HTTP (required by LiveKit)
+aiohttp>=3.9.0
+
+# ============================================================
+# Install with: pip install -r requirements.txt
+# ============================================================
