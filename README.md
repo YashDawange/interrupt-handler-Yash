@@ -20,6 +20,172 @@
 
 Looking for the JS/TS library? Check out [AgentsJS](https://github.com/livekit/agents-js)
 
+<br />
+
+---
+
+## Intelligent Backchanneling & Semantic Interruption Handling
+
+This section includes a solution to the **LiveKit conversational flow challenge**, focused on preventing unintended interruptions caused by user backchanneling (e.g., “yeah”, “ok”, “hmm”) while preserving true, intentional interruptions.
+
+
+
+## Solution Overview
+
+This solution introduces an **Backchanneling Handling Service** that sits *on top* of LiveKit’s existing pipeline and makes interruption decisions based on:
+
+- Whether the agent is currently speaking
+- The semantic content of the user’s transcribed speech
+- Partial vs final STT transcripts (for latency-safe decisions)
+
+### Key Design Principles
+
+- No modification to LiveKit VAD or turn detection
+- Purely event-driven logic layer
+- Real-time, latency-safe interruption decisions
+- Configurable ignore and interrupt word sets
+
+---
+## Architecture
+
+- All logic lives in **`agents-assignment/examples/voice_agents/backchanneling_handling_service.py`**
+- The agent demo is in **`agents-assignment/examples/voice_agents/backchanneling_agent_demo.py`**
+- No third-party libraries were added
+- No framework internals were modified
+
+---
+
+
+### Core Components
+
+- **`BackchannelingHandlingService:`**
+  A session-attached service that listens to agent and user events.
+
+- **Agent State Tracking:**
+  Uses the `agent_state_changed` event to track whether the agent is currently speaking.
+
+- **Semantic STT Filtering:**
+  Uses `user_input_transcribed` events to inspect partial and final transcripts.
+
+### 1. Agent State Awareness
+
+The handler maintains a real-time flag:
+
+- **`agent_is_speaking`** = True -> apply filtering
+- **`agent_is_speaking`** = False -> allow normal conversation flow
+
+This ensures that “yeah” is ignored only when appropriate.
+
+### 2. Configurable Word Sets
+
+Two configurable sets control behavior:
+
+- **Ignore Words (Passive Backchanneling) Examples:** yeah, ok, okay, hmm, uh-huh, right, sure, aha  
+These are treated as non-interruptive acknowledgements.
+
+- **Interrupt Words (Explicit Commands) Examples:** stop, wait, no, pause, cancel  
+These immediately interrupt the agent.
+
+Both sets are stored as Python sets for O(1) lookup and minimal latency.
+
+### 3. Partial Transcript Handling (Latency Optimization)
+
+**Since VAD fires before STT completes, the handler inspects partial transcripts**:
+
+- If a partial transcript already contains a confident interrupt word (e.g., “stop”) -> interrupt immediately
+
+- If it looks like filler (“yeah”, “hmm”) -> wait for final transcript before acting
+
+This avoids false interruptions while remaining responsive.
+
+### 4. Final Transcript Decision Logic
+
+When a final transcript is received while the agent is speaking:
+
+User Speech	Behavior
+Only ignore words	Clear user turn, agent continues
+Contains interrupt word	Immediate interruption
+Mixed (“yeah wait”)	Interrupt (semantic priority)
+Anything else	Interrupt (safe default)
+
+Soft acknowledgements are removed using:
+
+**`session.clear_user_turn()`**
+
+
+This ensures no pause, stutter, or resume artifacts.
+
+### User Input	Agent State	Result
+
+
+| User Input | Agent State | Result |
+|--------|-------|-----|
+| **“yeah / ok / hmm”** | Speaking | Ignored completely|
+| **“wait / stop / no”** | Speaking | Immediate interruption |
+| **“yeah”** | Silent | Treated as valid response | 
+| **“hello / start”** | Silent | Normal conversation  |
+| **“yeah wait”** | Speaking | Interrupts |
+
+## Demo Video 
+-  Unzip the file, **demo_video** present in the root direcrory and play.
+- It is the video of agent showing it stop on interrupt words and continuing if the said word just a filler
+
+### Attachment Model
+
+The handler is attached externally to an `AgentSession`:
+
+```python
+BackchannelingHandlingService(
+    session=session,
+    config=BackchannelingConfig(),
+)
+```
+
+Custom ignore and interrupt words can be passed as Set(str):
+
+```python
+BackchannelingHandlingService(
+    session=session,
+    config=BackchannelingConfig(
+        ignore_words={'okay', 'understood', 'hmm'},
+        interrupt_words={'wait', 'abort', 'stop'},
+    ),
+)
+```
+## Running the solution locally
+
+1) In the root dir, create a .env file and set the following variables   
+OPENAI_API_KEY=  
+DEEPGRAM_API_KEY=  
+LIVEKIT_URL=  
+LIVEKIT_API_KEY=  
+LIVEKIT_API_SECRET=      
+
+Livekit variables are only required to run in a playground. If only want to run in console then avoid the last 3 variables in .env.  
+Now, open a terminal in the root of the project and follow the steps:
+
+2) Create a python virtual environment and activate it  
+(this command is for linux, for windows search for equivalent command on google)
+```
+python3 -m venv venv
+source venv/bin/activate
+```
+
+3) Install the requirements.txt
+```
+pip3 install -r examples/voice_agents/requirements.txt
+```
+
+4) Running the agent in console:
+
+```
+python examples/voice_agents/backchanneling_agent_demo.py console
+```
+
+To run the agent in livekit playground follow the official tutorial:  https://docs.livekit.io/agents/start/playground/
+
+---
+
 ## What is Agents?
 
 <!--BEGIN_DESCRIPTION-->
