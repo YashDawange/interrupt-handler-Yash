@@ -1,6 +1,4 @@
 import logging
-import os
-import re
 from dotenv import load_dotenv
 
 from livekit.agents import (
@@ -16,7 +14,7 @@ from livekit.agents import (
     cli,
     metrics,
     RoomInputOptions,
-    RoomOutputOptions
+    RoomOutputOptions,
 )
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
@@ -31,6 +29,7 @@ from basic_agent_interruption_handler import (
 logger = logging.getLogger("basic-agent")
 load_dotenv()
 
+
 # =========================
 # AGENT
 # =========================
@@ -39,14 +38,19 @@ class MyAgent(Agent):
         super().__init__(
             instructions=(
                 "Your name is Kelly. "
-                "You interact with users via voice. "
-                "Keep responses concise and natural. "
-                "Do not use emojis, markdown, or special characters. "
-                "You are friendly and curious."
+                "You are a conversational AI assistant. "
+                "Speak naturally and concisely. "
+                "Do not use emojis or markdown."
+                "You are NOT limited to any single domain. "
+                "You should only use tools when they are clearly useful, "
+                "and you should never say that you are incapable of answering general questions. "
+                "If a question is abstract or conceptual, explain it in simple terms. "
+                "If the user asks about weather, you may use the weather tool. "
             )
         )
 
     async def on_enter(self):
+        # generate an initial reply when agent enters
         self.session.generate_reply()
 
     @function_tool
@@ -57,16 +61,16 @@ class MyAgent(Agent):
         latitude: str,
         longitude: str,
     ):
-        return "Lemme Know what you need."
+        return "It is sunny and 70 degrees."
 
 
 # =========================
 # PREWARM
 # =========================
 def prewarm(proc: JobProcess):
-    # Load VAD once per worker
     proc.userdata["vad"] = silero.VAD.load()
-    proc.userdata["interrupt_policy"] = InterruptionPolicy.from_env()
+    # store a default policy instance for each worker process
+    proc.userdata["interrupt_policy"] = InterruptionPolicy()
 
 
 # =========================
@@ -75,7 +79,6 @@ def prewarm(proc: JobProcess):
 async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    #  Disable framework auto-interruptions
     session = AgentSession(
         stt="assemblyai/universal-streaming:en",
         llm="openai/gpt-4.1-mini",
@@ -86,9 +89,11 @@ async def entrypoint(ctx: JobContext):
 
         preemptive_generation=True,
 
-        #  CRITICAL FLAGS
-        allow_interruptions=False,
-        discard_audio_if_uninterruptible=False,
+        # SAME AS PASTED SCRIPT
+        allow_interruptions=True,
+        discard_audio_if_uninterruptible=True,
+        min_interruption_duration=0.6,
+        min_interruption_words=2,
     )
 
     # =========================
@@ -105,14 +110,13 @@ async def entrypoint(ctx: JobContext):
     )
 
     # =========================
-    # AGENT SPEAKING STATE
+    # AGENT STATE TRACKING
     # =========================
     agent_speaking = {"value": False}
 
     @session.on("agent_state_changed")
     def _on_agent_state_changed(ev: AgentStateChangedEvent):
         agent_speaking["value"] = ev.new_state == "speaking"
-        logger.debug("Agent state: %s -> %s", ev.old_state, ev.new_state)
 
     # =========================
     # INTERRUPTION FILTER
@@ -120,39 +124,60 @@ async def entrypoint(ctx: JobContext):
     interrupt_filter = InterruptionFilter(ctx.proc.userdata["interrupt_policy"])
 
     # =========================
-    # USER INPUT HANDLER (CORRECT EVENT)
+    # USER BUFFER (Option 1)
+    #   - accumulate all STT segments (interim + final) while agent is speaking
+    #   - when a final segment arrives, process the entire accumulated text
+    # =========================
+    user_buffer = {"text": ""}
+
+    # Helper to flush+decide on buffer
+    def _flush_and_handle_buffer():
+        full_text = user_buffer["text"].strip()
+        user_buffer["text"] = ""  # clear buffer immediately
+        if not full_text:
+            return
+
+        decision = interrupt_filter.decide(text=full_text, agent_speaking=True)
+
+        if decision == InterruptionDecision.IGNORE:
+            # exactly like pasted script
+            session.clear_user_turn()
+            return
+
+        if decision == InterruptionDecision.INTERRUPT:
+            session.interrupt(force=True)
+            return
+
+    # =========================
+    # USER INPUT HANDLER (with accumulation)
     # =========================
     @session.on("user_input_transcribed")
     def _on_user_input_transcribed(ev: UserInputTranscribedEvent):
         text = (ev.transcript or "").strip()
-        confidence = getattr(ev, "confidence", None)
-
         if not text:
             return
 
-        # If agent is not speaking, let framework handle normally
+        # Only care about user speech that happens WHILE agent is speaking.
+        # If the agent is not speaking, let the framework handle it normally.
         if not agent_speaking["value"]:
-            logger.debug("User spoke while agent silent: %r", text)
             return
 
-        logger.info("User spoke while agent speaking: %r", text)
+        # Accumulate every STT segment (interim OR final).
+        # Many STT streams will emit short early finals while the user is still talking —
+        # collecting segments avoids missing words.
+        # We add a space only if there's existing buffered text.
+        if user_buffer["text"]:
+            user_buffer["text"] += " " + text
+        else:
+            user_buffer["text"] = text
 
-        decision = interrupt_filter.decide(
-            text=text,
-            confidence=confidence,
-            agent_speaking=True,
-        )
-
-        if decision == InterruptionDecision.IGNORE:
-            # 🔑 Prevent fillers from becoming a user turn
-            session.clear_user_turn()
-            logger.info("Ignored filler/backchannel: %r", text)
+        # Only make a decision when we have a final segment.
+        # This ensures we consider the entire utterance the ASR has accumulated.
+        if not getattr(ev, "is_final", False):
             return
 
-        if decision == InterruptionDecision.INTERRUPT:
-            logger.info("Interrupting agent due to: %r", text)
-            session.interrupt(force=True)
-            return
+        # ev.is_final is True -> process accumulated buffer
+        _flush_and_handle_buffer()
 
     # =========================
     # START SESSION
@@ -167,5 +192,8 @@ async def entrypoint(ctx: JobContext):
 
 if __name__ == "__main__":
     cli.run_app(
-        WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm)
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
+        )
     )

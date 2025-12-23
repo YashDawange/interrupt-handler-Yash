@@ -1,36 +1,25 @@
-import os
 import re
 import logging
 from dataclasses import dataclass, field
-from typing import Iterable, Set
+from typing import Set
 
 logger = logging.getLogger("interrupt-filter")
 
 
-def _split_csv(s: str | None):
-    if not s:
-        return []
-    return [x.strip().lower() for x in s.split(",") if x.strip()]
-
-
 @dataclass
 class InterruptionPolicy:
+    # Backchannel / filler words (soft acknowledgements)
     ignored_fillers: Set[str] = field(default_factory=lambda: {
-        "uh", "um", "umm", "hmm", "mm", "ah", "er", "haan", "huh", "okay", "ok", "yeah", "uh-huh", "right"
+        "uh", "um", "umm", "hmm", "mm", "ah", "er",
+        "okay", "ok", "yeah", "yep", "yes", "right",
+        "uh-huh", "mm-hmm", "mhm", "hm"
     })
-    command_keywords: Set[str] = field(default_factory=lambda: {
-        "stop", "wait", "pause", "hold on", "one second",
-        "no", "not that", "excuse me", "listen"
-    })
-    min_confidence: float = 0.55
 
-    @classmethod
-    def from_env(cls):
-        return cls(
-            ignored_fillers=set(_split_csv(os.getenv("IGNORED_FILLERS"))) or cls().ignored_fillers,
-            command_keywords=set(_split_csv(os.getenv("INTERRUPT_COMMANDS"))) or cls().command_keywords,
-            min_confidence=float(os.getenv("ASR_MIN_CONFIDENCE", cls().min_confidence)),
-        )
+    # Explicit interruption commands
+    command_keywords: Set[str] = field(default_factory=lambda: {
+        "stop", "wait", "pause", "hold", "cancel",
+        "no", "hold on", "enough"
+    })
 
 
 class InterruptionDecision:
@@ -58,6 +47,7 @@ class InterruptionFilter:
     def contains_command(self, text: str) -> bool:
         norm = self._normalize(text)
         tokens = self._tokens(text)
+
         for cmd in self.policy.command_keywords:
             if " " in cmd and cmd in norm:
                 return True
@@ -65,14 +55,10 @@ class InterruptionFilter:
                 return True
         return False
 
-    def decide(self, *, text: str, confidence: float | None, agent_speaking: bool):
-        conf = confidence if confidence is not None else 1.0
-
+    # IDENTICAL LOGIC TO PASTED SCRIPT
+    def decide(self, *, text: str, agent_speaking: bool):
         if not agent_speaking:
             return InterruptionDecision.REGISTER
-
-        if conf < self.policy.min_confidence:
-            return InterruptionDecision.IGNORE
 
         if self.is_fillers_only(text):
             return InterruptionDecision.IGNORE
@@ -80,4 +66,5 @@ class InterruptionFilter:
         if self.contains_command(text):
             return InterruptionDecision.INTERRUPT
 
+        # mixed / non-filler speech while agent is speaking
         return InterruptionDecision.INTERRUPT
