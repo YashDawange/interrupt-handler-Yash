@@ -1,0 +1,22 @@
+    22:39:55 DEBUG  asyncio          Using proactor: IocpProactor  
+             DEV    livekit.agents   Watching D:\VSC KARTIK                    
+                                     VATS\GENAI\agents-assignment\examples\vo  
+                                     ice_agents                                
+             DEV    livekit.agents   Watching D:\VSC KARTIK                    
+                                     VATS\GENAI\agents-assignment\livekit-age  
+                                     nts                                       
+    22:39:56 DEBUG  asyncio          Using proactor: IocpProactor  
+             INFO   livekit.agents   starting worker {"version": "1.3.3",      
+                                                     "rtc-version": "1.0.23"}  
+             INFO   livekit.agents   starting inference executor  
+             INFO   livekit.agents   initializing process {"pid": 17140,       
+                                                          "inference": true}   
+    22:40:00 INFO   livekit.agents   process initialized {"pid": 17140,        
+                                                         "inference": true,    
+                                                         "elapsed_time": 4.11} 
+    22:40:01 INFO   livekit.agents   registered worker {"agent_name": "", "id":
+                                                       "AW_JvPSm4f7N9uN",      
+                                                       "url":                  
+                                                       "wss://salescode-assign…
+                                                       "region": "India South",
+                                                       "protocol": 16}         

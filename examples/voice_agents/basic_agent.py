@@ -1,3 +1,19 @@
+"""
+Basic Voice Agent with Intelligent Interruption Handling (TSF)
+
+This agent demonstrates the Temporal-Semantic Fusion (TSF) approach for handling
+user interruptions. It ignores backchanneling ("yeah", "ok") while speaking but
+responds to active commands ("stop", "wait").
+
+ADDED BY: Kartik Vats (feature/interrupt-handler-kartik)
+See interruption_handler.py for the modular TSF implementation.
+
+Usage:
+    python basic_agent.py dev     # Development mode with hot reload
+    python basic_agent.py console # Terminal testing mode
+    python basic_agent.py start   # Production mode
+"""
+
 import logging
 
 from dotenv import load_dotenv
@@ -17,6 +33,11 @@ from livekit.agents import (
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+# ============================================================================
+# ADDED: Import TSF Interruption Handler (Kartik Vats)
+# ============================================================================
+from interruption_handler import setup_interruption_handler
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -80,15 +101,12 @@ async def entrypoint(ctx: JobContext):
         "room": ctx.room.name,
     }
     session = AgentSession(
-        # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
-        # See all available models at https://docs.livekit.io/agents/models/stt/
-        stt="deepgram/nova-3",
-        # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
-        # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
-        # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
-        # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
-        tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+        # Speech-to-text (STT) - via LiveKit Cloud proxy
+        stt="deepgram/nova-2",
+        # LLM - via LiveKit Cloud proxy
+        llm="openai/gpt-4o-mini",
+        # TTS - via LiveKit Cloud proxy (sonic is the model, voice ID after colon)
+        tts="cartesia/sonic:79a125e8-cd45-4c13-8a67-188112f4dd22",
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
         turn_detection=MultilingualModel(),
@@ -96,10 +114,13 @@ async def entrypoint(ctx: JobContext):
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
         preemptive_generation=True,
-        # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
-        # when it's detected, you may resume the agent's speech
-        resume_false_interruption=True,
-        false_interruption_timeout=1.0,
+        # ========================================================================
+        # ADDED FOR TSF (Kartik Vats): Intelligent Interruption Handling
+        # ========================================================================
+        # Disable default auto-interruption - TSF handler will manage this
+        allow_interruptions=False,
+        # Keep STT running even when agent speaks, so we receive transcripts to analyze
+        discard_audio_if_uninterruptible=False,
     )
 
     # log metrics as they are emitted, and total usage after session is over
@@ -116,6 +137,15 @@ async def entrypoint(ctx: JobContext):
 
     # shutdown callbacks are triggered when the session is over
     ctx.add_shutdown_callback(log_usage)
+
+    # ========================================================================
+    # SET UP INTELLIGENT INTERRUPTION HANDLER (TSF)
+    # ========================================================================
+    # This registers the user_input_transcribed event handler that:
+    # - Ignores "yeah", "ok", "hmm" while agent is speaking (backchannels)
+    # - Triggers interruption for "stop", "wait" (commands)
+    # - Processes all input normally when agent is silent
+    setup_interruption_handler(session)
 
     await session.start(
         agent=MyAgent(),

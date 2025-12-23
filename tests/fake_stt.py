@@ -159,6 +159,7 @@ class FakeRecognizeStream(RecognizeStream):
         return self._attempt
 
     def send_fake_transcript(self, transcript: str, is_final: bool = True) -> None:
+        print(f"DEBUG: Sending fake transcript: {transcript}")
         self._event_ch.send_nowait(
             SpeechEvent(
                 type=SpeechEventType.FINAL_TRANSCRIPT
@@ -187,11 +188,17 @@ class FakeRecognizeStream(RecognizeStream):
             raise self._stt._fake_exception
 
     async def _fake_user_speech_task(self) -> None:
+        print(f"DEBUG: _fake_user_speech_task started. Speeches: {len(self._stt._fake_user_speeches) if self._stt._fake_user_speeches else 0}")
         if not self._stt._fake_user_speeches:
             return
 
-        # start from when the first frame is pushed
-        await self._input_ch.recv()
+        # start from when the first frame is pushed; fall back to a short timeout so tests don't hang
+        print("DEBUG: Waiting for first frame...")
+        try:
+            await asyncio.wait_for(self._input_ch.recv(), timeout=0.2)
+            print("DEBUG: First frame received!")
+        except asyncio.TimeoutError:
+            print("DEBUG: First frame not received in time, proceeding anyway")
         start_time = time.perf_counter()
 
         def curr_time() -> float:

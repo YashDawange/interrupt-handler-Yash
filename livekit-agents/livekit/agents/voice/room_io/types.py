@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Optional
@@ -50,7 +51,8 @@ NoiseCancellationSelector = Callable[
 
 
 def _default_text_input_cb(sess: AgentSession, ev: TextInputEvent) -> None:
-    sess.interrupt()
+    # Interrupt asynchronously since we're in a sync callback.
+    asyncio.create_task(sess.interrupt())
     sess.generate_reply(user_input=ev.text)
 
 

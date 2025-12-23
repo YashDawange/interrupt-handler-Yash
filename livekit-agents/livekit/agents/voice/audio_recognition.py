@@ -649,7 +649,11 @@ class AudioRecognition:
         if task is not None:
             await aio.cancel_and_wait(task)
 
-        node = stt_node(audio_input, ModelSettings())
+        try:
+            node = stt_node(audio_input, ModelSettings())
+        except Exception as e:
+            raise
+
         if asyncio.iscoroutine(node):
             node = await node
 
