@@ -1,5 +1,4 @@
 import logging
-
 from dotenv import load_dotenv
 from livekit.agents import (
     Agent,
@@ -19,15 +18,21 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# Import our custom backchannel handler
-from backchannel_handler import BackchannelInterruptHandler
+from backchannel_handler import SmartInterruptionHandler
 
-logger = logging.getLogger("basic-agent")
+# Initialize logging subsystem
+logger = logging.getLogger("voice-assistant")
 load_dotenv()
 
 
-class MyAgent(Agent):
+class ConversationalAssistant(Agent):
+    """
+    Full-featured conversational AI agent with natural interaction capabilities.
+    Designed to handle broad topic discussions while maintaining conversational flow.
+    """
+    
     def __init__(self) -> None:
+        """Configure agent personality and behavioral guidelines."""
         super().__init__(
             instructions=(
                 "Your name is Kelly. "
@@ -45,7 +50,10 @@ class MyAgent(Agent):
         )
 
     async def on_enter(self):
-        """When the agent is added to the session, generate initial reply."""
+        """
+        Lifecycle hook: executed when agent joins the session.
+        Triggers initial greeting generation based on instructions.
+        """
         self.session.generate_reply()
 
     @function_tool
@@ -57,120 +65,182 @@ class MyAgent(Agent):
         longitude: str,
     ):
         """
-        OPTIONAL helper tool.
-        Use this tool ONLY when the user explicitly asks for weather information
-        (e.g., temperature, forecast, rain, humidity).
-        Do NOT use this tool for general conversation or explanations.
+        Weather information retrieval tool.
+        
+        Usage Policy:
+        - Only invoke when user explicitly requests weather data
+        - Do not use for general conversation or explanations
+        - Suitable for queries about: temperature, forecast, precipitation, humidity
+        
+        Args:
+            location: Human-readable location name
+            latitude: Geographic latitude coordinate
+            longitude: Geographic longitude coordinate
+        
+        Returns:
+            Weather information string
         """
-        logger.info(f"Weather tool invoked for location: {location}")
+        logger.info(f"Weather query for location: {location}")
         return "It is currently sunny with a temperature of 70 degrees."
 
 
+# Initialize agent server instance
 server = AgentServer()
 
 
 def prewarm(proc: JobProcess):
-    """Load VAD once per worker process."""
+    """
+    Worker process initialization hook.
+    Pre-loads heavy resources (like VAD model) once per process
+    to avoid repeated loading overhead during conversations.
+    """
+    logger.info("Pre-warming worker process with VAD model")
     proc.userdata["vad"] = silero.VAD.load()
 
 
+# Register prewarm function
 server.setup_fnc = prewarm
 
 
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
-    """Main entry point for the agent session."""
+    """
+    Session entry point: orchestrates the entire conversation lifecycle.
+    Sets up all components, event handlers, and starts the agent session.
+    """
     
-    # Set up logging context
-    ctx.log_context_fields = {
-        "room": ctx.room.name,
-    }
+    # Configure structured logging with room context
+    ctx.log_context_fields = {"room": ctx.room.name}
+    logger.info(f"Starting new session in room: {ctx.room.name}")
 
-    # ===========
-    # AGENT SESSION SETUP
-    # ===========
+    # ==========================================
+    # SESSION CONFIGURATION
+    # ==========================================
     session = AgentSession(
+        # Speech-to-Text provider and model
         stt="deepgram/nova-3",
+        
+        # Language model for conversation
         llm="google/gemini-2.5-flash",
+        
+        # Text-to-Speech provider and voice
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
+        
+        # Turn detection for natural conversation flow
         turn_detection=MultilingualModel(),
+        
+        # Voice Activity Detection (pre-loaded)
         vad=ctx.proc.userdata["vad"],
+        
+        # Enable proactive response generation
         preemptive_generation=True,
+        
+        # Interruption behavior (framework-level)
         allow_interruptions=True,
         discard_audio_if_uninterruptible=True,
-        min_interruption_duration=0.6,
-        min_interruption_words=2,
+        
+        # Fine-tuning interruption sensitivity
+        min_interruption_duration=0.6,   # seconds of speech required
+        min_interruption_words=2,         # minimum word count for interruption
     )
 
-    # ===========
-    # INITIALIZE BACKCHANNEL HANDLER
-    # ===========
-    interrupt_handler = BackchannelInterruptHandler()
+    # ==========================================
+    # SMART INTERRUPTION SYSTEM INITIALIZATION
+    # ==========================================
+    interruption_handler = SmartInterruptionHandler()
+    logger.info("Smart interruption system activated")
 
-    # ===========
-    # METRICS LOGGING
-    # ===========
+    # ==========================================
+    # TELEMETRY AND METRICS COLLECTION
+    # ==========================================
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
-    def _on_metrics_collected(ev: MetricsCollectedEvent):
-        metrics.log_metrics(ev.metrics)
-        usage_collector.collect(ev.metrics)
+    def handle_metrics_collection(event: MetricsCollectedEvent):
+        """
+        Process and log collected metrics from the session.
+        Tracks usage for monitoring and optimization.
+        """
+        metrics.log_metrics(event.metrics)
+        usage_collector.collect(event.metrics)
 
-    async def log_usage():
+    async def log_session_summary():
+        """
+        Shutdown callback: logs final usage summary.
+        Called automatically when session ends.
+        """
         summary = usage_collector.get_summary()
-        logger.info(f"Usage: {summary}")
+        logger.info(f"Session completed. Usage summary: {summary}")
 
-    ctx.add_shutdown_callback(log_usage)
+    ctx.add_shutdown_callback(log_session_summary)
 
-    # ===========
-    # INTELLIGENT INTERRUPTION LAYER
-    # ===========
+    # ==========================================
+    # EVENT HANDLERS FOR INTERRUPTION LOGIC
+    # ==========================================
 
     @session.on("agent_state_changed")
-    def _on_agent_state_changed(ev: AgentStateChangedEvent):
-        """Track agent speaking state for interruption logic."""
-        is_speaking = ev.new_state == "speaking"
-        interrupt_handler.update_agent_speaking_state(is_speaking)
-        logger.debug("Agent state changed: %s -> %s", ev.old_state, ev.new_state)
+    def handle_agent_state_transition(event: AgentStateChangedEvent):
+        """
+        Monitor agent state transitions to track when agent is speaking.
+        
+        States: initializing → listening → thinking → speaking
+        The 'speaking' state is crucial for interruption decisions.
+        """
+        currently_speaking = (event.new_state == "speaking")
+        interruption_handler.update_agent_speaking_state(currently_speaking)
+        
+        logger.debug(
+            f"Agent transitioned: {event.old_state} → {event.new_state}"
+        )
 
     @session.on("user_input_transcribed")
-    def _on_user_input_transcribed(ev: UserInputTranscribedEvent):
+    def handle_user_speech(event: UserInputTranscribedEvent):
         """
-        Handle user input with intelligent interruption logic.
+        Process incoming user speech transcripts with intelligent interruption logic.
         
-        Core logic:
-        - If the agent is NOT speaking → do nothing, let normal behavior happen.
-        - If the agent IS speaking:
-            * If final transcript is only backchannel words → ignore.
-            * If final transcript contains interrupt words or non-backchannel → interrupt.
+        Strategy:
+        - Allow normal flow when agent is silent (user can respond freely)
+        - Filter out acknowledgments when agent is speaking (maintain flow)
+        - Interrupt immediately on explicit commands or substantive input
+        
+        This creates a natural conversation where users can acknowledge
+        without disrupting the agent, but can also interrupt when needed.
         """
-        text = (ev.transcript or "").strip()
+        transcript = (event.transcript or "").strip()
         
-        # Use the handler to determine if we should interrupt
-        should_interrupt, reason = interrupt_handler.should_interrupt(text, ev.is_final)
+        # Analyze transcript and get interruption decision
+        should_interrupt, reason = interruption_handler.should_interrupt(
+            transcript, 
+            event.is_final
+        )
         
+        # Execute appropriate action based on decision
         if reason == "soft_backchannel":
-            # Clear the current user turn so these words are not committed
+            # Acknowledgment detected: clear from history to prevent echo
+            logger.debug(f"Filtered acknowledgment: '{transcript}'")
             session.clear_user_turn()
             return
         
         if should_interrupt:
-            # Force interruption for strong interrupts or mixed input
+            # Real interruption: stop agent and process user input
+            logger.info(f"User interrupted agent: '{transcript}' (reason: {reason})")
             session.interrupt(force=True)
             return
         
-        # Otherwise, let normal session behavior handle it
+        # Normal processing: let framework handle it naturally
+        # (This covers cases where agent isn't speaking)
 
-    # ===========
-    # START SESSION
-    # ===========
+    # ==========================================
+    # SESSION STARTUP
+    # ==========================================
+    logger.info("Launching agent session")
     await session.start(
-        agent=MyAgent(),
+        agent=ConversationalAssistant(),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
-                # noise_cancellation=noise_cancellation.BVC(),  # optional
+                # Optional: noise cancellation can be enabled here
+                # noise_cancellation=noise_cancellation.BVC(),
             ),
         ),
     )
