@@ -1,11 +1,16 @@
 import logging
 
+IGNORE_WORDS = {"yeah", "ok", "hmm", "uh-huh"}
+INTERRUPT_WORDS = {"stop", "wait", "no"}
+
+agent_speaking = False
+
+
 from dotenv import load_dotenv
-from google.genai.types import Modality  # noqa: F401
 
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, cli, room_io
 from livekit.agents.llm import function_tool
-from livekit.plugins import google, openai  # noqa: F401
+from livekit.plugins import openai
 
 logger = logging.getLogger("realtime-with-tts")
 logger.setLevel(logging.INFO)
@@ -24,10 +29,20 @@ class WeatherAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
             instructions="You are a helpful assistant.",
-            llm=openai.realtime.RealtimeModel(modalities=["text"]),
-            # llm=google.beta.realtime.RealtimeModel(modalities=[Modality.TEXT]),
+            llm=openai.LLM(
+                model="gpt-4o-mini",
+            ),
+
             tts=openai.TTS(voice="ash"),
         )
+    async def on_speech_start(self):
+        global agent_speaking
+        agent_speaking = True
+
+    async def on_speech_end(self):
+        global agent_speaking
+        agent_speaking = False
+
 
     @function_tool
     async def get_weather(self, location: str):
@@ -39,6 +54,21 @@ class WeatherAgent(Agent):
 
         logger.info(f"getting weather for {location}")
         return f"The weather in {location} is sunny, and the temperature is 20 degrees Celsius."
+
+def handle_user_transcript(text: str, session: AgentSession):
+    global agent_speaking
+
+    text = text.lower().strip()
+
+    if agent_speaking:
+        # If agent is speaking
+        if any(word in text for word in INTERRUPT_WORDS):
+            session.interrupt()
+        elif text in IGNORE_WORDS:
+            return  # ignore acknowledgement
+    else:
+        session.generate_reply(instructions=text)
+
 
 
 server = AgentServer()
