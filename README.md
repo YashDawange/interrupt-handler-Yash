@@ -8,7 +8,7 @@ The **Intelligent Interruption Handler** is a sophisticated middleware designed 
 
 Check out the Intelligent Interruption Handler in action on the LiveKit Playground:
 
-[![LiveKit Agent Demo](https://img.youtube.com/vi/placeholder/0.jpg)](https://www.youtube.com/watch?v=placeholder)
+[![LiveKit Agent Demo]](https://drive.google.com/file/d/1_Bys1ryr2iHB9c2q4F1jGAC4omqEK6Q5/view?usp=sharing)
 *Note: Click the image above to watch the demonstration of backchannel filtering and command-driven interruptions.*
 
 ## 🛡️ Multilevel Guard Architecture
