@@ -1,3 +1,21 @@
+
+## Interruption Handling Assignment
+
+✅ Ignores "yeah/ok/hmm" while agent is speaking  
+✅ Responds to "yeah" when waiting for user answer  
+✅ Interrupts immediately on "stop/wait/no"  
+✅ Configurable via `.env`
+
+### Setup
+1. Fork this repo
+2. Copy `.env.example` to `.env`
+3. Add your API keys
+4. Run: `python main.py dev`
+
+demo link
+https://drive.google.com/drive/folders/1mZ5e7qeNdvscV6Hi2xuL-CBI_7qhnM6p?usp=sharing
+
+
 # Voice Agents Examples
 
 This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
