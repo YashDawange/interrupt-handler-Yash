@@ -40,6 +40,7 @@ from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
 from ..utils.misc import is_given
 from ._utils import _set_participant_attributes
+from .interrupt_policy import InterruptionPolicy
 from .agent import (
     Agent,
     ModelSettings,
@@ -125,6 +126,12 @@ class AgentActivity(RecognitionHooks):
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
+        # interruption policy and short grace timer to avoid false-start pauses
+        self._interrupt_policy: InterruptionPolicy = InterruptionPolicy.from_env()
+        self._ack_grace_timer: asyncio.TimerHandle | None = None
+        # tracking the most recent interim delta to apply semantic gating on just-arrived words
+        self._latest_user_chunk: str = ""
+        self._prev_interim_text: str = ""
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
@@ -1169,10 +1176,60 @@ class AgentActivity(RecognitionHooks):
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
+        # small helper to abbreviate logs
+        def _abbr(s: str, n: int = 60) -> str:
+            s = (s or "").strip()
+            return (s[: n - 1] + "…") if len(s) > n else s
 
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
             # ignore if realtime model has turn detection enabled
             return
+
+        # treat active, uncompleted speech as speaking for gating purposes
+        is_agent_speaking = (
+            self._session.agent_state == "speaking"
+            or (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and not self._current_speech.done()
+            )
+        )
+
+        text_for_semantic = ""
+        if self._audio_recognition is not None:
+            # prefer the latest delta chunk while speaking, else fall back to full transcript
+            full_text = self._audio_recognition.current_transcript
+            text_for_semantic = (self._latest_user_chunk if is_agent_speaking else full_text).strip()
+
+        if is_agent_speaking:
+            # If no transcript yet (VAD first), schedule a short grace re-check
+            if not text_for_semantic:
+                if (
+                    self._current_speech is not None
+                    and not self._current_speech.interrupted
+                    and self._current_speech.allow_interruptions
+                ):
+                    logger.debug(
+                        "ack grace scheduled (no transcript yet while speaking)",
+                        extra={"ack_grace_ms": self._interrupt_policy.ack_grace_ms},
+                    )
+                    self._schedule_ack_grace_check()
+                return
+
+            if self._interrupt_policy.contains_hard(text_for_semantic):
+                logger.info(
+                    "hard interruption keyword detected while speaking",
+                    extra={"user_text": _abbr(text_for_semantic)},
+                )
+            elif self._interrupt_policy.is_only_soft_ack(text_for_semantic):
+                logger.info(
+                    "soft acknowledgement detected while speaking; ignoring",
+                    extra={"user_text": _abbr(text_for_semantic)},
+                )
+                if self._ack_grace_timer:
+                    self._ack_grace_timer.cancel()
+                    self._ack_grace_timer = None
+                return
 
         if (
             self.stt is not None
@@ -1183,6 +1240,10 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                logger.debug(
+                    "ignoring potential interruption (below min_interruption_words)",
+                    extra={"min_interruption_words": opt.min_interruption_words, "user_text": _abbr(text)},
+                )
                 return
 
         if self._rt_session is not None:
@@ -1201,15 +1262,34 @@ class AgentActivity(RecognitionHooks):
                 self._false_interruption_timer = None
 
             if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
+                logger.debug("pausing current speech due to user activity (pause supported)")
                 self._session.output.audio.pause()
                 self._session._update_agent_state("listening")
             else:
                 if self._rt_session is not None:
                     self._rt_session.interrupt()
 
+                logger.debug("interrupting current speech due to user activity")
                 self._current_speech.interrupt()
 
     # region recognition hooks
+
+    def _schedule_ack_grace_check(self) -> None:
+        if self._ack_grace_timer is not None:
+            self._ack_grace_timer.cancel()
+            self._ack_grace_timer = None
+
+        delay = max(self._interrupt_policy.ack_grace_ms, 0) / 1000.0
+
+        def _cb() -> None:
+            self._ack_grace_timer = None
+            logger.debug("ack grace recheck fired")
+            try:
+                self._interrupt_by_audio_activity()
+            except Exception:
+                logger.exception("ack grace recheck failed")
+
+        self._ack_grace_timer = self._session._loop.call_later(delay, _cb)
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
@@ -1218,6 +1298,12 @@ class AgentActivity(RecognitionHooks):
             # cancel the timer when user starts speaking but leave the paused state unchanged
             self._false_interruption_timer.cancel()
             self._false_interruption_timer = None
+        if self._ack_grace_timer:
+            self._ack_grace_timer.cancel()
+            self._ack_grace_timer = None
+        # reset interim delta tracking
+        self._latest_user_chunk = ""
+        self._prev_interim_text = ""
 
     def on_end_of_speech(self, ev: vad.VADEvent | None) -> None:
         speech_end_time = time.time()
@@ -1234,6 +1320,9 @@ class AgentActivity(RecognitionHooks):
         ):
             # schedule a resume timer when user stops speaking
             self._start_false_interruption_timer(timeout)
+        if self._ack_grace_timer:
+            self._ack_grace_timer.cancel()
+            self._ack_grace_timer = None
 
     def on_vad_inference_done(self, ev: vad.VADEvent) -> None:
         if self._turn_detection in ("manual", "realtime_llm"):
@@ -1261,6 +1350,14 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
+            # compute delta chunk from interim growth for semantic gating
+            new_text = ev.alternatives[0].text or ""
+            i = 0
+            max_i = min(len(self._prev_interim_text), len(new_text))
+            while i < max_i and self._prev_interim_text[i] == new_text[i]:
+                i += 1
+            self._latest_user_chunk = new_text[i:].strip()
+            self._prev_interim_text = new_text
             self._interrupt_by_audio_activity()
 
             if (
@@ -1275,6 +1372,11 @@ class AgentActivity(RecognitionHooks):
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
+
+        # update delta tracker on final
+        final_text = ev.alternatives[0].text or ""
+        self._latest_user_chunk = final_text.strip()
+        self._prev_interim_text = final_text
 
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
@@ -1314,6 +1416,24 @@ class AgentActivity(RecognitionHooks):
             or not isinstance(self.llm, llm.LLM)
         ):
             return
+
+        # Suppress speculative replies on soft-ack while speaking/active
+        is_agent_speaking = (
+            self._session.agent_state == "speaking"
+            or (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and not self._current_speech.done()
+            )
+        )
+        if is_agent_speaking:
+            new_text = (info.new_transcript or "").strip()
+            if new_text and self._interrupt_policy.is_only_soft_ack(new_text):
+                logger.info(
+                    "preemptive generation suppressed for soft acknowledgement while speaking",
+                    extra={"user_text": new_text},
+                )
+                return
 
         self._cancel_preemptive_generation()
 
@@ -1364,6 +1484,23 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        # Suppress committing a turn when current agent speech is active and the user's turn
+        # is only a soft acknowledgement (e.g., "yeah/ok/right/hmm"). This avoids stopping
+        # the agent and replying with filler acknowledgements.
+        if (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        ):
+            new_text = (info.new_transcript or "").strip()
+            if new_text and self._interrupt_policy.is_only_soft_ack(new_text):
+                self._cancel_preemptive_generation()
+                logger.info(
+                    "end_of_turn suppressed for soft acknowledgement while agent speech active",
+                    extra={"user_text": new_text},
+                )
+                return False
 
         if (
             self.stt is not None
