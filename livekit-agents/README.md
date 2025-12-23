@@ -35,3 +35,30 @@ async def entrypoint(ctx: agents.JobContext):
 if __name__ == "__main__":
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
 ```
+
+
+
+
+
+# LiveKit Backchannel Interruption Handling
+
+## Problem
+LiveKit’s default VAD interrupts agent speech when users say passive
+acknowledgements like "yeah", "ok", or "hmm".
+
+## Solution
+We added a context-aware interruption layer in `speech_handle.py`.
+
+### Key Behavior
+- If the agent is speaking:
+  - Passive acknowledgements are ignored
+  - Explicit interruption words cancel speech
+- If the agent is silent:
+  - All user input is handled normally
+
+### Configuration
+Ignored and interrupt words are configurable via environment variables:
+
+```bash
+export LIVEKIT_IGNORE_WORDS="yeah,ok,okay,hmm"
+export LIVEKIT_INTERRUPT_WORDS="stop,wait,pause"

@@ -4,9 +4,33 @@ import asyncio
 import contextlib
 from collections.abc import Generator, Sequence
 from typing import Any, Callable
+import re
 
 from .. import llm, utils
+import os
 
+IGNORE_WORDS = set(
+    os.getenv(
+        "LIVEKIT_IGNORE_WORDS",
+        "yeah,ok,okay,hmm,uh-huh,right"
+    ).split(",")
+)
+
+INTERRUPT_WORDS = set(
+    os.getenv(
+        "LIVEKIT_INTERRUPT_WORDS",
+        "stop,wait,no,hold,pause"
+    ).split(",")
+)
+
+def _is_passive_ack(text: str) -> bool:
+    words = set(re.findall(r"\b\w+\b", text.lower()))
+    return words and words.issubset(IGNORE_WORDS)
+
+
+def _is_active_interrupt(text: str) -> bool:
+    words = set(re.findall(r"\b\w+\b", text.lower()))
+    return bool(words & INTERRUPT_WORDS)
 
 class SpeechHandle:
     SPEECH_PRIORITY_LOW = 0
@@ -15,15 +39,16 @@ class SpeechHandle:
     """Every speech generates by the VoiceAgent defaults to this priority."""
     SPEECH_PRIORITY_HIGH = 10
     """Priority for important messages that should be played before others."""
-
+    
     def __init__(self, *, speech_id: str, allow_interruptions: bool) -> None:
         self._id = speech_id
         self._allow_interruptions = allow_interruptions
-
+        self._pending_interrupt = False
         self._interrupt_fut = asyncio.Future[None]()
         self._done_fut = asyncio.Future[None]()
         self._scheduled_fut = asyncio.Future[None]()
         self._authorize_event = asyncio.Event()
+        self._is_speaking = False
 
         self._generations: list[asyncio.Future[None]] = []
 
@@ -41,6 +66,28 @@ class SpeechHandle:
 
         self._done_fut.add_done_callback(_on_done)
         self._maybe_run_final_output: Any = None  # kept private
+    def on_final_transcript(self, text: str) -> None:
+            # Only care if agent is currently speaking
+            if not self._is_speaking or not self._allow_interruptions:
+             return
+
+            text = text.strip().lower()
+            if not text:
+                return
+
+            words = set(re.findall(r"\b\w+\b", text))
+
+            # CASE 1: Passive acknowledgements → ignore
+            if words and words.issubset(IGNORE_WORDS):
+                return
+
+            # CASE 2: Explicit interrupt words → interrupt
+            if words & INTERRUPT_WORDS:
+                self._cancel()
+                return
+
+            # CASE 3: Any other speech while agent talks → interrupt
+            self._cancel()
 
     @staticmethod
     def create(allow_interruptions: bool = True) -> SpeechHandle:
@@ -106,9 +153,15 @@ class SpeechHandle:
         Returns:
             SpeechHandle: The same speech handle that was interrupted.
         """
-        if not force and not self._allow_interruptions:
-            raise RuntimeError("This generation handle does not allow interruptions")
+        if not self._allow_interruptions:
+            return self
 
+        # Agent is speaking → defer decision
+        if self._is_speaking:
+            self._pending_interrupt = True
+            return self
+
+        # Agent is silent → interrupt normally
         self._cancel()
         return self
 
@@ -172,10 +225,14 @@ class SpeechHandle:
 
     def _item_added(self, items: Sequence[llm.ChatItem]) -> None:
         for item in items:
+            if item.role == "user" and hasattr(item, "content"):
+                self.on_final_transcript(item.content)
+            
             for cb in self._item_added_callbacks:
                 cb(item)
 
             self._chat_items.append(item)
+
 
     def _authorize_generation(self) -> None:
         fut = asyncio.Future[None]()
@@ -205,6 +262,8 @@ class SpeechHandle:
             self._generations[-1].set_result(None)
 
     def _mark_done(self) -> None:
+        self._is_speaking = False
+
         with contextlib.suppress(asyncio.InvalidStateError):
             # will raise InvalidStateError if the future is already done (interrupted)
             self._done_fut.set_result(None)
@@ -212,5 +271,12 @@ class SpeechHandle:
                 self._mark_generation_done()  # preemptive generation could be cancelled before being scheduled
 
     def _mark_scheduled(self) -> None:
+        self._is_speaking = True
+
+        if self._pending_interrupt:
+            self._pending_interrupt = False
+            self._cancel()
+            return
+
         with contextlib.suppress(asyncio.InvalidStateError):
             self._scheduled_fut.set_result(None)
