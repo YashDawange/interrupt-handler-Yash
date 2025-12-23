@@ -75,6 +75,7 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .semantic_interruptions import CommandDetector, SoftWordFilter
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -136,6 +137,8 @@ class AgentActivity(RecognitionHooks):
 
         self._preemptive_generation: _PreemptiveGeneration | None = None
 
+        self._semantic_interrupt_detector: CommandDetector | None = None
+
         self._drain_blocked_tasks: list[asyncio.Task[Any]] = []
         self._mcp_tools: list[mcp.MCPTool] = []
 
@@ -163,6 +166,22 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+    def _get_semantic_interrupt_detector(self) -> CommandDetector | None:
+        opt = self._session.options
+        if opt.semantic_interruption_soft_words is None:
+            return None
+
+        if self._semantic_interrupt_detector is None:
+            stop_commands = opt.semantic_interruption_stop_commands or []
+            correction_cues = opt.semantic_interruption_correction_cues or []
+            self._semantic_interrupt_detector = CommandDetector(
+                stop_commands=stop_commands,
+                correction_cues=correction_cues,
+                soft_filter=SoftWordFilter(opt.semantic_interruption_soft_words),
+            )
+
+        return self._semantic_interrupt_detector
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1181,9 +1200,32 @@ class AgentActivity(RecognitionHooks):
         ):
             text = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+            detector = self._get_semantic_interrupt_detector()
+            if detector is not None:
+                label, _ = detector.classify(text)
+                # If we don't have text yet, do not interrupt based on VAD alone.
+                if label in ("empty", "soft"):
+                    return
+
+                # Preserve the previous min_interruption_words behavior for generic content,
+                # but always allow hard commands/corrections to interrupt.
+                if label == "content":
+                    # TODO(long): better word splitting for multi-language
+                    if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                        return
+            else:
+                # TODO(long): better word splitting for multi-language
+                if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                    return
+
+        elif self._audio_recognition is not None:
+            # Semantic interruption can run even when min_interruption_words == 0.
+            detector = self._get_semantic_interrupt_detector()
+            if detector is not None:
+                text = self._audio_recognition.current_transcript
+                label, _ = detector.classify(text)
+                if label in ("empty", "soft"):
+                    return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
@@ -1371,12 +1413,20 @@ class AgentActivity(RecognitionHooks):
             and self._current_speech is not None
             and self._current_speech.allow_interruptions
             and not self._current_speech.interrupted
-            and self._session.options.min_interruption_words > 0
-            and len(split_words(info.new_transcript, split_character=True))
-            < self._session.options.min_interruption_words
+            and (
+                (
+                    (detector := self._get_semantic_interrupt_detector()) is not None
+                    and detector.classify(info.new_transcript)[0] == "soft"
+                )
+                or (
+                    self._session.options.min_interruption_words > 0
+                    and len(split_words(info.new_transcript, split_character=True))
+                    < self._session.options.min_interruption_words
+                )
+            )
         ):
             self._cancel_preemptive_generation()
-            # avoid interruption if the new_transcript is too short
+            # Avoid interruption/reply when the new transcript is too short, or soft-only.
             return False
 
         old_task = self._user_turn_completed_atask

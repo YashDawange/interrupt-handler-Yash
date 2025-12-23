@@ -2,6 +2,10 @@
 
 This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
 
+## 🔑 Environment
+
+Copy `env.sample` to `.env` in this directory and fill in your keys (OpenAI, Deepgram, Cartesia, LiveKit). Examples now load that `.env` directly, so you can run them from the repo root without exporting variables manually.
+
 ## 📋 Table of Contents
 
 ### 🚀 Getting Started
@@ -35,6 +39,7 @@ This directory contains a comprehensive collection of voice-based agent examples
 - [`inactive_user.py`](./inactive_user.py) - Handling inactive users with the `user_state_changed` event hook
 - [`resume_interrupted_agent.py`](./resume_interrupted_agent.py) - Resuming agent speech after false interruption detection
 - [`toggle_io.py`](./toggle_io.py) - Dynamically toggling audio input/output during conversations
+- [`intelligent_interrupt.py`](./intelligent_interrupt.py) - Context-aware interruption handling (ignores backchanneling while speaking, interrupts on real commands; uses Gemini)
 
 ### 🤖 Multi-agent & AgentTask Use Cases
 
