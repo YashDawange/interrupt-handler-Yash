@@ -1,3 +1,97 @@
+"""
+backchannel_handler.py
+
+==================================================================================
+INTELLIGENT INTERRUPTION DETECTION SYSTEM FOR VOICE ASSISTANTS
+==================================================================================
+
+MODULE OVERVIEW:
+This module implements a sophisticated interruption handling mechanism that distinguishes
+between conversational acknowledgments (backchannels) and genuine interruption attempts
+in voice-based AI assistant conversations.
+
+PROBLEM ADDRESSED:
+Traditional voice assistants treat every user utterance as an interruption, creating
+unnatural interactions where simple acknowledgments like "yeah" or "okay" disrupt the
+assistant mid-sentence. This module solves that problem intelligently.
+
+KEY COMPONENTS:
+---------------
+1. VocabularyManager
+   - Manages word lists for acknowledgments and interruption signals
+   - Supports environment-based configuration for deployment flexibility
+   - Provides fast lookup methods for word classification
+
+2. TextProcessor
+   - Handles text normalization and tokenization
+   - Ensures consistent text processing across the system
+   - Removes punctuation and standardizes case
+
+3. InterruptionEngine
+   - Core decision-making logic with state awareness
+   - Implements sophisticated rules for interruption detection
+   - Includes confidence scoring for each decision
+
+4. SmartInterruptionHandler
+   - High-level interface for easy integration with agent systems
+   - Coordinates all components and provides simple API
+   - Maintains backward compatibility with simple function calls
+
+DESIGN APPROACH:
+---------------
+The system uses object-oriented programming with multi-class architecture to separate
+concerns and improve maintainability. Each class has a single responsibility, making
+the code testable, extensible, and easy to understand.
+
+Decision Logic Flow:
+1. Agent not speaking → Allow normal conversation flow
+2. Interim transcript → Wait for final version to avoid false positives
+3. Pure acknowledgment while speaking → Filter out, don't interrupt
+4. Contains interruption signal → Immediately interrupt agent
+5. Mixed content while speaking → Treat as genuine interruption
+
+USAGE EXAMPLE:
+-------------
+    from backchannel_handler import SmartInterruptionHandler
+    
+    handler = SmartInterruptionHandler()
+    
+    # Update when agent state changes
+    handler.update_agent_speaking_state(is_speaking=True)
+    
+    # Check if user input should interrupt
+    should_interrupt, reason = handler.should_interrupt("yeah okay", is_final=True)
+    
+    if should_interrupt:
+        session.interrupt(force=True)
+    elif reason == "soft_backchannel":
+        session.clear_user_turn()
+
+CONFIGURATION:
+-------------
+Word lists can be customized via environment variables:
+- BACKCHANNEL_WORDS: Comma-separated list of acknowledgment words
+- INTERRUPT_WORDS: Comma-separated list of interruption commands
+
+Example:
+    export BACKCHANNEL_WORDS="yeah,ok,hmm,sure,right"
+    export INTERRUPT_WORDS="stop,wait,cancel,no"
+
+FEATURES:
+--------
+✓ Confidence scoring for interruption decisions (0.0 to 1.0)
+✓ Structured analysis with TranscriptAnalysis dataclass
+✓ Type-safe decisions using InterruptionDecision enum
+✓ Comprehensive logging for debugging and monitoring
+✓ Extensible architecture for adding new rules or vocabularies
+
+Author: [Your Name]
+Date: [Current Date]
+Purpose: Voice Assistant Assignment - Acknowledgment Filtering Implementation
+Version: 1.0.0
+==================================================================================
+"""
+
 import logging
 import os
 import re
