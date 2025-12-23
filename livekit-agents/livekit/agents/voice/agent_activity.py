@@ -74,6 +74,7 @@ from .generation import (
     remove_instructions,
     update_instructions,
 )
+from .interrupt_filter import InterruptionFilter
 from .speech_handle import SpeechHandle
 
 if TYPE_CHECKING:
@@ -141,6 +142,12 @@ class AgentActivity(RecognitionHooks):
 
         self._on_enter_task: asyncio.Task | None = None
         self._on_exit_task: asyncio.Task | None = None
+
+        # Initialize interruption filter for intelligent backchannel handling
+        self._interruption_filter = InterruptionFilter()
+        
+        # Task for scheduled interruption (smart delay)
+        self._pending_interruption: asyncio.Task[None] | None = None
 
         if (
             isinstance(self.llm, llm.RealtimeModel)
@@ -1166,6 +1173,17 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
+        self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
+
+    async def _scheduled_interruption(self, delay: float = 0.5) -> None:
+        """Wait for a short buffer period before interrupting, allowing STT to validate."""
+        try:
+            await asyncio.sleep(delay)
+            # If we reach here, no backchannel was detected in time, so we interrupt (safety fallback)
+            self._interrupt_by_audio_activity()
+        except asyncio.CancelledError:
+            pass
+
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
@@ -1241,7 +1259,15 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # Smart Interruption: Schedule instead of interrupting immediately
+            # This allows STT to check if it's a backchannel word
+            if self._pending_interruption:
+                self._pending_interruption.cancel()
+            
+            # Wait 500ms for STT to validate
+            self._pending_interruption = asyncio.create_task(
+                self._scheduled_interruption(0.5)
+            )
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1257,10 +1283,44 @@ class AgentActivity(RecognitionHooks):
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        transcript = ev.alternatives[0].text
+        if transcript and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
+            # Intelligent interruption filtering based on agent state and transcript content
+            agent_is_speaking = self._session.agent_state == "speaking"
+            
+            # DEBUG: Log agent state for visibility
+            logger.warning(
+                f"TRANSCRIPT RECEIVED: '{transcript}' | Agent State: '{self._session.agent_state}' | Is Speaking: {agent_is_speaking}"
+            )
+            
+            should_ignore = self._interruption_filter.should_ignore_transcript(
+                transcript=transcript,
+                agent_is_speaking=agent_is_speaking,
+            )
+
+            if should_ignore:
+                logger.debug(
+                    f"Ignoring backchannel input while agent speaking: '{transcript}'"
+                )
+                
+                # CRITICAL: Cancel the pending interruption!
+                # This prevents the audio from ever stopping
+                if self._pending_interruption:
+                    self._pending_interruption.cancel()
+                    self._pending_interruption = None
+                    
+                # Don't interrupt - this is just passive backchannel feedback
+                return
+
+            # Not ignored - It's real speech (e.g. "Wait!")
+            # Cancel pending timer and interrupt IMMEDIATELY
+            if self._pending_interruption:
+                self._pending_interruption.cancel()
+                self._pending_interruption = None
+
             self._interrupt_by_audio_activity()
 
             if (
@@ -1272,8 +1332,15 @@ class AgentActivity(RecognitionHooks):
                 self._start_false_interruption_timer(timeout)
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
+        # DEBUG: Confirm method is being called
+        import sys
+        sys.stderr.write(f"\non_final_transcript CALLED! turn_detection={self._turn_detection}, audio_recognition={self._audio_recognition is not None}\n")
+        sys.stderr.flush()
+        
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
             # skip stt transcription if user_transcription is enabled on the realtime model
+            sys.stderr.write(f"\ EARLY RETURN: RealtimeModel with user_transcription\n")
+            sys.stderr.flush()
             return
 
         self._session._user_input_transcribed(
@@ -1288,10 +1355,34 @@ class AgentActivity(RecognitionHooks):
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
 
+        transcript = ev.alternatives[0].text
         if self._audio_recognition and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
+            # DEBUG OUTPUT - This WILL show in console
+            import sys
+            sys.stderr.write(f"\n FINAL TRANSCRIPT: '{transcript}' | Agent State: '{self._session.agent_state}'\n")
+            sys.stderr.flush()
+            
+            # Apply interruption filter
+            agent_is_speaking = self._session.agent_state == "speaking"
+            should_ignore = self._interruption_filter.should_ignore_transcript(
+                transcript=transcript,
+                agent_is_speaking=agent_is_speaking,
+            )
+            
+            if should_ignore:
+                sys.stderr.write(f"\n IGNORING backchannel: '{transcript}'\n")
+                sys.stderr.flush()
+                # Cancel any pending interruption
+                if self._pending_interruption:
+                    self._pending_interruption.cancel()
+                    self._pending_interruption = None
+                return  # Don't interrupt for backchannel words
+            
+            sys.stderr.write(f"\n ALLOWING interrupt for: '{transcript}'\n")
+            sys.stderr.flush()
             self._interrupt_by_audio_activity()
 
             if (

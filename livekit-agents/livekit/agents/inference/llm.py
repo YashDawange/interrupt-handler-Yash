@@ -65,6 +65,8 @@ KimiModels = Literal["moonshotai/kimi-k2-instruct"]
 
 DeepSeekModels = Literal["deepseek-ai/deepseek-v3"]
 
+
+
 LLMModels = Union[OpenAIModels, GoogleModels, QwenModels, KimiModels, DeepSeekModels]
 
 
