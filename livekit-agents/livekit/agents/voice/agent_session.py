@@ -18,7 +18,9 @@ from typing import (
     overload,
     runtime_checkable,
 )
-
+from livekit.agents.utils.interrupt_handling import is_passive_ack, is_real_interruption
+Passive_ack = {"yeah", "ok", "okay", "hmm", "uh-huh", "right", "mm-hmm"}
+Interrupts = {"stop", "wait", "no", "hold on", "cancel"}
 from opentelemetry import context as otel_context, trace
 
 from livekit import rtc
@@ -357,7 +359,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
 
         # ivr activity
         self._ivr_activity: IVRActivity | None = None
-
+        self._pending_interrupt: bool = False
+        self._pending_interrupt_started_at: float | None = None
+        
     def emit(self, event: EventTypes, arg: AgentEvent) -> None:  # type: ignore
         self._recorded_events.append(arg)
         super().emit(event, arg)
@@ -372,7 +376,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
     @userdata.setter
     def userdata(self, value: Userdata_T) -> None:
         self._userdata = value
-
+        
     @property
     def turn_detection(self) -> TurnDetectionMode | None:
         return self._turn_detection
@@ -955,6 +959,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         """
         if self._activity is None:
             raise RuntimeError("AgentSession isn't running")
+        
+        if self.agent_state == "speaking" and not force:
+           self._pending_interrupt = True
+           self._pending_interrupt_started_at = time.time()
+           return asyncio.get_event_loop().create_future()
 
         return self._activity.interrupt(force=force)
 
@@ -1215,6 +1224,27 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         if self.user_state == "away" and ev.is_final:
             # reset user state from away to listening in case VAD has a miss detection
             self._update_user_state("listening")
+
+        if self.agent_state != "speaking":
+            self.emit("user_input_transcribed", ev)
+            return
+
+        if not ev.is_final:
+            self.emit("user_input_transcribed", ev)
+            return
+
+        text = (ev.text or "").strip().lower()
+        speech = self.current_speech
+        if text in Passive_ack:
+            if speech:
+                speech.allow_interruptions = False
+            return
+
+        if any(word in text for word in Interrupts):
+            if speech:
+                speech.allow_interruptions = True
+            self.interrupt(force=True)
+            return
 
         self.emit("user_input_transcribed", ev)
 
