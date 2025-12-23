@@ -13,6 +13,7 @@ from opentelemetry import trace
 from livekit import rtc
 
 from .. import llm, stt, utils, vad
+from ..tokenize.basic import split_words
 from ..log import logger
 from ..telemetry import trace_types, tracer
 from ..types import NOT_GIVEN, NotGivenOr
@@ -142,6 +143,36 @@ class AudioRecognition:
 
         self._user_turn_span: trace.Span | None = None
         self._closing = asyncio.Event()
+
+    def _normalize_token(self, tok: str) -> str:
+        return tok.lower().strip('"\'.,!?;:-()')
+
+    def _is_filler_only(self, text: str) -> bool:
+        if not text:
+            return False
+        words = split_words(text, split_character=True)
+        if not words:
+            return False
+        filler_set = {self._normalize_token(w) for w in (self._session.options.filler_words or [])}
+        for w in words:
+            token = self._normalize_token(w[0])
+            if token == "":
+                return False
+            if token not in filler_set:
+                return False
+        return True
+
+    def _contains_command_word(self, text: str) -> bool:
+        if not text:
+            return False
+        # small command set; could be extended
+        COMMAND_KEYWORDS = {"stop", "wait", "pause", "no", "halt", "hold", "dont", "don't", "stop"}
+        words = split_words(text, split_character=True)
+        for w in words:
+            token = self._normalize_token(w[0])
+            if token in COMMAND_KEYWORDS:
+                return True
+        return False
 
     def update_options(
         self,
@@ -355,6 +386,13 @@ class AudioRecognition:
 
             if not transcript:
                 return
+            # If the agent is currently speaking, filter out filler-only
+            # transcripts so they don't interrupt playback. However, if the
+            # transcript contains a command word, allow it through.
+            if self._session.agent_state == "speaking":
+                if self._is_filler_only(transcript) and not self._contains_command_word(transcript):
+                    logger.debug("filtered filler-only final transcript while speaking", extra={"transcript": transcript})
+                    return
 
             self._hooks.on_final_transcript(
                 ev,
@@ -441,8 +479,16 @@ class AudioRecognition:
                 )
 
         elif ev.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
+            # Apply same filtering for interim transcripts to avoid early
+            # preemptive generation or interruptions caused by filler words.
+            interim_text = ev.alternatives[0].text
+            if self._session.agent_state == "speaking":
+                if self._is_filler_only(interim_text) and not self._contains_command_word(interim_text):
+                    logger.debug("filtered filler-only interim transcript while speaking", extra={"transcript": interim_text})
+                    return
+
             self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
-            self._audio_interim_transcript = ev.alternatives[0].text
+            self._audio_interim_transcript = interim_text
 
         elif ev.type == stt.SpeechEventType.END_OF_SPEECH and self._turn_detection_mode == "stt":
             with trace.use_span(self._ensure_user_turn_span()):
