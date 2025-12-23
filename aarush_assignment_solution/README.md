@@ -76,18 +76,18 @@ VAD → STT → Interruption Decision
 
 ### Word Categories
 
-#### Passive Acknowledgements (Soft Signals)
+**Passive Acknowledgements (Soft Signals)**
 Examples:
 
 
-yeah, ok, okay, hmm, uh-huh, right
+- yeah, ok, okay, hmm, uh-huh, right
 
 
-#### Active Interruptions (Hard Signals)
+**Active Interruptions (Hard Signals)**
 Examples:
 
 
-stop, wait, no, hold on, cancel
+- stop, wait, no, hold on, cancel
 
 
 ---
@@ -134,7 +134,7 @@ Final score ≤ 0 → Ignore
 
 ✔ No modification to VAD kernel  
 ✔ No reduction of VAD sensitivity  
-✔ No global disabling of interruptions  
+✔ Replaced non-deterministic auto-interruptions with a deterministic manual gating layer 
 ✔ No audible pause or resume artifacts  
 ✔ Real-time safe and deterministic  
 
@@ -145,7 +145,7 @@ All logic is implemented **purely at the agent event-handling layer**.
 ## 🧩 Code Structure
 
 
-
+```
 aarush_assignment_solution/
 │
 ├── agent.py # LiveKit agent + event wiring
@@ -154,7 +154,7 @@ aarush_assignment_solution/
 ├── .env.example # Environment variable template
 └── README.md # This file
 
-
+```
 ---
 
 ## 🧠 Why This Solution Is Correct
