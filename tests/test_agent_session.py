@@ -624,6 +624,101 @@ async def test_interrupt_during_on_user_turn_completed(
     assert conversation_events[2].item.text_content == "Here is a story about a firefighter..."
 
 
+async def test_filler_words_no_interruption() -> None:
+    """Test that filler words don't interrupt when agent is speaking."""
+    speed = 5.0
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 2.5, "Tell me a story.")
+    actions.add_llm("Here is a long story for you ... the end.")
+    actions.add_tts(10.0)  # playout starts at 3.5s
+    actions.add_user_speech(5.0, 6.0, "Yeah", stt_delay=0.2)  # filler word while speaking
+
+    session = create_session(
+        actions,
+        speed_factor=speed,
+        extra_kwargs={"filler_words": ["yeah", "ok", "hmm"]},
+    )
+    agent = MyAgent()
+
+    agent_state_events: list[AgentStateChangedEvent] = []
+    playback_finished_events: list[PlaybackFinishedEvent] = []
+    session.on("agent_state_changed", agent_state_events.append)
+    session.output.audio.on("playback_finished", playback_finished_events.append)
+
+    t_origin = await asyncio.wait_for(run_session(session, agent), timeout=SESSION_TIMEOUT)
+
+    chat_ctx_items = agent.chat_ctx.items
+    assert len(chat_ctx_items) == 3  # No interruption, so no new user message
+    assert chat_ctx_items[2].type == "message"
+    assert chat_ctx_items[2].role == "assistant"
+    assert chat_ctx_items[2].interrupted is False  # Should not be interrupted
+
+    assert len(playback_finished_events) == 1
+    assert playback_finished_events[0].interrupted is False
+
+
+async def test_non_filler_words_interrupt() -> None:
+    """Test that non-filler words still interrupt when agent is speaking."""
+    speed = 5.0
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 2.5, "Tell me a story.")
+    actions.add_llm("Here is a long story for you ... the end.")
+    actions.add_tts(10.0)  # playout starts at 3.5s
+    actions.add_user_speech(5.0, 6.0, "Stop", stt_delay=0.2)  # non-filler word
+
+    session = create_session(
+        actions,
+        speed_factor=speed,
+        extra_kwargs={"filler_words": ["yeah", "ok", "hmm"]},
+    )
+    agent = MyAgent()
+
+    agent_state_events: list[AgentStateChangedEvent] = []
+    playback_finished_events: list[PlaybackFinishedEvent] = []
+    session.on("agent_state_changed", agent_state_events.append)
+    session.output.audio.on("playback_finished", playback_finished_events.append)
+
+    t_origin = await asyncio.wait_for(run_session(session, agent), timeout=SESSION_TIMEOUT)
+
+    chat_ctx_items = agent.chat_ctx.items
+    assert len(chat_ctx_items) == 4  # Interruption creates new user message
+    assert chat_ctx_items[2].type == "message"
+    assert chat_ctx_items[2].role == "assistant"
+    assert chat_ctx_items[2].interrupted is True
+
+    assert len(playback_finished_events) == 1
+    assert playback_finished_events[0].interrupted is True
+
+
+async def test_filler_words_response_when_silent() -> None:
+    """Test that filler words are processed as valid input when agent is silent."""
+    speed = 5.0
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 2.5, "Yeah")  # filler word when silent
+    actions.add_llm("Great! How can I help you?")
+    actions.add_tts(3.0)
+
+    session = create_session(
+        actions,
+        speed_factor=speed,
+        extra_kwargs={"filler_words": ["yeah", "ok", "hmm"]},
+    )
+    agent = MyAgent()
+
+    conversation_events: list[ConversationItemAddedEvent] = []
+    session.on("conversation_item_added", conversation_events.append)
+
+    await asyncio.wait_for(run_session(session, agent), timeout=SESSION_TIMEOUT)
+
+    chat_ctx_items = agent.chat_ctx.items
+    assert len(chat_ctx_items) == 3
+    assert chat_ctx_items[1].type == "message"
+    assert chat_ctx_items[1].role == "user"
+    assert chat_ctx_items[1].text_content == "Yeah"
+    assert chat_ctx_items[2].type == "message"
+    assert chat_ctx_items[2].role == "assistant"
+
+
 # helpers
 
 

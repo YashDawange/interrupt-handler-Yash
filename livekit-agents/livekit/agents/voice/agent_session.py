@@ -89,6 +89,7 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    filler_words: list[str]
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +160,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        filler_words: list[str] | None = None,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -245,6 +247,8 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            filler_words (list[str], optional): List of words that are considered filler words
+                and should not interrupt the agent when it is speaking. Default ``['yeah', 'ok', 'hmm', 'right', 'uh-huh', 'aha', 'okay', 'alright']``.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -288,6 +292,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            filler_words=filler_words or ['yeah', 'ok', 'hmm', 'right', 'uh-huh', 'aha', 'okay', 'alright'],
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False
