@@ -1,0 +1,403 @@
+
+(.venv) C:\Users\vaibh\Downloads\agents-assignment\examples\voice_agents>
+
+
+(.venv) C:\Users\vaibh\Downloads\agents-assignment\examples\voice_agents>python basic_agent.py dev
+    22:34:53 DEBUG  asyncio          Using proactor: IocpProactor  
+             DEV    livekit.agents   Watching C:\Users\vaibh\Downloads\agents-assignment\examples\voice_agents  
+             DEV    livekit.agents   Watching C:\Users\vaibh\Downloads\agents-assignment\livekit-agents  
+    22:34:58 DEBUG  asyncio          Using proactor: IocpProactor  
+             INFO   livekit.agents   starting worker {"version": "1.3.3", "rtc-version": "1.0.23"}
+             INFO   livekit.agents   starting inference executor  
+             INFO   livekit.agents   initializing process {"pid": 25028, "inference": true}
+    22:35:10 INFO   livekit.agents   process initialized {"pid": 25028, "inference": true, "elapsed_time": 12.01}
+             INFO   livekit.agents   registered worker {"agent_name": "", "id": "AW_WM4BjMmqXJZX", "url": "wss://agent-assign-w8n7e86k.livekit.cloud", "region": "India West", "protocol": 16}
+    22:35:19 INFO   livekit.agents   received job request {"job_id": "AJ_aXiag3PiAYQS", "dispatch_id": "AD_KW6ByyyGgYKF", "room": "playground-PRtd-6bL8", "room_id": "RM_DiWJ2VqRCQZw", "agent_name": "", "resuming": false, "enable_recording": false}
+             DEBUG  livekit.agents   received assignment {"agent_name": "", "room_id": "RM_DiWJ2VqRCQZw", "room": "playground-PRtd-6bL8", "job_id": "AJ_aXiag3PiAYQS", "dispatch_id": "AD_KW6ByyyGgYKF", "enable_recording": false}
+             INFO   livekit.agents   initializing job runner {"tid": 11904}
+             INFO   livekit.agents   job runner initialized {"tid": 11904, "elapsed_time": 0.38}
+             DEBUG  asyncio          Using proactor: IocpProactor  
+    22:35:21 DEBUG  livekit.agents   input stream attached {"room": "playground-PRtd-6bL8", "participant": null, "source": "SOURCE_UNKNOWN", "accepted_sources": ["SOURCE_MICROPHONE"]}
+             DEBUG  livekit.agents   http_session(): creating a new httpclient ctx {"room": "playground-PRtd-6bL8"}
+    22:35:22 DEBUG  basic-agent      Agent state changed: initializing -> thinking {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   start reading stream {"room": "playground-PRtd-6bL8", "participant": "identity-R0pi", "source": "SOURCE_MICROPHONE"}
+             DEBUG  basic-agent      Agent state changed: thinking -> listening {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   using audio io: `RoomIO` -> `AgentSession` -> `TranscriptSynchronizer` -> `RoomIO` {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   using transcript io: `AgentSession` -> `TranscriptSynchronizer` -> `RoomIO` {"room": "playground-PRtd-6bL8"}
+    22:35:23 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.89, "prompt_tokens": 151, "prompt_cached_tokens": 0, "completion_tokens": 12, "tokens_per_second": 5.95}
+             DEBUG  basic-agent      Agent state changed: listening -> speaking {"room": "playground-PRtd-6bL8"}
+    22:35:24 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.20653740000125254, "audio_duration": 2.46}
+    22:35:26 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.35}
+    22:35:27 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.35}
+    22:35:28 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.3}
+    22:35:29 DEBUG  basic-agent      User speaking while agent not speaking: 'Can you please' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:35:30 DEBUG  basic-agent      User speaking while agent not speaking: 'Can you please tell me about' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:35:31 DEBUG  basic-agent      User speaking while agent not speaking: 'Can you please tell me about history of' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:35:32 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.85}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Can you please tell me about history of Panipat?' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Can you please tell me about history of Panipat?", "language": "en", "transcript_delay": 0.4760630130767822}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.06037236750125885, "duration": 0.124, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please  
+                                                    tell me about history of panipat"}                                                                                                                                                                                
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.2036447525024414}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.68, "transcription_delay": 0.48}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:35:33 DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:35:34 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.62, "prompt_tokens": 181, "prompt_cached_tokens": 0, "completion_tokens": 109, "tokens_per_second":     
+                                                 53.85}                                                                                                                                                                                                               
+    22:35:36 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.95}
+    22:35:38 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.6}
+             INFO   basic-agent      User spoke while agent is speaking: 'Yeah.' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Ignoring soft backchannel while agent is speaking: 'Yeah.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Yeah.", "language": "en", "transcript_delay": 0.6341335773468018}
+    22:35:39 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.2709500789642334, "duration": 0.185, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please   
+                                                    tell me about history of panipat yeah"}                                                                                                                                                                           
+    22:35:41 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.20748090000415687, "audio_duration": 30.33}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.2709500789642334, "duration": 0.128, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please   
+                                                    tell me about history of panipat yeah"}                                                                                                                                                                           
+             DEBUG  basic-agent      Interim transcript while speaking (ignored for logic): 'Okay.' {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.7}
+             INFO   basic-agent      User spoke while agent is speaking: 'Okay.' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Ignoring soft backchannel while agent is speaking: 'Okay.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Okay.", "language": "en", "transcript_delay": 0.7911932468414307}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.31167176365852356, "duration": 0.196, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please  
+                                                    tell me about history of panipat okay"}                                                                                                                                                                           
+    22:35:43 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.31167176365852356, "duration": 0.117, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please  
+                                                    tell me about history of panipat okay"}                                                                                                                                                                           
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.1}
+             INFO   basic-agent      User spoke while agent is speaking: 'Mhmm.' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Ignoring soft backchannel while agent is speaking: 'Mhmm.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Mhmm.", "language": "en", "transcript_delay": 0.8799910545349121}
+    22:35:44 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.5652264356613159, "duration": 0.184, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please   
+                                                    tell me about history of panipat mhmm"}                                                                                                                                                                           
+    22:35:49 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.25}
+    22:35:52 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.05}
+    22:35:55 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.35}
+    22:35:57 DEBUG  basic-agent      Interim transcript while speaking (ignored for logic): 'Yeah.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:35:58 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.65}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Yeah.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Yeah.", "language": "en", "transcript_delay": 0.5494883060455322}
+             WARNI… livekit.agents   _SegmentSynchronizerImpl.resume called after close {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.18581506609916687, "duration": 0.156, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please  
+                                                    tell me about history of panipat mhmm yeah"}                                                                                                                                                                      
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.72, "transcription_delay": 0.55}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:35:59 DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.62, "prompt_tokens": 286, "prompt_cached_tokens": 0, "completion_tokens": 21, "tokens_per_second":      
+                                                 20.39}                                                                                                                                                                                                               
+    22:36:01 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.21278879999590572, "audio_duration": 8.27}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.8}
+    22:36:02 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.95}
+    22:36:04 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.4}
+    22:36:07 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.5}
+    22:36:08 DEBUG  basic-agent      User speaking while agent not speaking: 'Ten' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:36:09 DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me about the same' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:36:10 DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me about the same history, but this' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:36:11 DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me about the same history, but this time, first ask' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:36:12 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.95}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me about the same history, but this time first ask' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Tell me about the same history, but this time first ask", "language": "en", "transcript_delay": 0.31711339950561523}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'am I ready or not?' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:36:13 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.25}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'am I ready or not?' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "am I ready or not?", "language": "en", "transcript_delay": 0.5915589332580566}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.59, "prompt_tokens": 332, "prompt_cached_tokens": 0, "completion_tokens": 13, "tokens_per_second":      
+                                                 16.79}                                                                                                                                                                                                               
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.5248048305511475, "duration": 0.417, "input": "<|im_start|>assistant\nhi there what can i help you with today<|im_end|>\n<|im_start|>user\ncan you please   
+                                                    tell me about history of panipat<|im_end|>\n<|im_start|>assistant\nsure panipat located in northern india is famous for three major battles that shaped indian history the first battle of panipat in 1526 marked 
+                                                    the beginning of the mughal empire when babur defeated ibrahim lodhi the second battle in 1556 saw akbar's forces defeat hemu solidifying mughal rule the third battle in 1761 was between the marathas and ahmad 
+                                                    shah abdali which had a huge<|im_end|>\n<|im_start|>user\nmhmm yeah<|im_end|>\n<|im_start|>assistant\nanything else you'd like to know or chat about history weather jokesim all                                  
+                                                    ears<|im_end|>\n<|im_start|>user\ntell me about the same history but this time first ask am i ready or not"}                                                                                                      
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.8519878387451172}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 1.45, "transcription_delay": 0.6}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:36:14 DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.21267119999538409, "audio_duration": 2.51}
+    22:36:16 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:36:17 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    22:36:18 DEBUG  basic-agent      User speaking while agent not speaking: 'Yeah.' (final=False) {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.35}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Yeah.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Yeah.", "language": "en", "transcript_delay": 0.7496645450592041}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.32801637053489685, "duration": 0.334, "input": "<|im_start|>assistant\nsure panipat located in northern india is famous for three major battles that shaped 
+                                                    indian history the first battle of panipat in 1526 marked the beginning of the mughal empire when babur defeated ibrahim lodhi the second battle in 1556 saw akbar's forces defeat hemu solidifying mughal rule   
+                                                    the third battle in 1761 was between the marathas and ahmad shah abdali which had a huge<|im_end|>\n<|im_start|>user\nmhmm yeah<|im_end|>\n<|im_start|>assistant\nanything else you'd like to know or chat about  
+                                                    history weather jokesim all ears<|im_end|>\n<|im_start|>user\ntell me about the same history but this time first ask am i ready or not<|im_end|>\n<|im_start|>assistant\nare you ready to hear the history of     
+                                                    panipat again<|im_end|>\n<|im_start|>user\nyeah"}                                                                                                                                                                 
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.3555417060852051}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 1.11, "transcription_delay": 0.75}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:36:19 DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:36:20 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.65, "prompt_tokens": 354, "prompt_cached_tokens": 0, "completion_tokens": 85, "tokens_per_second":      
+                                                 43.73}                                                                                                                                                                                                               
+    22:36:21 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.85}
+    22:36:26 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.95}
+             INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.21208630000182893, "audio_duration": 23.08}
+    22:36:29 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.0}
+    22:36:30 DEBUG  basic-agent      Interim transcript while speaking (ignored for logic): 'Stop.' {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.35}
+             INFO   basic-agent      User spoke while agent is speaking: 'Stop.' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Detected strong interrupt while agent speaking. Interrupting: 'Stop.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Stop.", "language": "en", "transcript_delay": 0.6812927722930908}
+             DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.03917450085282326, "duration": 0.354, "input": "<|im_start|>user\nmhmm yeah<|im_end|>\n<|im_start|>assistant\nanything else you'd like to know or chat about
+                                                    history weather jokesim all ears<|im_end|>\n<|im_start|>user\ntell me about the same history but this time first ask am i ready or not<|im_end|>\n<|im_start|>assistant\nare you ready to hear the history of     
+                                                    panipat again<|im_end|>\n<|im_start|>user\nyeah stop"}                                                                                                                                                            
+             WARNI… livekit.agents   preemptive generation enabled but chat context or tools have changed after `on_user_turn_completed` {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 1.06, "transcription_delay": 0.69}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:36:31 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.64, "prompt_tokens": 404, "prompt_cached_tokens": 0, "completion_tokens": 14, "tokens_per_second":      
+                                                 16.86}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:36:32 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.22813260000111768, "audio_duration": 2.88}
+    22:36:33 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.25}
+    22:36:34 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:36:36 DEBUG  basic-agent      User speaking while agent not speaking: 'Count from' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:36:37 DEBUG  basic-agent      User speaking while agent not speaking: 'Count from one, two,' (final=False) {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.15}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Count from one, two,' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Count from one, two,", "language": "en", "transcript_delay": 0.026884078979492188}
+    22:36:38 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.7}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'thirty.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "thirty.", "language": "en", "transcript_delay": 0.5662596225738525}
+    22:36:39 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.13203077018260956, "duration": 0.359, "input": "<|im_start|>assistant\nare you ready to hear the history of panipat                                         
+                                                    again<|im_end|>\n<|im_start|>user\nyeah<|im_end|>\n<|im_start|>assistant\nalright panipat is known for three crucial battles in indian history the first in 1526 started the mughal empire when babur beat ibrahim
+                                                    lodhi the second in 1556 helped<|im_end|>\n<|im_start|>user\nstop<|im_end|>\n<|im_start|>assistant\ngot it switching gearswhats next on your mind<|im_end|>\n<|im_start|>user\ncount from one two thirty"}        
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.6391663551330566}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 1.21, "transcription_delay": 0.57}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.56, "prompt_tokens": 433, "prompt_cached_tokens": 0, "completion_tokens": 21, "tokens_per_second":      
+                                                 26.78}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:36:40 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.20526090000203112, "audio_duration": 6.27}
+    22:36:43 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.45}
+    22:36:45 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:36:46 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.15}
+    22:36:47 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.7}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Yes.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Yes.", "language": "en", "transcript_delay": 0.5756111145019531}
+    22:36:48 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.37596964836120605, "duration": 0.31, "input": "<|im_start|>assistant\nalright panipat is known for three crucial battles in indian history the first in 1526
+                                                    started the mughal empire when babur beat ibrahim lodhi the second in 1556 helped<|im_end|>\n<|im_start|>user\nstop<|im_end|>\n<|im_start|>assistant\ngot it switching gearswhats next on your                    
+                                                    mind<|im_end|>\n<|im_start|>user\ncount from one two thirty<|im_end|>\n<|im_start|>assistant\none two thirty that was quick want me to count the numbers in between too<|im_end|>\n<|im_start|>user\nyes"}        
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.32999300956726074}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.91, "transcription_delay": 0.58}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:36:49 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.77, "prompt_tokens": 463, "prompt_cached_tokens": 0, "completion_tokens": 81, "tokens_per_second":      
+                                                 42.76}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:36:51 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.1}
+    22:36:53 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.05}
+    22:36:54 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.2178083000035258, "audio_duration": 16.07}
+    22:36:55 DEBUG  basic-agent      Interim transcript while speaking (ignored for logic): 'No stop.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.2}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'No. Stop.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "No. Stop.", "language": "en", "transcript_delay": 0.6213765144348145}
+             WARNI… livekit.agents   _SegmentSynchronizerImpl.resume called after close {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.43250155448913574, "duration": 0.321, "input": "<|im_start|>user\nstop<|im_end|>\n<|im_start|>assistant\ngot it switching gearswhats next on your           
+                                                    mind<|im_end|>\n<|im_start|>user\ncount from one two thirty<|im_end|>\n<|im_start|>assistant\none two thirty that was quick want me to count the numbers in between too<|im_end|>\n<|im_start|>user\nyes no stop"}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.96, "transcription_delay": 0.62}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:36:56 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.2}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.78, "prompt_tokens": 513, "prompt_cached_tokens": 0, "completion_tokens": 9, "tokens_per_second": 10.21}
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:36:57 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.2254707000029157, "audio_duration": 2.79}
+    22:36:59 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:37:00 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.9}
+    22:37:01 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.8}
+    22:37:02 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.95}
+    22:37:03 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.0}
+    22:37:04 DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me the history' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:37:05 DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me the history of Panipat again.' (final=False) {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.15}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Tell me the history of Panipat again.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Tell me the history of Panipat again.", "language": "en", "transcript_delay": 0.5194318294525146}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.5235127806663513, "duration": 0.412, "input": "<|im_start|>assistant\none two thirty that was quick want me to count the numbers in between                 
+                                                    too<|im_end|>\n<|im_start|>user\nyes<|im_end|>\n<|im_start|>assistant\nhere we go one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen                                
+                                                    seventeen<|im_end|>\n<|im_start|>user\nno stop<|im_end|>\n<|im_start|>assistant\nstopping right there whats next<|im_end|>\n<|im_start|>user\ntell me the history of panipat again"}                              
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.4653897285461426}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.99, "transcription_delay": 0.52}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:37:06 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 1.1, "prompt_tokens": 538, "prompt_cached_tokens": 0, "completion_tokens": 10, "tokens_per_second": 7.82}
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:37:07 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.2108869000003324, "audio_duration": 2.6}
+    22:37:09 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:37:10 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.9}
+    22:37:12 DEBUG  basic-agent      User speaking while agent not speaking: 'Yes.' (final=False) {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.55}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Yes.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Yes.", "language": "en", "transcript_delay": 1.2410502433776855}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.12084513157606125, "duration": 0.232, "input": "<|im_start|>assistant\nhere we go one two three four five six seven eight nine ten eleven twelve thirteen   
+                                                    fourteen fifteen sixteen seventeen<|im_end|>\n<|im_start|>user\nno stop<|im_end|>\n<|im_start|>assistant\nstopping right there whats next<|im_end|>\n<|im_start|>user\ntell me the history of panipat             
+                                                    again<|im_end|>\n<|im_start|>assistant\nready for the panipat history round three<|im_end|>\n<|im_start|>user\nyes"}                                                                                              
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.2560582160949707}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 1.5, "transcription_delay": 1.24}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:37:14 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.77, "prompt_tokens": 557, "prompt_cached_tokens": 0, "completion_tokens": 67, "tokens_per_second":      
+                                                 36.16}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:37:17 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    22:37:19 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.29772070000035455, "audio_duration": 17.6}
+    22:37:22 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.8}
+             DEBUG  basic-agent      Interim transcript while speaking (ignored for logic): 'Yeah. Okay. But' {"room": "playground-PRtd-6bL8"}
+             DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:37:23 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.65}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Yeah. Okay. But wait.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Yeah. Okay. But wait.", "language": "en", "transcript_delay": 0.510047435760498}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.009224407374858856, "duration": 0.429, "input": "<|im_start|>assistant\nstopping right there whats next<|im_end|>\n<|im_start|>user\ntell me the history of 
+                                                    panipat again<|im_end|>\n<|im_start|>assistant\nready for the panipat history round three<|im_end|>\n<|im_start|>user\nyes<|im_end|>\n<|im_start|>assistant\npanipats famous for three battles 1526 baburs win    
+                                                    started the mughal empire 1556 akbars forces defeated hemu and 1761 the<|im_end|>\n<|im_start|>user\nyeah okay but wait"}                                                                                         
+    22:37:25 INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 3.0, "transcription_delay": 0.51}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:37:26 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.57, "prompt_tokens": 612, "prompt_cached_tokens": 0, "completion_tokens": 12, "tokens_per_second":      
+                                                 17.78}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:37:27 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.2224160000041593, "audio_duration": 2.97}
+    22:37:28 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    22:37:29 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+    22:37:32 DEBUG  basic-agent      User speaking while agent not speaking: "That's it for today." (final=False) {"room": "playground-PRtd-6bL8"}
+    22:37:33 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.95}
+             DEBUG  basic-agent      User speaking while agent not speaking: "That's it for today. Thank you." (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "That's it for today. Thank you.", "language": "en", "transcript_delay": 0.6757569313049316}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.5308172106742859, "duration": 0.716, "input": "<|im_start|>assistant\nready for the panipat history round                                                   
+                                                    three<|im_end|>\n<|im_start|>user\nyes<|im_end|>\n<|im_start|>assistant\npanipats famous for three battles 1526 baburs win started the mughal empire 1556 akbars forces defeated hemu and 1761                    
+                                                    the<|im_end|>\n<|im_start|>user\nyeah okay but wait<|im_end|>\n<|im_start|>assistant\nsure take your time what's on your mind<|im_end|>\n<|im_start|>user\nthat's it for today thank you"}                        
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.7531893253326416}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 1.43, "transcription_delay": 0.68}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:37:34 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.71, "prompt_tokens": 639, "prompt_cached_tokens": 0, "completion_tokens": 23, "tokens_per_second":      
+                                                 23.54}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:37:35 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.2072669000044698, "audio_duration": 6.5}
+    22:37:38 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.95}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.45}
+    22:37:40 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.4}
+    22:37:42 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.9}
+    22:37:43 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.55}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.3}
+    22:37:44 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.85}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.35}
+    22:37:45 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.55}
+    22:37:47 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.05}
+    22:37:48 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.15}
+    22:37:50 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.0}
+    22:37:54 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.55}
+    22:37:58 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.05}
+    22:38:00 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.2}
+    22:38:02 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.1}
+    22:38:07 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.95}
+    22:38:11 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.05}
+    22:38:13 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.5}
+    22:38:14 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.05}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.6}
+    22:38:15 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.0}
+    22:38:20 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 5.0}
+    22:38:23 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.95}
+    22:38:26 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.1}
+    22:38:31 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 4.9}
+    22:38:35 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 3.65}
+    22:38:36 DEBUG  basic-agent      User speaking while agent not speaking: 'Hi there.' (final=False) {"room": "playground-PRtd-6bL8"}
+    22:38:37 DEBUG  basic-agent      User speaking while agent not speaking: 'Hi there. What can I help you' (final=False) {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.65}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Hi there. What can I help you with today?' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Hi there. What can I help you with today?", "language": "en"}
+    22:38:38 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.948615312576294, "duration": 0.28, "input": "<|im_start|>assistant\npanipats famous for three battles 1526 baburs win started the mughal empire 1556 akbars 
+                                                    forces defeated hemu and 1761 the<|im_end|>\n<|im_start|>user\nyeah okay but wait<|im_end|>\n<|im_start|>assistant\nsure take your time what's on your mind<|im_end|>\n<|im_start|>user\nthat's it for today thank
+                                                    you<|im_end|>\n<|im_start|>assistant\nyoure welcome have a great day and come back anytime for more chat or info take care<|im_end|>\n<|im_start|>user\nhi there what can i help you with today"}                 
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.7819056510925293}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.0, "transcription_delay": 0.0}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.8}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.79, "prompt_tokens": 680, "prompt_cached_tokens": 0, "completion_tokens": 17, "tokens_per_second":      
+                                                 15.65}                                                                                                                                                                                                               
+    22:38:39 DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:38:40 INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.22144699999626027, "audio_duration": 4.13}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.55}
+    22:38:41 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.0}
+             INFO   basic-agent      User spoke while agent is speaking: 'Please tell me.' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Detected mixed/non-soft input while speaking. Interrupting: 'Please tell me.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Please tell me.", "language": "en"}
+             DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.007534080650657415, "duration": 0.19, "input": "<|im_start|>user\nyeah okay but wait<|im_end|>\n<|im_start|>assistant\nsure take your time what's on your   
+                                                    mind<|im_end|>\n<|im_start|>user\nthat's it for today thank you<|im_end|>\n<|im_start|>assistant\nyoure welcome have a great day and come back anytime for more chat or info take                                 
+                                                    care<|im_end|>\n<|im_start|>user\nhi there what can i help you with today please tell me"}                                                                                                                        
+    22:38:42 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.56, "prompt_tokens": 688, "prompt_cached_tokens": 0, "completion_tokens": 21, "tokens_per_second":      
+                                                 27.51}                                                                                                                                                                                                               
+             DEBUG  basic-agent      User speaking while agent not speaking: "It's too" (final=False) {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.6}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'To stir you off.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "To stir you off.", "language": "en", "transcript_delay": 0.5705709457397461}
+    22:38:43 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.3456808626651764, "duration": 0.219, "input": "<|im_start|>assistant\nsure take your time what's on your mind<|im_end|>\n<|im_start|>user\nthat's it for    
+                                                    today thank you<|im_end|>\n<|im_start|>assistant\nyoure welcome have a great day and come back anytime for more chat or info take care<|im_end|>\n<|im_start|>user\nhi there what can i help you with             
+                                                    today<|im_end|>\n<|im_start|>assistant\nhey that's what i usually say what<|im_end|>\n<|im_start|>user\nplease tell me to stir you off"}                                                                          
+             DEBUG  livekit.agents   using preemptive generation {"room": "playground-PRtd-6bL8", "preemptive_lead_time": 0.23644495010375977}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.81, "transcription_delay": 0.57}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.7}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'Panning up.' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Panning up.", "language": "en"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.20485101640224457, "duration": 0.19, "input": "<|im_start|>user\nthat's it for today thank you<|im_end|>\n<|im_start|>assistant\nyoure welcome have a great 
+                                                    day and come back anytime for more chat or info take care<|im_end|>\n<|im_start|>user\nhi there what can i help you with today<|im_end|>\n<|im_start|>assistant\nhey that's what i usually say                    
+                                                    what<|im_end|>\n<|im_start|>user\nplease tell me to stir you off panning up"}                                                                                                                                     
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.74, "prompt_tokens": 706, "prompt_cached_tokens": 0, "completion_tokens": 26, "tokens_per_second":      
+                                                 25.82}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+    22:38:44 DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   EOU metrics {"room": "playground-PRtd-6bL8", "model_name": "multilingual", "model_provider": "livekit", "end_of_utterance_delay": 0.0, "transcription_delay": 0.0}
+             DEBUG  basic-agent      Agent state changed: listening -> thinking {"room": "playground-PRtd-6bL8"}
+    22:38:45 INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.65, "prompt_tokens": 714, "prompt_cached_tokens": 0, "completion_tokens": 21, "tokens_per_second":      
+                                                 23.54}                                                                                                                                                                                                               
+             DEBUG  basic-agent      Agent state changed: thinking -> speaking {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 2.05}
+    22:38:46 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.8}
+             INFO   basic-agent      User spoke while agent is speaking: 'Sure.' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Ignoring soft backchannel while agent is speaking: 'Sure.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Sure.", "language": "en"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.2833283841609955, "duration": 0.18, "input": "<|im_start|>assistant\nyoure welcome have a great day and come back anytime for more chat or info take        
+                                                    care<|im_end|>\n<|im_start|>user\nhi there what can i help you with today<|im_end|>\n<|im_start|>assistant\nhey that's what i usually say what<|im_end|>\n<|im_st             INFO   basic-agent      Ignoring soft backchannel while agent is speaking: 'Sure.' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Sure.", "language": "en"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.2833283841609955, "duration": 0.18, "input": "<|im_start|>assistant\nyoure welcome have a great day and come back anytime for more chat or info take                                                                                                                                                                            
+                                                    care<|im_end|>\n<|im_start|>user\nhi there what can i help you with today<|im_end|>\n<|im_start|>assistant\nhey that's what i usually say what<|im_end|>\n<|im_start|>user\nplease tell me to stir you off panning                                                                                                                                                                    
+                                                    up sure"}                                                                                                                                                        
+             INFO   livekit.agents   TTS metrics {"room": "playground-PRtd-6bL8", "model_name": "cartesia/sonic-2", "model_provider": "livekit", "ttfb": 0.22023790000093868, "audio_duration": 5.57}
+    22:38:47 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.4}
+    22:38:49 DEBUG  basic-agent      Interim transcript while speaking (ignored for logic): 'Northern India is famous' {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 1.55}
+             INFO   basic-agent      User spoke while agent is speaking: 'Northern India is famous for' {"room": "playground-PRtd-6bL8"}
+             INFO   basic-agent      Detected mixed/non-soft input while speaking. Interrupting: 'Northern India is famous for' {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "Northern India is famous for", "language": "en", "transcript_delay": 0.8974804878234863}
+             DEBUG  basic-agent      Agent state changed: speaking -> listening {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.0011636310955509543, "duration": 0.19, "input": "<|im_start|>assistant\nyoure welcome have a great day and come back anytime for more chat or info take                                                                                                                                                                         
+                                                    care<|im_end|>\n<|im_start|>user\nhi there what can i help you with today<|im_end|>\n<|im_start|>assistant\nhey that's what i usually say what<|im_end|>\n<|im_start|>user\nplease tell me to stir you off panning                                                                                                                                                                    
+                                                    up sure northern india is famous for"}                                                                                                                           
+    22:38:50 INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.8}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'three major' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "three major", "language": "en", "transcript_delay": 0.027827024459838867}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.6, "prompt_tokens": 0, "prompt_cached_tokens": 0, "completion_tokens": 0, "tokens_per_second": 0.0}
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.65}
+             DEBUG  basic-agent      User speaking while agent not speaking: 'achieved' (final=True) {"room": "playground-PRtd-6bL8"}
+             DEBUG  livekit.agents   received user transcript {"room": "playground-PRtd-6bL8", "user_transcript": "achieved", "language": "en", "transcript_delay": 0.5985167026519775}
+    22:38:51 DEBUG  livekit.plugins… eou prediction {"room": "playground-PRtd-6bL8", "eou_probability": 0.0021514776162803173, "duration": 0.161, "input": "<|im_start|>user\nhi there what can i help you with today<|im_end|>\n<|im_start|>assistant\nhey that's                                                                                                                                                                        
+                                                    what i usually say what<|im_end|>\n<|im_start|>user\nplease tell me to stir you off panning up<|im_end|>\n<|im_start|>assistant\nsounds like youre having fun with words want to hear more                                                                                                                                                                                            
+                                                    about<|im_end|>\n<|im_start|>user\nsure northern india is famous for three major achieved"}                                                                      
+             INFO   livekit.agents   STT metrics {"room": "playground-PRtd-6bL8", "model_name": "deepgram/nova-3", "model_provider": "livekit", "audio_duration": 0.45}
+             INFO   livekit.agents   LLM metrics {"room": "playground-PRtd-6bL8", "model_name": "openai/gpt-4.1-mini", "model_provider": "livekit", "ttft": 0.78, "prompt_tokens": 746, "prompt_cached_tokens": 0, "completion_tokens": 23, "tokens_per_second":                                                                                                                                                                          
+                                                 22.49}                                                                                                                                                              
+    22:38:52 INFO   livekit.agents   closing agent session due to participant disconnect (disable via `RoomInputOptions.close_on_disconnect=False`) {"room": "playground-PRtd-6bL8", "participant": "identity-R0pi", "reason": "CLIENT_INITIATED"}
+             DEBUG  livekit.agents   stream closed {"room": "playground-PRtd-6bL8", "participant": "identity-R0pi", "source": "SOURCE_MICROPHONE"}
+             DEBUG  livekit.agents   input stream detached {"room": "playground-PRtd-6bL8", "participant": "identity-R0pi", "source": "SOURCE_UNKNOWN", "accepted_sources": ["SOURCE_MICROPHONE"]}
+             WARNI… livekit.agents   skipping user input, speech scheduling is paused {"room": "playground-PRtd-6bL8", "user_input": "Sure. Northern India is famous for three major achieved"}
+    22:38:54 DEBUG  livekit.agents   session closed {"room": "playground-PRtd-6bL8", "reason": "participant_disconnected", "error": null}
+    22:38:58 INFO   livekit.agents   shutting down worker {"id": "AW_WM4BjMmqXJZX"}
+             DEBUG  livekit.agents   shutting down job task {"room": "playground-PRtd-6bL8", "reason": "", "user_initiated": false}
+             DEBUG  livekit.agents   job exiting {"reason": "", "tid": 11904, "job_id": "AJ_aXiag3PiAYQS", "room_id": "RM_DiWJ2VqRCQZw"}
+             INFO   basic-agent      Usage: UsageSummary(llm_prompt_tokens=8997, llm_prompt_cached_tokens=0, llm_input_audio_tokens=0, llm_input_cached_audio_tokens=0, llm_input_text_tokens=0, llm_input_cached_text_tokens=0,      {"room": "playground-PRtd-6bL8"}                                                                                                                                                                    
+                                     llm_input_image_tokens=0, llm_input_cached_image_tokens=0, llm_completion_tokens=585, llm_output_audio_tokens=0, llm_output_image_tokens=0, llm_output_text_tokens=0, tts_characters_count=2050,                                                                                                                                                                                                     
+                                     tts_audio_duration=134.0250416666665, stt_audio_duration=208.59999999999982)
+             DEBUG  livekit.agents   http_session(): closing the httpclient ctx {"room": "playground-PRtd-6bL8"}
+             INFO   livekit.agents   process exiting {"reason": "", "pid": 25028, "inference": true}
+
+(.venv) C:\Users\vaibh\Downloads\agents-assignment\examples\voice_agents>  
