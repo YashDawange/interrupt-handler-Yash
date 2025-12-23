@@ -14,12 +14,11 @@ from livekit.agents import (
     metrics,
     room_io,
 )
-from livekit.agents.llm import function_tool
+from livekit.agents import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
-
-# uncomment to enable Krisp background voice/noise cancellation
-# from livekit.plugins import noise_cancellation
+from interrupt_handlers import attach_interrupt_handlers
+#from livekit.plugins import noise_cancellation
 
 logger = logging.getLogger("basic-agent")
 
@@ -96,13 +95,12 @@ async def entrypoint(ctx: JobContext):
         # allow the LLM to generate a response while waiting for the end of turn
         # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
         preemptive_generation=True,
-        # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
-        # when it's detected, you may resume the agent's speech
-        resume_false_interruption=True,
-        false_interruption_timeout=1.0,
+        allow_interruptions=True,
+        discard_audio_if_uninterruptible=True,
+        min_interruption_duration=0.6,
+        min_interruption_words=2,
     )
 
-    # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
@@ -117,13 +115,14 @@ async def entrypoint(ctx: JobContext):
     # shutdown callbacks are triggered when the session is over
     ctx.add_shutdown_callback(log_usage)
 
+    attach_interrupt_handlers(session)
+
     await session.start(
         agent=MyAgent(),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
-                # uncomment to enable the Krisp BVC noise cancellation
-                # noise_cancellation=noise_cancellation.BVC(),
+            #noise_cancellation=noise_cancellation.BVC(),
             ),
         ),
     )
