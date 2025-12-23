@@ -4,9 +4,12 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(message)s"
+)
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
-
 sys.path.insert(0, BASE_DIR)
 
 from livekit_plugins.livekit_interrupt_handler import InterruptHandler
@@ -29,9 +32,6 @@ from livekit.agents.llm import function_tool
 from livekit.plugins.silero import VAD
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# uncomment to enable Krisp background voice/noise cancellation
-# from livekit.plugins import noise_cancellation
-
 logger = logging.getLogger("basic-agent")
 
 load_dotenv()
@@ -50,14 +50,12 @@ class MyAgent(Agent):
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
         self.session.generate_reply()
 
     @function_tool
     async def lookup_weather(
         self, context: RunContext, location: str, latitude: str, longitude: str
     ):
-        """Called when the user asks for weather-related information."""
         logger.info(f"Looking up weather for {location}")
         return "sunny with a temperature of 70 degrees."
 
@@ -80,13 +78,10 @@ async def entrypoint(ctx: JobContext):
         false_interruption_timeout=1.0,
     )
 
-    # Initialize the filler-word interruption handler
     interrupt_handler = InterruptHandler()
 
-    # Handle user speech interruptions intelligently
     @session.on("transcription")
     def _on_user_transcription(ev):
-        # Async work must be wrapped in create_task since .on() doesn't support async callbacks
         async def handle():
             text = getattr(ev, "text", "").strip()
             confidence = getattr(ev, "confidence", 1.0)
@@ -96,13 +91,15 @@ async def entrypoint(ctx: JobContext):
                 logger.info(f"Ignored filler during agent speech: {text}")
             elif decision == "stop":
                 logger.info(f"Real interruption detected: {text}")
-                # Note: stop_tts may need to be called differently depending on the session API
+                try:
+                    await session.stop_tts()
+                except Exception:
+                    pass
             else:
                 logger.info(f"Processing valid user input: {text}")
-        
+
         asyncio.create_task(handle())
 
-    # Collect metrics
     usage_collector = metrics.UsageCollector()
 
     @session.on("metrics_collected")
