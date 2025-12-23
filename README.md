@@ -18,6 +18,61 @@
 
 <br />
 
+---
+
+## 🎯 Feature Addition: Intelligent Interruption Handling (TSF)
+
+**Author:** Kartik Vats  
+**Branch:** `feature/interrupt-handler-kartik`  
+**Date:** December 2025
+
+### Problem Solved
+
+Voice agents often get interrupted by user feedback sounds like "yeah", "ok", or "hmm" (backchanneling) when users are simply indicating they're listening. This causes the agent to stop speaking abruptly, breaking the conversation flow.
+
+### Solution: Temporal-Semantic Fusion (TSF)
+
+A logic layer that distinguishes between:
+
+- **Backchannels** ("yeah", "ok", "hmm") → IGNORED when agent is speaking
+- **Commands** ("stop", "wait", questions) → INTERRUPT agent immediately
+- **When agent is silent** → ALL inputs processed normally (including "yeah")
+
+### Files Added/Modified
+
+| File                                            | Type     | Description                |
+| ----------------------------------------------- | -------- | -------------------------- |
+| `examples/voice_agents/interruption_handler.py` | **NEW**  | Modular TSF handler module |
+| `examples/voice_agents/basic_agent.py`          | Modified | Added TSF integration      |
+| `tests/test_interruption_logic.py`              | **NEW**  | Unit tests for TSF logic   |
+| `examples/voice_agents/TSF_LOG_TRANSCRIPT.md`   | **NEW**  | Test proof/transcript      |
+
+### Quick Usage
+
+```python
+from interruption_handler import setup_interruption_handler
+
+# In your agent entrypoint:
+session = AgentSession(
+    stt="deepgram/nova-3",
+    llm="openai/gpt-4.1-mini",
+    tts="cartesia/sonic-2:...",
+    vad=silero.VAD.load(),
+    allow_interruptions=False,           # Required for TSF
+    discard_audio_if_uninterruptible=False,  # Keeps STT active
+)
+
+setup_interruption_handler(session)  # Enable TSF
+```
+
+### Run Tests
+
+```bash
+pytest tests/test_interruption_logic.py -v
+```
+
+---
+
 Looking for the JS/TS library? Check out [AgentsJS](https://github.com/livekit/agents-js)
 
 ## What is Agents?
@@ -41,7 +96,6 @@ agents that can see, hear, and understand.
 - **MCP support**: Native support for MCP. Integrate tools provided by MCP servers with one loc.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
-- **Intelligent Interruption Handling**: Temporal-Semantic Fusion (TSF) approach to filter backchanneling from real interruptions.
 
 ## Installation
 
@@ -215,87 +269,6 @@ async def test_no_availability() -> None:
 
 ```
 
-### Intelligent Interruption Handling (TSF)
-
-Voice agents often face a challenge: users say things like "yeah", "ok", or "hmm" while listening—these are **backchannels**, not interruptions. The Temporal-Semantic Fusion (TSF) approach intelligently filters these from real commands like "stop" or "wait".
-
-#### How It Works
-
-1. **Temporal Gate**: Checks if the agent is currently speaking
-2. **Semantic Analysis**: Analyzes the transcript to determine if it's a backchannel
-3. **Decision Matrix**: Either ignores the input or triggers an interruption
-
-#### Quick Start
-
-```python
-from interruption_handler import setup_interruption_handler
-
-# In your entrypoint:
-session = AgentSession(
-    stt=deepgram.STT(),
-    llm=openai.LLM(),
-    tts=openai.TTS(),
-    vad=silero.VAD.load(),
-)
-
-# Set up intelligent interruption handling
-handler = setup_interruption_handler(session)
-
-# Optional: Add callbacks for monitoring
-handler.on_backchannel = lambda text: print(f"Ignored: {text}")
-handler.on_interrupt = lambda text: print(f"Interrupted: {text}")
-```
-
-#### Configuring Ignore Words
-
-The default ignore list includes: `yeah`, `ok`, `okay`, `hmm`, `aha`, `right`, `uh-huh`, `yep`, `yup`, `sure`, `got it`, `i see`, `mm`, `mhm`, `uh huh`.
-
-You can customize via environment variable:
-
-```bash
-export IGNORE_WORDS="yeah,ok,hmm,uh-huh,sure"
-```
-
-Or programmatically:
-
-```python
-from interruption_handler import InterruptionHandler
-
-handler = InterruptionHandler(
-    session,
-    ignore_words={"yeah", "ok", "custom_word"}
-)
-handler.register()
-```
-
-#### Running the Demo Agent
-
-```bash
-# Set environment variables
-export LIVEKIT_URL=wss://your-livekit-server.com
-export LIVEKIT_API_KEY=your_api_key
-export LIVEKIT_API_SECRET=your_api_secret
-export DEEPGRAM_API_KEY=your_deepgram_key
-export OPENAI_API_KEY=your_openai_key
-
-# Run in development mode
-python agent.py dev
-
-# Or run in console mode for testing
-python agent.py console
-```
-
-#### Running Tests
-
-```bash
-pytest tests/test_interruption_logic.py -v
-```
-
-The test suite covers:
-- **Backchannel Ignore**: Verifies "Yeah" is ignored while agent speaks
-- **Active Interruption**: Verifies "Stop" triggers interruption while agent speaks
-- **Mixed Interruption**: Verifies "Yeah but wait" triggers interruption (contains non-backchannel words)
-
 ## Examples
 
 <table>
@@ -423,6 +396,7 @@ python myagent.py dev
 Starts the agent server and enables hot reloading when files change. This mode allows each process to host multiple concurrent agents efficiently.
 
 The agent connects to LiveKit Cloud or your self-hosted server. Set the following environment variables:
+
 - LIVEKIT_URL
 - LIVEKIT_API_KEY
 - LIVEKIT_API_SECRET
@@ -443,7 +417,9 @@ Runs the agent with production-ready optimizations.
 The Agents framework is under active development in a rapidly evolving field. We welcome and appreciate contributions of any kind, be it feedback, bugfixes, features, new plugins and tools, or better documentation. You can file issues under this repo, open a PR, or chat with us in LiveKit's [Slack community](https://livekit.io/join-slack).
 
 <!--BEGIN_REPO_NAV-->
+
 <br/><table>
+
 <thead><tr><th colspan="2">LiveKit Ecosystem</th></tr></thead>
 <tbody>
 <tr><td>LiveKit SDKs</td><td><a href="https://github.com/livekit/client-sdk-js">Browser</a> · <a href="https://github.com/livekit/client-sdk-swift">iOS/macOS/visionOS</a> · <a href="https://github.com/livekit/client-sdk-android">Android</a> · <a href="https://github.com/livekit/client-sdk-flutter">Flutter</a> · <a href="https://github.com/livekit/client-sdk-react-native">React Native</a> · <a href="https://github.com/livekit/rust-sdks">Rust</a> · <a href="https://github.com/livekit/node-sdks">Node.js</a> · <a href="https://github.com/livekit/python-sdks">Python</a> · <a href="https://github.com/livekit/client-sdk-unity">Unity</a> · <a href="https://github.com/livekit/client-sdk-unity-web">Unity (WebGL)</a> · <a href="https://github.com/livekit/client-sdk-esp32">ESP32</a></td></tr><tr></tr>

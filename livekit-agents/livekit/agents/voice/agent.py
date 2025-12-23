@@ -383,11 +383,8 @@ class Agent:
 
                 @utils.log_exceptions(logger=logger)
                 async def _forward_input() -> None:
-                    print("DEBUG: _forward_input started")
                     async for frame in audio:
-                        print("DEBUG: _forward_input received frame")
                         stream.push_frame(frame)
-                    print("DEBUG: _forward_input finished")
 
                 forward_task = asyncio.create_task(_forward_input())
                 try:

@@ -26,9 +26,17 @@ logger = logging.getLogger("interruption-handler")
 # Default list of words to ignore when the agent is speaking
 # These are common backchanneling words that indicate the user is listening
 DEFAULT_IGNORE_WORDS: Set[str] = {
-    "yeah", "ok", "okay", "hmm", "aha", "right", "uh-huh",
-    "yep", "yup", "sure", "got it", "i see", "mhm", "uh huh",
-    "mm", "mmm", "mhmm", "yes", "yea", "ya"
+    # Affirmative backchannels
+    "yeah", "yes", "yea", "ya", "yep", "yup", "yah", "yeh",
+    # Agreement/acknowledgment
+    "ok", "okay", "k", "kk", "alright", "right", "sure", "fine",
+    # Understanding signals
+    "got it", "i see", "i understand", "understood",
+    # Filler sounds / hesitations
+    "hmm", "hm", "hmmmm", "aha", "ah", "uh", "um", "umm",
+    "uh-huh", "uh huh", "mhm", "mhmm", "mm", "mmm", "mm-hmm",
+    # Short encouragements
+    "go on", "continue", "and", "so", "then",
 }
 
 
@@ -136,6 +144,7 @@ class InterruptionHandler:
         # 1. Temporal Gate - Only filter when agent is speaking
         if self.session.agent_state != "speaking":
             # Agent is not speaking, treat all input as valid (including "yeah")
+            print(f"[TSF] Agent silent - processing input: '{event.transcript}'")
             return
         
         # 2. Semantic Analysis
@@ -147,17 +156,17 @@ class InterruptionHandler:
         # 3. Decision Matrix
         if is_backchannel(transcript, self.ignore_words):
             # Backchannel detected - IGNORE
-            logger.info(f"[TSF] Ignoring backchannel: '{transcript}'")
+            print(f"[TSF] IGNORED (backchannel): '{event.transcript}' - Agent continues speaking")
             if self.on_backchannel:
                 self.on_backchannel(transcript)
             # Do nothing - agent continues speaking seamlessly
         else:
             # Active interruption detected - INTERRUPT
-            logger.info(f"[TSF] Interruption triggered: '{transcript}'")
+            print(f"[TSF] INTERRUPT: '{event.transcript}' - Stopping agent")
             if self.on_interrupt:
                 self.on_interrupt(transcript)
             # Force interrupt the agent
-            asyncio.create_task(self.session.interrupt())
+            asyncio.create_task(self.session.interrupt(force=True))
     
     def register(self) -> "InterruptionHandler":
         """

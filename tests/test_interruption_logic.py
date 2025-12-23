@@ -1,3 +1,14 @@
+"""
+Test Suite for Intelligent Interruption Handler (TSF)
+
+Author: Kartik Vats
+Branch: feature/interrupt-handler-kartik
+
+This test suite verifies the Temporal-Semantic Fusion (TSF) interruption handling logic:
+- test_ignore_interruption: Verifies backchannels are ignored while agent speaks
+- test_active_interruption: Verifies commands trigger interruption while agent speaks  
+- test_mixed_interruption: Verifies mixed input ("Yeah but wait") triggers interruption
+"""
 
 import asyncio
 import os
@@ -13,7 +24,7 @@ from livekit.agents import (
 from livekit.agents.voice.speech_handle import SpeechHandle
 from .fake_session import FakeActions, create_session, run_session
 
-# Replicate the logic from agent.py
+# Replicate the logic from interruption_handler.py
 IGNORE_WORDS = {
     "yeah", "ok", "okay", "hmm", "aha", "right", "uh-huh", 
     "yep", "yup", "sure", "got it", "i see"
