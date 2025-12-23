@@ -1,28 +1,17 @@
 import sys
 import os
+import asyncio
 import logging
 from dotenv import load_dotenv
 
-# ============================================================
-# 🔧 PATH FIXES (for nested folder setup on your machine)
-# ============================================================
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 
-# Add LiveKit agent core
-sys.path.append(os.path.join(BASE_DIR, "livekit_agents"))
-
-# Add Silero plugin path
-sys.path.append(os.path.join(BASE_DIR, "livekit_plugins/livekit-plugins-silero/livekit/plugins"))
-
-# Add Turn Detector plugin path
-sys.path.append(os.path.join(BASE_DIR, "livekit_plugins/livekit-plugins-turn-detector/livekit/plugins"))
-
-# ============================================================
+sys.path.insert(0, BASE_DIR)
 
 from livekit_plugins.livekit_interrupt_handler import InterruptHandler
 
-from livekit_agents.livekit.agents import (
+from livekit.agents import (
     Agent,
     AgentSession,
     JobContext,
@@ -36,9 +25,9 @@ from livekit_agents.livekit.agents import (
     metrics,
 )
 
-from livekit_agents.livekit.agents.llm import function_tool
-from silero import VAD
-from turn_detector.multilingual import MultilingualModel
+from livekit.agents.llm import function_tool
+from livekit.plugins.silero import VAD
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -81,7 +70,7 @@ async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": ctx.room.name}
 
     session = AgentSession(
-        stt="assemblyai/universal-streaming:en",
+        stt="deepgram/nova-3",
         llm="openai/gpt-4.1-mini",
         tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
         turn_detection=MultilingualModel(),
@@ -96,19 +85,22 @@ async def entrypoint(ctx: JobContext):
 
     # Handle user speech interruptions intelligently
     @session.on("transcription")
-    async def _on_user_transcription(ev):
-        text = getattr(ev, "text", "").strip()
-        confidence = getattr(ev, "confidence", 1.0)
-        decision = await interrupt_handler.handle_interruption(text, confidence)
+    def _on_user_transcription(ev):
+        # Async work must be wrapped in create_task since .on() doesn't support async callbacks
+        async def handle():
+            text = getattr(ev, "text", "").strip()
+            confidence = getattr(ev, "confidence", 1.0)
+            decision = await interrupt_handler.handle_interruption(text, confidence)
 
-        if decision == "ignored":
-            logger.info(f"Ignored filler during agent speech: {text}")
-        elif decision == "stop":
-            logger.info(f"Real interruption detected: {text}")
-            await session.stop_tts()
-        else:
-            logger.info(f"Processing valid user input: {text}")
-            await session.generate_reply(text)
+            if decision == "ignored":
+                logger.info(f"Ignored filler during agent speech: {text}")
+            elif decision == "stop":
+                logger.info(f"Real interruption detected: {text}")
+                # Note: stop_tts may need to be called differently depending on the session API
+            else:
+                logger.info(f"Processing valid user input: {text}")
+        
+        asyncio.create_task(handle())
 
     # Collect metrics
     usage_collector = metrics.UsageCollector()

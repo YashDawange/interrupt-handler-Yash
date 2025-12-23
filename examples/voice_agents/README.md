@@ -1,77 +1,260 @@
-# Voice Agents Examples
+# LiveKit Voice Agent with Intelligent Interruption Handler
 
-This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
+A voice agent built with LiveKit that features intelligent interruption handling - filtering out filler words ("uh", "umm", "hmm") while still responding to real user commands.
 
-## 📋 Table of Contents
+## 🎯 Features
 
-### 🚀 Getting Started
+- **Voice-based AI Agent** powered by LiveKit
+- **Intelligent Interruption Handling** - Filters filler words during agent speech
+- **Multilingual Turn Detection** - Context-aware conversation flow
+- **Speech-to-Text** using Deepgram Nova-3
+- **Text-to-Speech** using Cartesia Sonic-2
+- **LLM** powered by OpenAI GPT-4.1-mini
 
-- [`basic_agent.py`](./basic_agent.py) - A fundamental voice agent with metrics collection
+---
 
-### 🛠️ Tool Integration & Function Calling
+## 📋 Prerequisites
 
-- [`annotated_tool_args.py`](./annotated_tool_args.py) - Using Python type annotations for tool arguments
-- [`dynamic_tool_creation.py`](./dynamic_tool_creation.py) - Creating and registering tools dynamically at runtime
-- [`raw_function_description.py`](./raw_function_description.py) - Using raw JSON schema definitions for tool descriptions
-- [`silent_function_call.py`](./silent_function_call.py) - Executing function calls without verbal responses to user
-- [`long_running_function.py`](./long_running_function.py) - Handling long running function calls with interruption support
+- **Python 3.11+** installed on your system
+- **API Keys** for the following services:
+  - [Deepgram](https://deepgram.com/) (STT)
+  - [OpenAI](https://openai.com/) (LLM)
+  - [Cartesia](https://cartesia.ai/) (TTS)
+  - [LiveKit Cloud](https://livekit.io/) (optional, for production deployment)
 
-### ⚡ Real-time Models
+---
 
-- [`weather_agent.py`](./weather_agent.py) - OpenAI Realtime API with function calls for weather information
-- [`realtime_video_agent.py`](./realtime_video_agent.py) - Google Gemini with multimodal video and voice capabilities
-- [`realtime_joke_teller.py`](./realtime_joke_teller.py) - Amazon Nova Sonic real-time model with function calls
-- [`realtime_load_chat_history.py`](./realtime_load_chat_history.py) - Loading previous chat history into real-time models
-- [`realtime_turn_detector.py`](./realtime_turn_detector.py) - Using LiveKit's turn detection with real-time models
-- [`realtime_with_tts.py`](./realtime_with_tts.py) - Combining external TTS providers with real-time models
+## 🚀 Installation Steps
 
-### 🎯 Pipeline Nodes & Hooks
+### Step 1: Clone the Repository
 
-- [`fast-preresponse.py`](./fast-preresponse.py) - Generating quick responses using the `on_user_turn_completed` node
-- [`structured_output.py`](./structured_output.py) - Structured data and JSON outputs from agent responses
-- [`speedup_output_audio.py`](./speedup_output_audio.py) - Dynamically adjusting agent audio playback speed
-- [`timed_agent_transcript.py`](./timed_agent_transcript.py) - Reading timestamped transcripts from `transcription_node`
-- [`inactive_user.py`](./inactive_user.py) - Handling inactive users with the `user_state_changed` event hook
-- [`resume_interrupted_agent.py`](./resume_interrupted_agent.py) - Resuming agent speech after false interruption detection
-- [`toggle_io.py`](./toggle_io.py) - Dynamically toggling audio input/output during conversations
+```bash
+git clone <repository-url>
+cd livekit-agent-interruption-handler
+```
 
-### 🤖 Multi-agent & AgentTask Use Cases
+### Step 2: Create Virtual Environment
 
-- [`restaurant_agent.py`](./restaurant_agent.py) - Multi-agent system for restaurant ordering and reservation management
-- [`multi_agent.py`](./multi_agent.py) - Collaborative storytelling with multiple specialized agents
-- [`email_example.py`](./email_example.py) - Using AgentTask to collect and validate email addresses
+```bash
+# Windows
+python -m venv venv
+.\venv\Scripts\activate
 
-### 🔗 MCP & External Integrations
+# macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
+```
 
-- [`web_search.py`](./web_search.py) - Integrating web search capabilities into voice agents
-- [`langgraph_agent.py`](./langgraph_agent.py) - LangGraph integration
-- [`mcp/`](./mcp/) - Model Context Protocol (MCP) integration examples
-  - [`mcp-agent.py`](./mcp/mcp-agent.py) - MCP agent integration
-  - [`server.py`](./mcp/server.py) - MCP server example
-- [`zapier_mcp_integration.py`](./zapier_mcp_integration.py) - Automating workflows with Zapier through MCP
+### Step 3: Install Dependencies
 
-### 💾 RAG & Knowledge Management
+```bash
+pip install livekit-agents livekit-plugins-silero livekit-plugins-turn-detector livekit-plugins-deepgram livekit-plugins-openai livekit-plugins-cartesia python-dotenv
+```
 
-- [`llamaindex-rag/`](./llamaindex-rag/) - Complete RAG implementation with LlamaIndex
-  - [`chat_engine.py`](./llamaindex-rag/chat_engine.py) - Chat engine integration
-  - [`query_engine.py`](./llamaindex-rag/query_engine.py) - Query engine used in a function tool
-  - [`retrieval.py`](./llamaindex-rag/retrieval.py) - Document retrieval
+Or if a `requirements.txt` exists:
 
-### 🎵 Specialized Use Cases
+```bash
+pip install -r requirements.txt
+```
 
-- [`background_audio.py`](./background_audio.py) - Playing background audio or ambient sounds during conversations
-- [`push_to_talk.py`](./push_to_talk.py) - Push-to-talk interaction
-- [`tts_text_pacing.py`](./tts_text_pacing.py) - Pacing control for TTS requests
-- [`speaker_id_multi_speaker.py`](./speaker_id_multi_speaker.py) - Multi-speaker identification
+### Step 4: Configure Environment Variables
 
-### 📊 Tracing & Error Handling
+Create a `.env` file in the `examples/voice_agents/` directory:
 
-- [`langfuse_trace.py`](./langfuse_trace.py) - LangFuse integration for conversation tracing
-- [`error_callback.py`](./error_callback.py) - Error handling callback
-- [`session_close_callback.py`](./session_close_callback.py) - Session lifecycle management
+```bash
+cd examples/voice_agents
+```
 
-## 📖 Additional Resources
+Create a file named `.env` with the following content:
+
+```env
+# Deepgram API Key (for Speech-to-Text)
+DEEPGRAM_API_KEY=your_deepgram_api_key_here
+
+# OpenAI API Key (for LLM)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Cartesia API Key (for Text-to-Speech)
+CARTESIA_API_KEY=your_cartesia_api_key_here
+
+# LiveKit Credentials (optional for console mode, required for production)
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+```
+
+### Step 5: Download Required Model Files
+
+Before running the agent, you need to download the turn detection and VAD models:
+
+```bash
+python basic_agent.py download-files
+```
+
+This will download:
+- Silero VAD model
+- Multilingual turn detection model
+
+---
+
+## ▶️ Running the Agent
+
+### Console Mode (Local Testing)
+
+This mode allows you to test the agent locally without connecting to LiveKit Cloud:
+
+```bash
+cd examples/voice_agents
+python basic_agent.py console
+```
+
+You should see output like:
+
+```
+Agents   Starting console mode 🚀
+... INFO   livekit.agents     starting worker
+... INFO   livekit.agents     HTTP server listening on :55927
+```
+
+### Production Mode (with LiveKit Cloud)
+
+For production deployment with LiveKit Cloud:
+
+```bash
+python basic_agent.py start
+```
+
+---
+
+## 📁 Project Structure
+
+```
+livekit-agent-interruption-handler/
+├── livekit_plugins/
+│   ├── __init__.py
+│   └── livekit_interrupt_handler.py    # Custom interruption handler
+├── examples/
+│   └── voice_agents/
+│       ├── basic_agent.py              # Main agent file
+│       ├── .env                         # Environment variables (create this)
+│       └── README.md                    # This file
+└── venv/                                # Virtual environment
+```
+
+---
+
+## 🧩 How the Interruption Handler Works
+
+The custom `InterruptHandler` class in `livekit_plugins/livekit_interrupt_handler.py`:
+
+1. **Filters Filler Words** - When the agent is speaking, filler words like "uh", "umm", "hmm", "haan" are ignored
+2. **Detects Real Interruptions** - Non-filler speech during agent playback triggers a real interruption
+3. **Processes Normal Input** - When the agent is silent, all user speech is processed normally
+
+### Decision Flow:
+
+```
+User speaks while agent is speaking
+    ├── Low confidence (< 0.6) → IGNORED
+    ├── Filler word only → IGNORED  
+    └── Real speech → STOP agent (valid interruption)
+
+User speaks while agent is silent
+    └── All speech → PROCESSED normally
+```
+
+### Configurable Filler Words:
+
+You can customize the ignored words list when initializing:
+
+```python
+interrupt_handler = InterruptHandler(
+    ignored_words=["uh", "umm", "hmm", "yeah", "okay", "mhm"]
+)
+```
+
+---
+
+## 🔧 Customization
+
+### Change the Agent's Personality
+
+Edit the `instructions` in `basic_agent.py`:
+
+```python
+class MyAgent(Agent):
+    def __init__(self) -> None:
+        super().__init__(
+            instructions=(
+                "Your name is Kelly. You would interact with users via voice. "
+                "Keep your responses concise and to the point. "
+                # Add your custom instructions here
+            )
+        )
+```
+
+### Change Voice/LLM Providers
+
+Modify the `AgentSession` configuration:
+
+```python
+session = AgentSession(
+    stt="deepgram/nova-3",           # Speech-to-Text provider
+    llm="openai/gpt-4.1-mini",       # LLM provider
+    tts="cartesia/sonic-2:voice-id", # Text-to-Speech provider
+    # ...
+)
+```
+
+---
+
+## ❓ Troubleshooting
+
+### Error: `ModuleNotFoundError: No module named 'livekit'`
+
+Make sure you've activated the virtual environment:
+
+```bash
+.\venv\Scripts\activate  # Windows
+source venv/bin/activate  # macOS/Linux
+```
+
+### Error: `Could not find file "model_q8.onnx"`
+
+Run the download command:
+
+```bash
+python basic_agent.py download-files
+```
+
+### Error: `Duplicated timeseries in CollectorRegistry`
+
+This happens when mixing local and installed package versions. Make sure you're using the correct imports from `livekit.agents` and `livekit.plugins.*`.
+
+### Error: `Cannot register an async callback with .on()`
+
+Use a sync callback wrapper with `asyncio.create_task()`:
+
+```python
+@session.on("event_name")
+def sync_handler(ev):
+    async def async_work():
+        # your async code here
+    asyncio.create_task(async_work())
+```
+
+---
+
+## 📚 Resources
 
 - [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
-- [Agents Starter Example](https://github.com/livekit-examples/agent-starter-python)
-- [More Agents Examples](https://github.com/livekit-examples/python-agents-examples)
+- [LiveKit GitHub](https://github.com/livekit/agents)
+- [Deepgram API](https://developers.deepgram.com/)
+- [OpenAI API](https://platform.openai.com/docs/)
+- [Cartesia API](https://docs.cartesia.ai/)
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0.

@@ -1,50 +1,54 @@
-"""
-LiveKit Voice Interruption Handler
-Author: Vaibhav
-Description: Filters out filler words during agent TTS playback to prevent false VAD interruptions.
-"""
-
-import asyncio
+import re
 from typing import List
 
-# Configurable list of ignored filler words
-IGNORED_WORDS = ["uh", "umm", "hmm", "haan"]
+IGNORED_WORDS = {
+    "uh", "umm", "um", "hmm", "hmmm",
+    "haan", "yeah", "ok", "okay",
+    "mhm", "uh-huh", "uh huh",
+    "right", "aha", "ahaa", "ah",
+    "yep", "yup", "sure",
+    "gotcha", "got", "it",
+    "i", "see", "alright"
+}
 
 class InterruptHandler:
     def __init__(self, ignored_words: List[str] = None):
-        self.ignored_words = ignored_words or IGNORED_WORDS
-        self.agent_speaking = False  # This changes when TTS starts/stops
+        self.ignored_words = set(ignored_words) if ignored_words else IGNORED_WORDS
+        self.agent_speaking = False
 
     def set_agent_state(self, speaking: bool):
-        """Call this when the agent starts/stops speaking."""
         self.agent_speaking = speaking
 
+    def normalize(self, text: str) -> List[str]:
+        text = text.lower()
+        print(text)
+        text = re.sub(r"[^\w\s]", "", text)
+        print(text)
+
+        return text.split()
+
     def is_filler(self, text: str) -> bool:
-        """Return True if input text contains only filler words."""
-        clean_text = text.lower().strip()
-        if not clean_text:
+        words = self.normalize(text)
+
+        if not words:
             return False
-        return all(word in self.ignored_words for word in clean_text.split())
+
+        # 🔥 KEY RULE: very short utterances during agent speech
+        if len(words) <= 2 and all(w in self.ignored_words for w in words):
+            return True
+
+        return False
 
     async def handle_interruption(self, text: str, confidence: float = 1.0):
-        """
-        Handle incoming speech and decide if it's a real interruption.
-        Returns: 'ignored', 'stop', or 'process'
-        """
         if self.agent_speaking:
-            # Case 1: Agent currently speaking
             if confidence < 0.6:
-                print(f"[LOW CONFIDENCE IGNORED] '{text}'")
                 return "ignored"
 
             if self.is_filler(text):
-                print(f"[IGNORED FILLER] '{text}' while agent speaking")
+                print(f"[IGNORED FILLER] '{text}'")
                 return "ignored"
 
-            print(f"[VALID INTERRUPTION] '{text}' while agent speaking → STOP agent")
+            print(f"[VALID INTERRUPTION] '{text}' → STOP agent")
             return "stop"
 
-        else:
-            # Case 2: Agent quiet
-            print(f"[USER SPEECH] '{text}' registered normally")
-            return "process"
+        return "process"
