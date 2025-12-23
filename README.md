@@ -18,10 +18,6 @@
 
 <br />
 
-## 🎥 Demo
-
-[Download / View demo video]([demos/demo.mp4](https://drive.google.com/file/d/1Dv85Ha-o2fesTtK9lNcFnjm1jn2ngS-v/view?usp=sharing))
-
 Looking for the JS/TS library? Check out [AgentsJS](https://github.com/livekit/agents-js)
 
 ## What is Agents?
