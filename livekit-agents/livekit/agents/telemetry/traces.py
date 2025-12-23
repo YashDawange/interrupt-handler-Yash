@@ -16,12 +16,22 @@ from opentelemetry.exporter.otlp.proto.http import Compression
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import (
-    LogData,
     LoggerProvider,
     LoggingHandler,
-    LogRecord,
     LogRecordProcessor,
 )
+
+# Handle compatibility with different OpenTelemetry SDK versions
+try:
+    from opentelemetry.sdk._logs import LogData
+except ImportError:
+    from opentelemetry.sdk._logs import ReadableLogRecord as LogData
+
+try:
+    from opentelemetry.sdk._logs import LogRecord
+except ImportError:
+    from opentelemetry.sdk._logs import ReadWriteLogRecord as LogRecord
+
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
