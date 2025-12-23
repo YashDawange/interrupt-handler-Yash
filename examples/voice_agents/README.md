@@ -73,8 +73,8 @@
   ### Voice Agent: Smart Interruption Handling (English + Hinglish)
 
   #### 1. What changed
-  - [`basic_agent_interruption.py`](./basic_agent.py) - Integrates the interruption filter and controls stop/resume logic for agent speech.
-  - [`basic_agent_interruption_handler.py`](./interruption_handler.py) - Classifies ASR text as filler, real interruption, or normal speech.
+  - [`basic_agent_interruption.py`] - Integrates the interruption filter and controls stop/resume logic for agent speech.
+  - [`basic_agent_interruption_handler.py`] - Classifies ASR text as filler, real interruption, or normal speech.
 
   This example extends the standard voice agent by adding **real-time interruption awareness**.  
   It uses a lightweight speech-level filter to **ignore filler expressions** while the agent is speaking, and **stop immediately** when the user expresses intent to interrupt.
