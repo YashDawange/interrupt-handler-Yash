@@ -53,6 +53,7 @@ from .audio_recognition import (
     _EndOfTurnInfo,
     _PreemptiveGenerationInfo,
 )
+from .interruption_handler import InterruptionHandler, get_interruption_handler
 from .events import (
     AgentFalseInterruptionEvent,
     ErrorEvent,
@@ -125,6 +126,11 @@ class AgentActivity(RecognitionHooks):
         self._paused_speech: SpeechHandle | None = None
         self._false_interruption_timer: asyncio.TimerHandle | None = None
         self._interrupt_paused_speech_task: asyncio.Task[None] | None = None
+
+        # for intelligent interruption handling
+        self._interruption_handler: InterruptionHandler = get_interruption_handler()
+        self._pending_interruption: bool = False
+        self._pending_interruption_task: asyncio.Task[None] | None = None
 
         # fired when a speech_task finishes or when a new speech_handle is scheduled
         # this is used to wake up the main task when the scheduling state changes
@@ -1166,7 +1172,7 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
-    def _interrupt_by_audio_activity(self) -> None:
+    def _interrupt_by_audio_activity(self, transcript: str | None = None) -> None:
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1174,25 +1180,42 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
+        # Get transcript if not provided
+        if transcript is None and self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
+
+        # Check min_interruption_words
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
+            and transcript
         ):
-            text = self._audio_recognition.current_transcript
-
             # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+            if len(split_words(transcript, split_character=True)) < opt.min_interruption_words:
+                return
+
+        # Intelligent interruption handling: check if we should ignore based on transcript
+        agent_is_speaking = (
+            self._current_speech is not None
+            and not self._current_speech.interrupted
+            and self._current_speech.allow_interruptions
+        )
+
+        if transcript and agent_is_speaking:
+            if self._interruption_handler.should_ignore_interruption(
+                transcript, agent_is_speaking=True
+            ):
+                # Ignore this interruption - it's just backchanneling
+                logger.debug(
+                    "Ignoring interruption due to backchanneling",
+                    extra={"transcript": transcript, "agent_state": "speaking"},
+                )
                 return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
-        if (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
-        ):
+        if agent_is_speaking:
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1208,6 +1231,56 @@ class AgentActivity(RecognitionHooks):
                     self._rt_session.interrupt()
 
                 self._current_speech.interrupt()
+
+    async def _handle_pending_interruption(self, timeout: float = 1.0) -> None:
+        """
+        Handle pending interruption that was triggered by VAD before STT transcript was available.
+
+        This method waits for a transcript to become available, or times out and proceeds
+        with interruption if no transcript is received.
+
+        Args:
+            timeout: Maximum time to wait for transcript before proceeding with interruption.
+        """
+        try:
+            # Wait a bit for transcript to arrive
+            await asyncio.sleep(timeout)
+
+            # Check if we still have a pending interruption
+            if not self._pending_interruption:
+                return
+
+            # Get current transcript if available
+            transcript = None
+            if self._audio_recognition is not None:
+                transcript = self._audio_recognition.current_transcript
+
+            # If we have transcript, check if we should ignore
+            if transcript:
+                agent_is_speaking = (
+                    self._current_speech is not None
+                    and not self._current_speech.interrupted
+                    and self._current_speech.allow_interruptions
+                )
+
+                if agent_is_speaking:
+                    if self._interruption_handler.should_ignore_interruption(
+                        transcript, agent_is_speaking=True
+                    ):
+                        # Ignore - it's just backchanneling
+                        logger.debug(
+                            "Ignoring pending interruption due to backchanneling",
+                            extra={"transcript": transcript},
+                        )
+                        self._pending_interruption = False
+                        return
+
+            # Proceed with interruption (either no transcript or not backchanneling)
+            self._pending_interruption = False
+            self._interrupt_by_audio_activity(transcript=transcript)
+        except asyncio.CancelledError:
+            # Task was cancelled (transcript arrived), ignore
+            pass
 
     # region recognition hooks
 
@@ -1241,7 +1314,27 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
-            self._interrupt_by_audio_activity()
+            # VAD fires before STT, so we need to check if we have transcript yet
+            # If we have STT, check transcript immediately
+            # If not, delay interruption until we get transcript (or timeout)
+            transcript = None
+            if self._audio_recognition is not None:
+                transcript = self._audio_recognition.current_transcript
+
+            if transcript:
+                # We have transcript, check immediately
+                self._interrupt_by_audio_activity(transcript=transcript)
+            else:
+                # No transcript yet - delay interruption until we get transcript
+                # This handles the race condition where VAD fires before STT
+                self._pending_interruption = True
+                # Cancel any existing pending interruption task
+                if self._pending_interruption_task:
+                    self._pending_interruption_task.cancel()
+                # Schedule a delayed interruption check (timeout after 1 second if no transcript)
+                self._pending_interruption_task = asyncio.create_task(
+                    self._handle_pending_interruption(timeout=1.0)
+                )
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1261,7 +1354,17 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            transcript = ev.alternatives[0].text
+
+            # Check if we had a pending interruption from VAD
+            if self._pending_interruption:
+                self._pending_interruption = False
+                if self._pending_interruption_task:
+                    self._pending_interruption_task.cancel()
+                    self._pending_interruption_task = None
+
+            # Check if we should interrupt based on transcript
+            self._interrupt_by_audio_activity(transcript=transcript)
 
             if (
                 speaking is False
@@ -1292,7 +1395,17 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            transcript = ev.alternatives[0].text
+
+            # Check if we had a pending interruption from VAD
+            if self._pending_interruption:
+                self._pending_interruption = False
+                if self._pending_interruption_task:
+                    self._pending_interruption_task.cancel()
+                    self._pending_interruption_task = None
+
+            # Check if we should interrupt based on transcript
+            self._interrupt_by_audio_activity(transcript=transcript)
 
             if (
                 speaking is False
