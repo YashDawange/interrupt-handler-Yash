@@ -1,0 +1,28 @@
+2026-01-16 17:31:56,948 - INFO - ============================================================
+2026-01-16 17:31:56,948 - INFO - Scenario 1: Agent ignores 'yeah' while speaking
+2026-01-16 17:31:56,948 - INFO - ============================================================
+2026-01-16 17:31:56,948 - INFO - Agent: 'Let me explain the history of artificial intelligence...'
+2026-01-16 17:31:56,948 - INFO - User: 'yeah'
+2026-01-16 17:31:56,949 - INFO - Filter Decision: should_interrupt=False, reason=passive_acknowledgement
+2026-01-16 17:31:56,949 - INFO - Agent: '...it began in the 1950s with the work of Alan Turing...' (continues speaking)
+2026-01-16 17:31:56,949 - INFO - RESULT: [PASS] Agent continued speaking without pause or stop
+2026-01-16 17:31:56,949 - INFO - ============================================================
+2026-01-16 17:31:56,949 - INFO - Scenario 2: Agent responds to 'yeah' when silent
+2026-01-16 17:31:56,949 - INFO - ============================================================
+2026-01-16 17:31:56,949 - INFO - Agent: 'Are you ready?' (silent)
+2026-01-16 17:31:56,949 - INFO - User: 'yeah'
+2026-01-16 17:31:56,949 - INFO - Filter Decision: should_interrupt=True, reason=agent_silent
+2026-01-16 17:31:56,949 - INFO - Agent: 'Great! Let's start...'
+2026-01-16 17:31:56,949 - INFO - RESULT: [PASS] Agent processed 'yeah' as valid input
+2026-01-16 17:31:56,949 - INFO - ============================================================
+2026-01-16 17:31:56,949 - INFO - Scenario 3: Agent stops for 'stop'
+2026-01-16 17:31:56,949 - INFO - ============================================================
+2026-01-16 17:31:56,949 - INFO - Agent: 'Let me explain how voice agents work...'
+2026-01-16 17:31:56,949 - INFO - User: 'stop'
+2026-01-16 17:31:56,949 - INFO - Filter Decision: should_interrupt=True, reason=contains_interrupt_command
+2026-01-16 17:31:56,950 - INFO - Agent: [STOPS IMMEDIATELY]
+2026-01-16 17:31:56,950 - INFO - Agent State: listening
+2026-01-16 17:31:56,950 - INFO - RESULT: [PASS] Agent stopped immediately on interrupt command
+2026-01-16 17:31:56,950 - INFO - ============================================================
+2026-01-16 17:31:56,950 - INFO - All scenarios demonstrated successfully!
+2026-01-16 17:31:56,950 - INFO - ============================================================
