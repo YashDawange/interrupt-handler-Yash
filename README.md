@@ -373,3 +373,24 @@ The Agents framework is under active development in a rapidly evolving field. We
 </tbody>
 </table>
 <!--END_REPO_NAV-->
+---
+
+## Intelligent Interruption Handling (Assignment Addition)
+
+This section describes the context-aware interruption handling logic added as part
+of the assignment.
+
+### Problem
+LiveKit’s default Voice Activity Detection (VAD) may interrupt the agent when a user
+utters passive acknowledgements such as "yeah", "ok", or "hmm" while the agent is
+still speaking.
+
+### Solution
+A lightweight logic layer defers interruption decisions until the final
+Speech-to-Text (STT) transcript is available. Based on the agent’s current state
+and the semantic intent of the utterance, the system decides to ignore, interrupt,
+or respond.
+
+### Implementation
+Implemented in `livekit/agents/interrupt_handler.py` and intended to be invoked from
+the agent’s STT final transcript callback before acting on VAD interruption signals.
