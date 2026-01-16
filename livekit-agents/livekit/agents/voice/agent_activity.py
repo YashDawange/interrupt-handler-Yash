@@ -75,6 +75,11 @@ from .generation import (
     update_instructions,
 )
 from .speech_handle import SpeechHandle
+from .interruption_filter import (
+    InterruptionFilter,
+    InterruptionFilterConfig,
+    get_default_interruption_filter,
+)
 
 if TYPE_CHECKING:
     from ..llm import mcp
@@ -163,6 +168,12 @@ class AgentActivity(RecognitionHooks):
 
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
+
+        # interruption filter for context-aware interruption handling
+        self._interruption_filter: InterruptionFilter = get_default_interruption_filter()
+        
+        # pending interruption check (when VAD triggers before STT transcript is available)
+        self._pending_interruption_check: bool = False
 
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
@@ -1166,7 +1177,14 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
-    def _interrupt_by_audio_activity(self) -> None:
+    def _interrupt_by_audio_activity(self, transcript: str | None = None) -> None:
+        """
+        Handle interruption by audio activity (VAD or STT).
+        
+        Args:
+            transcript: Optional transcript text. If None, will try to get from audio_recognition.
+                       If transcript is not available yet, will queue the check for later.
+        """
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1174,25 +1192,65 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
-            text = self._audio_recognition.current_transcript
+        # Get transcript if not provided
+        if transcript is None and self._audio_recognition is not None:
+            transcript = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
-
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
-
-        if (
+        # Check if agent is currently speaking
+        agent_is_speaking = (
             self._current_speech is not None
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
+        )
+
+        # If transcript is not available yet and agent is speaking, queue the check
+        if transcript is None or not transcript.strip():
+            if agent_is_speaking:
+                # VAD triggered but STT transcript not available yet - queue check
+                self._pending_interruption_check = True
+                logger.debug(
+                    "VAD detected speech but transcript not available yet, "
+                    "queuing interruption check"
+                )
+            return
+
+        # Apply interruption filter if agent is speaking
+        if agent_is_speaking:
+            should_interrupt = self._interruption_filter.should_interrupt(
+                transcript=transcript,
+                agent_is_speaking=True
+            )
+            
+            filter_reason = self._interruption_filter.get_filter_reason(
+                transcript=transcript,
+                agent_is_speaking=True
+            )
+            
+            logger.debug(
+                f"Interruption filter decision: should_interrupt={should_interrupt}, "
+                f"reason={filter_reason}, transcript='{transcript}'"
+            )
+            
+            if not should_interrupt:
+                # Passive acknowledgement - ignore and continue speaking
+                logger.debug(f"Ignoring passive acknowledgement: '{transcript}'")
+                self._pending_interruption_check = False
+                return
+
+        # Check min_interruption_words if configured
+        if (
+            self.stt is not None
+            and opt.min_interruption_words > 0
         ):
+            # TODO(long): better word splitting for multi-language
+            if len(split_words(transcript, split_character=True)) < opt.min_interruption_words:
+                return
+
+        # Proceed with interruption
+        if self._rt_session is not None:
+            self._rt_session.start_user_activity()
+
+        if agent_is_speaking:
             self._paused_speech = self._current_speech
 
             # reset the false interruption timer
@@ -1208,6 +1266,8 @@ class AgentActivity(RecognitionHooks):
                     self._rt_session.interrupt()
 
                 self._current_speech.interrupt()
+            
+            self._pending_interruption_check = False
 
     # region recognition hooks
 
@@ -1248,20 +1308,29 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text if ev.alternatives else ""
+        
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript,
                 is_final=False,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
 
-        if ev.alternatives[0].text and self._turn_detection not in (
+        if transcript and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check if we have a pending interruption check or need to check now
+            if self._pending_interruption_check or (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            ):
+                # Use the interruption filter with the transcript
+                self._interrupt_by_audio_activity(transcript=transcript)
 
             if (
                 speaking is False
@@ -1276,10 +1345,12 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        transcript = ev.alternatives[0].text if ev.alternatives else ""
+        
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
-                transcript=ev.alternatives[0].text,
+                transcript=transcript,
                 is_final=True,
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
@@ -1292,7 +1363,14 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            # Check if we have a pending interruption check or need to check now
+            if self._pending_interruption_check or (
+                self._current_speech is not None
+                and not self._current_speech.interrupted
+                and self._current_speech.allow_interruptions
+            ):
+                # Use the interruption filter with the transcript
+                self._interrupt_by_audio_activity(transcript=transcript)
 
             if (
                 speaking is False

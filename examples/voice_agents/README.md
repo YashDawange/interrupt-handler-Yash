@@ -34,6 +34,7 @@ This directory contains a comprehensive collection of voice-based agent examples
 - [`timed_agent_transcript.py`](./timed_agent_transcript.py) - Reading timestamped transcripts from `transcription_node`
 - [`inactive_user.py`](./inactive_user.py) - Handling inactive users with the `user_state_changed` event hook
 - [`resume_interrupted_agent.py`](./resume_interrupted_agent.py) - Resuming agent speech after false interruption detection
+- [`interruption_filter_demo.py`](./interruption_filter_demo.py) - Intelligent interruption handling that distinguishes between passive acknowledgements and active interruptions
 - [`toggle_io.py`](./toggle_io.py) - Dynamically toggling audio input/output during conversations
 
 ### 🤖 Multi-agent & AgentTask Use Cases
