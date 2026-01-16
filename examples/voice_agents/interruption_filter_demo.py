@@ -14,6 +14,8 @@ Test scenarios:
 """
 
 import logging
+import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -28,6 +30,20 @@ from livekit.agents import (
 from livekit.plugins import silero
 
 logger = logging.getLogger("interruption-filter-demo")
+
+# Enable debug logging to capture filter decisions for proof
+# Set LIVEKIT_DEBUG=true environment variable to enable
+if os.environ.get("LIVEKIT_DEBUG", "").lower() == "true":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        handlers=[
+            logging.FileHandler('interruption_filter_proof.log', encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    logging.getLogger("livekit.agents.voice.agent_activity").setLevel(logging.DEBUG)
+    logger.info("Debug logging enabled - logs saved to interruption_filter_proof.log")
 
 load_dotenv()
 
