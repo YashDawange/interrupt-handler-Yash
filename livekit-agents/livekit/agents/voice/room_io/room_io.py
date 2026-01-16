@@ -57,6 +57,10 @@ class RoomIO:
         self._agent_session, self._room = agent_session, room
         # self._input_options = input_options
         # self._output_options = output_options
+        # --- interruption handling state ---
+        self._agent_state = AgentState()
+        self._interruption_gate = InterruptionGate(self._agent_state)
+
         self._participant_identity = (
             participant.identity if isinstance(participant, rtc.RemoteParticipant) else participant
         )
@@ -383,8 +387,35 @@ class RoomIO:
             self._agent_session._close_soon(reason=CloseReason.PARTICIPANT_DISCONNECTED)
 
     def _on_user_input_transcribed(self, ev: UserInputTranscribedEvent) -> None:
+        transcript = (ev.transcript or "").strip().lower()
+
+        # CASE 1: Agent is speaking
+        if self._agent_state.is_speaking():
+            should_interrupt = self._interruption_gate.should_interrupt(transcript)
+
+            if should_interrupt:
+                logger.info(
+                    "[INTERRUPT] User interrupted agent",
+                    extra={"transcript": transcript},
+                )
+                self._agent_session.interrupt()
+            else:
+                logger.info(
+                    "[IGNORED] Passive user input while agent speaking",
+                    extra={"transcript": transcript},
+                )
+            return
+
+        # CASE 2: Agent is silent → normal processing
+        logger.info(
+            "[ACCEPTED] User input while agent silent",
+            extra={"transcript": transcript},
+        )
+
         if self._user_transcript_atask:
             self._user_transcript_ch.send_nowait(ev)
+
+
 
     def _on_user_text_input(self, reader: rtc.TextStreamReader, participant_identity: str) -> None:
         if participant_identity != self._participant_identity:

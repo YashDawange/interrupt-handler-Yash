@@ -177,3 +177,7 @@ docs/
 
 # Examples for development
 examples/dev/*
+
+# Local demo & scratch files (DO NOT COMMIT)
+demo_interruptions.py
+livekit-agents/interrupt_logic/
