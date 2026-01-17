@@ -1,51 +1,39 @@
-# Interruption Handler Configuration
-# This file defines the behavior of the intelligent interruption handler
+from typing import Set
 
-# Passive Acknowledgment Words
-# These words/phrases will be IGNORED when the agent is speaking
-# The agent will continue speaking without interruption
-IGNORE_WORDS = [
-    'yeah',
-    'ok',
-    'okay',
-    'hmm',
-    'uh-huh',
-    'right',
-    'aha',
-    'mhm',
-    'mm-hmm',
-    'sure',
-    'yep',
-    'yes',
-    'got it',
-    'i see',
-    'understand',
-    'alright',
-    'cool',
-    'nice',
-]
+# =============================================================================
+# INTERRUPT HANDLER CONFIG
+# =============================================================================
 
-# Active Interruption Words
-# These words/phrases will ALWAYS interrupt the agent
-# Even if only part of a sentence
-INTERRUPT_WORDS = [
-    'wait',
-    'stop',
-    'no',
-    'hold',
-    'pause',
-    'hang on',
-    'hold on',
-    'one moment',
-    'one second',
-    'actually',
-    'but',
-    'however',
-]
+DEFAULT_BACKCHANNEL_WORDS: Set[str] = {
+    "yeah", "yea", "yes", "yep", "yup",
+    "ok", "okay", "alright", "aight",
+    "hmm", "hm", "mhm", "mmhmm", "uh-huh", "uhuh",
+    "right", "sure", "gotcha", "got it",
+    "aha", "ah", "oh", "ooh",
+    "mm", "mhmm", "huh"
+}
 
-# Timing Configuration
-# Time to wait for full transcription before making interrupt decision (in seconds)
-TRANSCRIPTION_WAIT_TIME = 0.3
+DEFAULT_COMMAND_WORDS: Set[str] = {
+    "stop", "wait", "hold", "pause",
+    "no", "nope", "don't",
+    "hold on", "wait a second", "wait a minute",
+    "hang on", "one second", "one minute"
+}
 
-# Whether to log detailed interruption decisions
-VERBOSE_LOGGING = True
+# =============================================================================
+# HELPER / PATCH CONFIG
+# =============================================================================
+
+BACKCHANNEL_WORDS: Set[str] = {
+    "yeah", "yea", "yes", "yep", "yup",
+    "ok", "okay", "alright", "aight",
+    "hmm", "hm", "mhm", "mmhmm", "uh-huh", "uhuh", "uh", "huh",
+    "right", "sure", "gotcha",
+    "aha", "ah", "oh", "ooh",
+    "mm", "mhmm", "mmm", "hey"
+}
+
+COMMAND_WORDS: Set[str] = {
+    "stop", "wait", "hold", "pause",
+    "no", "nope", "don't"
+}
