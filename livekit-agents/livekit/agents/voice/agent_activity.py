@@ -1191,47 +1191,56 @@ class AgentActivity(RecognitionHooks):
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
     def _interrupt_by_audio_activity(self) -> None:
-        opt = self._session.options
-        use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
+    opt = self._session.options
+    use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
-        if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
-            # ignore if realtime model has turn detection enabled
+    if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
+        return
+
+    text = ""
+    if self._audio_recognition is not None:
+        text = self._audio_recognition.current_transcript or ""
+
+    if (
+        self.stt is not None
+        and opt.min_interruption_words > 0
+        and self._audio_recognition is not None
+    ):
+        if len(split_words(text, split_character=True)) < opt.min_interruption_words:
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
-            text = self._audio_recognition.current_transcript
+    if (
+        self._current_speech is not None
+        and not self._current_speech.interrupted
+        and self._current_speech.allow_interruptions
+        and self._is_filler_only(text)
+        and not self._is_hard_interrupt(text)
+    ):
+        return
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+    if self._rt_session is not None:
+        self._rt_session.start_user_activity()
 
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
+    if (
+        self._current_speech is not None
+        and not self._current_speech.interrupted
+        and self._current_speech.allow_interruptions
+    ):
+        self._paused_speech = self._current_speech
 
-        if (
-            self._current_speech is not None
-            and not self._current_speech.interrupted
-            and self._current_speech.allow_interruptions
-        ):
-            self._paused_speech = self._current_speech
+        if self._false_interruption_timer:
+            self._false_interruption_timer.cancel()
+            self._false_interruption_timer = None
 
-            # reset the false interruption timer
-            if self._false_interruption_timer:
-                self._false_interruption_timer.cancel()
-                self._false_interruption_timer = None
+        if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
+            self._session.output.audio.pause()
+            self._session._update_agent_state("listening")
+        else:
+            if self._rt_session is not None:
+                self._rt_session.interrupt()
 
-            if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
-                self._session.output.audio.pause()
-                self._session._update_agent_state("listening")
-            else:
-                if self._rt_session is not None:
-                    self._rt_session.interrupt()
+            self._current_speech.interrupt()
 
-                self._current_speech.interrupt()
 
     # region recognition hooks
 
