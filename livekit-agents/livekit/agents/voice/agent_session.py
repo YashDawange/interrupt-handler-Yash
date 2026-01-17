@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .interrupt_handler import InterruptHandler
 
 import asyncio
 import copy
@@ -337,6 +338,15 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         self._user_state: UserState = "listening"
         self._agent_state: AgentState = "initializing"
         self._user_away_timer: asyncio.TimerHandle | None = None
+        self._interrupt_handler = InterruptHandler()
+        # STEP 3.3 — pending interruption from VAD
+        self._vad_pending_interrupt: bool = False
+        self._vad_pending_at: float | None = None
+        # STEP 3.5 — interruption state flags
+        self._vad_pending_interrupt: bool = False
+        self._vad_pending_at: float | None = None
+        # STEP 3.6 — interruption generation guard
+        self._interrupt_generation: int = 0
 
         self._userdata: Userdata_T | None = userdata if is_given(userdata) else None
         self._closing_task: asyncio.Task[None] | None = None
@@ -953,10 +963,29 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             An asyncio.Future that completes when the interruption is fully processed
             and chat context has been updated.
         """
-        if self._activity is None:
-            raise RuntimeError("AgentSession isn't running")
+           # STEP 3.6 — single guarded interruption gate
+        fut = asyncio.Future()
 
-        return self._activity.interrupt(force=force)
+        if self._activity is None:
+            fut.set_result(None)
+            return fut
+
+    # increment generation (invalidates stale timers/resumes)
+        self._interrupt_generation += 1
+        current_gen = self._interrupt_generation
+
+    # clear pending VAD intent
+        self._vad_pending_interrupt = False
+        self._vad_pending_at = None
+
+        inner_fut = self._activity.interrupt(force=force)
+
+        def _done(_: asyncio.Future) -> None:
+            if not fut.done() and current_gen == self._interrupt_generation:
+                fut.set_result(None)
+
+        inner_fut.add_done_callback(_done)
+        return fut
 
     def clear_user_turn(self) -> None:
         # clear the transcription or input audio buffer of the user turn
@@ -1155,6 +1184,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         if state == "speaking":
             self._llm_error_counts = 0
             self._tts_error_counts = 0
+            self._interrupt_handler.on_agent_speaking_start()
 
             if self._agent_speaking_span is None:
                 self._agent_speaking_span = tracer.start_span("agent_speaking")
@@ -1166,6 +1196,7 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 # self._agent_speaking_span.set_attribute(trace_types.ATTR_START_TIME, time.time())
         elif self._agent_speaking_span is not None:
             # self._agent_speaking_span.set_attribute(trace_types.ATTR_END_TIME, time.time())
+            self._interrupt_handler.on_agent_speaking_end()
             self._agent_speaking_span.end()
             self._agent_speaking_span = None
 
@@ -1212,8 +1243,57 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         self.emit("user_state_changed", UserStateChangedEvent(old_state=old_state, new_state=state))
 
     def _user_input_transcribed(self, ev: UserInputTranscribedEvent) -> None:
+        # STEP 3.4 — Resolve pending VAD interruption
+        if ev.is_final and getattr(self, "_vad_pending_interrupt", False):
+            self._vad_pending_interrupt = False
+
+            # How long user spoke
+            elapsed = time.time() - getattr(self, "_vad_pending_at", 0)
+
+            transcript = ev.transcript.strip().lower()
+
+            # Heuristics for false interruption
+            is_noise = transcript in ("", "uh", "um", "hmm", "ah", "...")
+            too_short = len(transcript.split()) < 2
+            too_fast = elapsed < 0.6  # seconds
+
+            if is_noise or too_short or too_fast:
+             # ✅ FALSE INTERRUPTION → RESUME
+                if (
+                    self._activity
+                    and self._activity._paused_speech
+                    and self.output.audio
+                    and self.output.audio.can_pause
+                ):
+                    self.output.audio.resume()
+                    self._update_agent_state("speaking")
+
+                return
+            else:
+                 # ❌ REAL INTERRUPTION → FORCE CANCEL
+                    self.interrupt(force=True)
+                    return
+        
+        if ev.is_final:
+            decision = self._interrupt_handler.decide(ev.transcript)
+
+                # clear VAD pending state
+            self._vad_pending_interrupt = False
+            self._vad_pending_at = None
+
+            if decision.ignore:
+                # 🔥 Cancel any false-interruption pause immediately
+                self._vad_pending_interrupt = False
+                self._vad_pending_at = None
+
+                if self.output.audio and self.output.audio.can_pause:
+                    self.output.audio.resume()
+
+            if decision.interrupt:
+                 self.interrupt(force=True)
+                 return
+
         if self.user_state == "away" and ev.is_final:
-            # reset user state from away to listening in case VAD has a miss detection
             self._update_user_state("listening")
 
         self.emit("user_input_transcribed", ev)
