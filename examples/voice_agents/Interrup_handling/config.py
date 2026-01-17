@@ -4,7 +4,7 @@ from typing import Set
 # INTERRUPT HANDLER CONFIG
 # =============================================================================
 
-DEFAULT_BACKCHANNEL_WORDS: Set[str] = {
+DEFAULT_ACKNOWLEDGMENT_WORDS: Set[str] = {
     "yeah", "yea", "yes", "yep", "yup",
     "ok", "okay", "alright", "aight",
     "hmm", "hm", "mhm", "mmhmm", "uh-huh", "uhuh",
@@ -13,7 +13,7 @@ DEFAULT_BACKCHANNEL_WORDS: Set[str] = {
     "mm", "mhmm", "huh"
 }
 
-DEFAULT_COMMAND_WORDS: Set[str] = {
+DEFAULT_DIRECTIVE_WORDS: Set[str] = {
     "stop", "wait", "hold", "pause",
     "no", "nope", "don't",
     "hold on", "wait a second", "wait a minute",
@@ -24,7 +24,7 @@ DEFAULT_COMMAND_WORDS: Set[str] = {
 # HELPER / PATCH CONFIG
 # =============================================================================
 
-BACKCHANNEL_WORDS: Set[str] = {
+ACKNOWLEDGMENT_WORDS: Set[str] = {
     "yeah", "yea", "yes", "yep", "yup",
     "ok", "okay", "alright", "aight",
     "hmm", "hm", "mhm", "mmhmm", "uh-huh", "uhuh", "uh", "huh",
@@ -33,7 +33,7 @@ BACKCHANNEL_WORDS: Set[str] = {
     "mm", "mhmm", "mmm", "hey"
 }
 
-COMMAND_WORDS: Set[str] = {
+DIRECTIVE_WORDS: Set[str] = {
     "stop", "wait", "hold", "pause",
     "no", "nope", "don't"
 }

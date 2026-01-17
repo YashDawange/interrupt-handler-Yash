@@ -25,9 +25,9 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 # Import our custom interruption filter
 from interrupt_handler import InterruptionFilter
 
-# Apply Backchannel Monkeypatch
+# Apply Acknowledgment Override
 import helper
-helper.apply_patch()
+helper.apply_override()
 
 logger = logging.getLogger("basic-agent")
 
@@ -90,7 +90,7 @@ class MyAgent(Agent):
         # For interim transcripts, we can do early filtering
         # This helps reduce latency in blocking unwanted interruptions
         if not is_final and self.agent_is_speaking:
-            # Quick check: if this is clearly backchannel, we can preemptively
+            # Quick check: if this is clearly acknowledgment, we can preemptively
             # signal that we don't want to interrupt
             should_interrupt = self.interruption_filter.should_interrupt(
                 transcript, self.agent_is_speaking
@@ -99,7 +99,7 @@ class MyAgent(Agent):
             if not should_interrupt:
                 logger.info(
                     f"FILTERING: Interim transcript '{transcript}' identified as "
-                    f"backchannel during agent speech - will suppress interruption"
+                    f"acknowledgment during agent speech - will suppress interruption"
                 )
         
         # For final transcripts, make the definitive decision
@@ -111,7 +111,7 @@ class MyAgent(Agent):
             if not should_interrupt and self.agent_is_speaking:
                 logger.info(
                     f"🚫 BLOCKING INTERRUPTION: Final transcript '{transcript}' is "
-                    f"backchannel - agent will continue speaking"
+                    f"acknowledgment - agent will continue speaking"
                 )
                 # Clear the user turn to prevent further processing
                 try:
@@ -184,7 +184,7 @@ async def entrypoint(ctx: JobContext):
         # when it's detected, you may resume the agent's speech
         resume_false_interruption=True,
         false_interruption_timeout=1.0,
-        # Enable backchannel filtering: require at least 1 word to trigger the filter
+        # Enable acknowledgment filtering: require at least 1 word to trigger the filter
         min_interruption_words=1,
     )
 
