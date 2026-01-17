@@ -160,7 +160,7 @@ async def entrypoint(ctx: JobContext):
             f"{'FINAL' if is_final else 'INTERIM'} transcript: '{t}' (agent_is_speaking={agent_flag})"
         )
         
-        if not is_final and agent_flag:
+        if agent_flag:
             should_interruptt = should_interrupt(t)
             
             if should_interruptt:
