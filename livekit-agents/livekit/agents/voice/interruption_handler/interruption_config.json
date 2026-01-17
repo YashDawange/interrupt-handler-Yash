@@ -1,0 +1,127 @@
+{
+  "description": "LiveKit Agent Interruption Handler Configuration",
+  "version": "1.0.0",
+  "interruption_handling": {
+    "enabled": true,
+    "description": "Enable intelligent interruption handling",
+    
+    "ignore_words": {
+      "description": "Words to ignore when agent is speaking (backchanneling)",
+      "words": [
+        "yeah",
+        "ok",
+        "okay",
+        "hmm",
+        "uh-huh",
+        "uhhuh",
+        "right",
+        "yep",
+        "mm-hmm",
+        "mhmm",
+        "uh",
+        "um",
+        "sure",
+        "got it",
+        "gotcha",
+        "i hear you",
+        "i see",
+        "understood",
+        "copy that",
+        "yup",
+        "ya"
+      ]
+    },
+    
+    "command_words": {
+      "description": "Words that trigger immediate interruption",
+      "words": [
+        "stop",
+        "wait",
+        "no",
+        "hold on",
+        "hold up",
+        "pause",
+        "slow down",
+        "hold",
+        "dont",
+        "don't",
+        "never mind",
+        "never",
+        "wrong",
+        "nope",
+        "cancel",
+        "abort",
+        "quit",
+        "exit",
+        "end"
+      ]
+    },
+    
+    "fuzzy_matching": {
+      "enabled": true,
+      "description": "Enable fuzzy matching for typos and variations",
+      "similarity_threshold": 0.8,
+      "comment": "Similarity score (0.0-1.0) for matching misspelled words"
+    },
+    
+    "timeout_settings": {
+      "stt_wait_timeout_ms": 500,
+      "description": "Maximum time to wait for STT transcription",
+      "comment": "If STT takes longer, default to interrupt (safe default)"
+    },
+    
+    "vad_stt_sync": {
+      "description": "Synchronization between VAD and STT",
+      "wait_for_transcription": true,
+      "comment": "Wait for STT before making interruption decision"
+    },
+    
+    "logging": {
+      "verbose": false,
+      "log_all_decisions": false,
+      "comment": "Set to true for detailed interruption decision logging"
+    }
+  },
+  
+  "test_scenarios": {
+    "scenario_1_long_explanation": {
+      "agent_speech": "In 1492, Columbus sailed across the Atlantic Ocean...",
+      "user_inputs": [
+        "okay",
+        "yeah",
+        "uh-huh"
+      ],
+      "expected_behavior": "Agent continues without pause",
+      "should_interrupt": false
+    },
+    
+    "scenario_2_passive_affirmation": {
+      "agent_speech": "Are you ready?",
+      "user_inputs": [
+        "Yeah"
+      ],
+      "expected_behavior": "Agent responds normally",
+      "should_interrupt": false,
+      "context": "Agent silent, so backchannel is processed as valid input"
+    },
+    
+    "scenario_3_correction": {
+      "agent_speech": "One, two, three...",
+      "user_inputs": [
+        "No stop"
+      ],
+      "expected_behavior": "Agent cuts off immediately",
+      "should_interrupt": true
+    },
+    
+    "scenario_4_mixed_input": {
+      "agent_speech": "[speaking about something]",
+      "user_inputs": [
+        "Yeah okay but wait"
+      ],
+      "expected_behavior": "Agent stops (detected 'but wait')",
+      "should_interrupt": true,
+      "reason": "Contains command word even with backchannel"
+    }
+  }
+}
