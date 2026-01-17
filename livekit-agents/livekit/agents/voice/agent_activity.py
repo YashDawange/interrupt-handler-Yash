@@ -83,6 +83,13 @@ if TYPE_CHECKING:
 _AgentActivityContextVar = contextvars.ContextVar["AgentActivity"]("agents_activity")
 _SpeechHandleContextVar = contextvars.ContextVar["SpeechHandle"]("agents_speech_handle")
 
+import os
+
+# Configurable list of soft acknowledgement words
+SOFT_ACK_WORDS = {
+    w.strip().lower()
+    for w in os.getenv("AGENT_SOFT_ACK_WORDS", "yeah,ok,okay,uh-huh").split(",")
+}
 
 @dataclass
 class _OnEnterData:
@@ -1284,6 +1291,14 @@ class AgentActivity(RecognitionHooks):
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
+        text = ev.alternatives[0].text.strip().lower()
+        speech_handle = self._current_speech
+
+        # Soft acknowledgements should not interrupt active speech
+        if speech_handle and getattr(speech_handle, "_pending_interrupt", False):
+            if any(word in SOFT_ACK_WORDS for word in text.split()):
+                return
+            speech_handle.validate_interrupt(text)
         # agent speech might not be interrupted if VAD failed and a final transcript is received
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted
