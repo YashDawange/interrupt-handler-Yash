@@ -130,6 +130,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+livekit-voice-agent/.env.local
 
 # Spyder project settings
 .spyderproject
