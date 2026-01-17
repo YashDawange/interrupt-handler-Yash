@@ -104,6 +104,20 @@ class _PreemptiveGeneration:
     created_at: float
 
 
+ignore = {"yeah", "ok", "okay", "hmm", "uh-huh", "right"}
+interrupt = {"stop", "wait", "no", "cancel", "hold"}
+
+def is_semantic_interrupt(text: str) -> bool:
+    words = text.lower().strip().split()
+
+    if any(w in interrupt for w in words):
+        return True
+
+    if all(w in ignore for w in words):
+        return False
+
+    return True
+
 # NOTE: AgentActivity isn't exposed to the public API
 class AgentActivity(RecognitionHooks):
     def __init__(self, agent: Agent, sess: AgentSession) -> None:
@@ -1292,7 +1306,8 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
+            if is_semantic_interrupt(ev.alternatives[0].text):
+                self._interrupt_by_audio_activity()
 
             if (
                 speaking is False

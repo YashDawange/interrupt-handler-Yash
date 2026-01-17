@@ -7,6 +7,19 @@ from typing import Any, Callable
 
 from .. import llm, utils
 
+ignore = {"yeah", "ok", "okay", "hmm", "uh-huh", "right"}
+interrupt = {"stop", "wait", "no", "cancel", "hold"}
+
+def is_semantic_interrupt(text: str) -> bool:
+    words = text.lower().strip().split()
+
+    if any(w in interrupt for w in words):
+        return True
+
+    if all(w in ignore for w in words):
+        return False
+
+    return True
 
 class SpeechHandle:
     SPEECH_PRIORITY_LOW = 0
@@ -62,7 +75,7 @@ class SpeechHandle:
         return self._scheduled_fut.done()
 
     @property
-    def interrupted(self) -> bool:
+    def interrupted(self, *, force: bool = False) -> bool:
         return self._interrupt_fut.done()
 
     @property
