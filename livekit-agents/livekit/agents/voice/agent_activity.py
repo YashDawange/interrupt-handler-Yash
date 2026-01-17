@@ -1168,48 +1168,32 @@ class AgentActivity(RecognitionHooks):
 
     def _interrupt_by_audio_activity(self) -> None:
         opt = self._session.options
-        use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
+        # Realtime LLM handles its own turn detection
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.turn_detection:
-            # ignore if realtime model has turn detection enabled
             return
 
+        # STT-based minimum word filtering
         if (
             self.stt is not None
             and opt.min_interruption_words > 0
             and self._audio_recognition is not None
         ):
             text = self._audio_recognition.current_transcript
-
-            # TODO(long): better word splitting for multi-language
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
-        if self._rt_session is not None:
-            self._rt_session.start_user_activity()
+        # 🚫 HARD BLOCK: ignore filler/backchannel VAD completely
+        if self._session._interrupt_handler.pending_ignore:
+            return
 
         if (
             self._current_speech is not None
             and not self._current_speech.interrupted
             and self._current_speech.allow_interruptions
         ):
-            self._paused_speech = self._current_speech
+            self._session._interrupt_handler.on_vad_interruption()
 
-            # reset the false interruption timer
-            if self._false_interruption_timer:
-                self._false_interruption_timer.cancel()
-                self._false_interruption_timer = None
-
-            if use_pause and self._session.output.audio and self._session.output.audio.can_pause:
-                self._session.output.audio.pause()
-                self._session._update_agent_state("listening")
-            else:
-                if self._rt_session is not None:
-                    self._rt_session.interrupt()
-
-                self._current_speech.interrupt()
-
-    # region recognition hooks
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
@@ -1345,6 +1329,14 @@ class AgentActivity(RecognitionHooks):
         # IMPORTANT: This method is sync to avoid it being cancelled by the AudioRecognition
         # We explicitly create a new task here
 
+        # 🚫 Ignore filler words when agent is speaking
+        if (
+                self._current_speech is not None
+                and not self._current_speech.done()
+                and self._session._interrupt_handler.is_filler(info.new_transcript)
+        ):
+                return False
+
         if self._scheduling_paused:
             self._cancel_preemptive_generation()
             logger.warning(
@@ -1396,6 +1388,13 @@ class AgentActivity(RecognitionHooks):
             # In practice this is OK because most speeches will be interrupted if a new turn
             # is detected. So the previous execution should complete quickly.
             await old_task
+        # 🚫 Final guard: ignore fillers while agent is speaking
+        if (
+           self._current_speech is not None
+           and not self._current_speech.done()
+           and self._session._interrupt_handler.is_filler(info.new_transcript)
+        ):
+            return
 
         # When the audio recognition detects the end of a user turn:
         #  - check if realtime model server-side turn detection is enabled
@@ -2541,11 +2540,14 @@ class AgentActivity(RecognitionHooks):
             self._false_interruption_timer.cancel()
 
         def _on_false_interruption() -> None:
-            if self._paused_speech is None or (
-                self._current_speech and self._current_speech is not self._paused_speech
+        # STEP 3.6 — ignore stale timers
+            if (
+                self._session._interrupt_generation != getattr(self, "_vad_generation", None)
             ):
-                # already new speech is scheduled, do nothing
                 self._paused_speech = None
+                return
+
+            if self._paused_speech is None:
                 return
 
             resumed = False
@@ -2558,20 +2560,29 @@ class AgentActivity(RecognitionHooks):
                 self._session._update_agent_state("speaking")
                 audio_output.resume()
                 resumed = True
-                logger.debug("resumed false interrupted speech", extra={"timeout": timeout})
 
             self._session.emit(
-                "agent_false_interruption", AgentFalseInterruptionEvent(resumed=resumed)
+                "agent_false_interruption",
+                AgentFalseInterruptionEvent(resumed=resumed),
             )
 
             self._paused_speech = None
             self._false_interruption_timer = None
+
 
         self._false_interruption_timer = self._session._loop.call_later(
             timeout, _on_false_interruption
         )
 
     async def _interrupt_paused_speech(self, old_task: asyncio.Task[None] | None = None) -> None:
+        # STEP 3.6 — generation guard
+        if (
+            self._session._interrupt_generation
+            != getattr(self, "_vad_generation", None)
+        ):
+            self._paused_speech = None
+            return
+      
         if old_task is not None:
             await old_task
 
