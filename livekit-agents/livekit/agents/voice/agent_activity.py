@@ -1284,6 +1284,11 @@ class AgentActivity(RecognitionHooks):
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
+        text = ev.alternatives[0].text
+        speech_handle = self._current_speech
+
+        if speech_handle and getattr(speech_handle, "_pending_interrupt", False):
+            speech_handle.validate_interrupt(text)
         # agent speech might not be interrupted if VAD failed and a final transcript is received
         # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
         # which will also be immediately interrupted

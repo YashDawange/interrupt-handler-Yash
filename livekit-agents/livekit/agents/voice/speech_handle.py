@@ -5,7 +5,17 @@ import contextlib
 from collections.abc import Generator, Sequence
 from typing import Any, Callable
 
+from matplotlib import text
+
 from .. import llm, utils
+
+SOFT_ACK_WORDS = {
+    "yeah", "ok", "okay", "hmm", "uh", "uh-huh", "right", "yep"
+}
+
+HARD_INTERRUPT_WORDS = {
+    "stop", "wait", "no", "pause", "hold on"
+}
 
 
 class SpeechHandle:
@@ -41,6 +51,10 @@ class SpeechHandle:
 
         self._done_fut.add_done_callback(_on_done)
         self._maybe_run_final_output: Any = None  # kept private
+
+        self._pending_interrupt: bool = False
+        self._pending_text: str | None = None
+
 
     @staticmethod
     def create(allow_interruptions: bool = True) -> SpeechHandle:
@@ -109,7 +123,7 @@ class SpeechHandle:
         if not force and not self._allow_interruptions:
             raise RuntimeError("This generation handle does not allow interruptions")
 
-        self._cancel()
+        self._pending_interrupt = True
         return self
 
     async def wait_for_playout(self) -> None:
@@ -214,3 +228,22 @@ class SpeechHandle:
     def _mark_scheduled(self) -> None:
         with contextlib.suppress(asyncio.InvalidStateError):
             self._scheduled_fut.set_result(None)
+
+    def validate_interrupt(self, text: str) -> None:
+        """
+        Decide whether a pending interruption should actually cancel speech
+        based on the transcribed text.
+        """
+        text = text.lower().strip()
+        # Case 1: pure acknowledgement → IGNORE
+        if text in SOFT_ACK_WORDS:
+            self._pending_interrupt = False
+            return
+
+        # Case 2: contains a real command → INTERRUPT
+        if any(word in text for word in HARD_INTERRUPT_WORDS):
+            self._cancel()
+            self._pending_interrupt = False
+            return
+        # Default: ignore noise while speaking
+        self._pending_interrupt = False
