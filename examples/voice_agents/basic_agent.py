@@ -1,3 +1,4 @@
+#from email.mime import text
 import logging
 
 from dotenv import load_dotenv
@@ -17,6 +18,11 @@ from livekit.agents import (
 from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from examples.voice_agents.interrupt_handler import should_interrupt
+
+agent_is_speaking = False
+pending_interrupt = False
+
 
 # uncomment to enable Krisp background voice/noise cancellation
 # from livekit.plugins import noise_cancellation
@@ -104,6 +110,39 @@ async def entrypoint(ctx: JobContext):
 
     # log metrics as they are emitted, and total usage after session is over
     usage_collector = metrics.UsageCollector()
+    @session.on("agent_speech_start")
+    def _on_agent_speech_start():
+        global agent_is_speaking
+        agent_is_speaking = True
+        print("[AUDIO] agent started speaking")
+
+
+    
+
+    @session.on("agent_speech_end")
+    def _on_agent_speech_end():
+        global agent_is_speaking
+        agent_is_speaking = False
+        print("[AUDIO] agent finished speaking")
+    @session.on("user_transcription")
+    def _on_user_transcription(text: str):
+        global pending_interrupt
+
+        print(f"[STT] '{text}'")
+
+        # If agent is speaking, we validate intent BEFORE interrupting
+        if agent_is_speaking:
+            if should_interrupt(text):
+                print("[LOGIC] hard interrupt detected → stopping agent")
+                session.interrupt()
+            else:
+                print("[LOGIC] soft acknowledgement → ignored")
+
+            return
+
+        # Agent is silent → normal behavior
+        print("[LOGIC] agent silent → normal processing")
+
 
     @session.on("metrics_collected")
     def _on_metrics_collected(ev: MetricsCollectedEvent):
