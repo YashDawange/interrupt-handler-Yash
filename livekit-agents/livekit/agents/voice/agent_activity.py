@@ -164,6 +164,30 @@ class AgentActivity(RecognitionHooks):
         # speeches that audio playout finished but not done because of tool calls
         self._background_speeches: set[SpeechHandle] = set()
 
+    def _normalize_interrupt_text(self, text: str) -> str:
+        return "".join(ch.lower() if ch.isalnum() or ch.isspace() else " " for ch in text).strip()
+
+    def _is_filler_only(self, text: str) -> bool:
+        t = self._normalize_interrupt_text(text)
+        if not t:
+            return True
+        fillers = {
+            "yeah", "yea", "yep", "yah",
+            "hmm", "hm",
+            "uh", "um", "uhh", "umm",
+            "ok", "okay",
+            "right", "huh",
+            "mm", "mmm",
+        }
+        words = [w for w in t.split() if w]
+        return len(words) > 0 and all(w in fillers for w in words)
+
+    def _is_hard_interrupt(self, text: str) -> bool:
+        t = self._normalize_interrupt_text(text)
+        hard = {"stop", "wait", "cancel", "pause", "shut", "quiet"}
+        words = set(t.split())
+        return any(w in hard for w in words)
+
     def _validate_turn_detection(
         self, turn_detection: TurnDetectionMode | None
     ) -> TurnDetectionMode | None:
