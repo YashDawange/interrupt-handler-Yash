@@ -123,15 +123,18 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+livekit-voice-agent/.env.local
 .env
+.env.local
+node_modules/
+__pycache__/
+.venv/
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
-livekit-voice-agent/.env.local
-.env.local
 
 # Spyder project settings
 .spyderproject
