@@ -10,31 +10,29 @@ from livekit.plugins import deepgram
 
 from interruption_logic import InterruptionLogic
 
-
-
+# -------------------- ENV --------------------
 load_dotenv(Path(__file__).parent / ".env")
 
-LOG_FILE=Path(__file__).parent / "easy_logging_status.txt"
+# -------------------- LOGGING --------------------
+LOG_FILE = Path(__file__).parent / "easy_logging_status.txt"
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler()
+        logging.StreamHandler(),
     ],
 )
 
 logger = logging.getLogger("interrupt-agent")
 
-
-
+# -------------------- STATE --------------------
 agent_speaking = False
 current_speak_task = None
 
 
-
-
+# -------------------- SPEAK --------------------
 async def speak(room: rtc.Room, text: str, duration: float = 2.5):
     global agent_speaking
 
@@ -53,8 +51,7 @@ async def speak(room: rtc.Room, text: str, duration: float = 2.5):
         logger.info("Agent finished speaking")
 
 
-
-
+# -------------------- ENTRYPOINT --------------------
 async def entrypoint(ctx: JobContext):
     global current_speak_task, agent_speaking
 
@@ -66,6 +63,7 @@ async def entrypoint(ctx: JobContext):
     participant = await ctx.wait_for_participant()
     logger.info(f"Participant joined: {participant.identity}")
 
+    # wait for audio track
     audio_track = None
     while not audio_track:
         for pub in participant.track_publications.values():
@@ -87,42 +85,40 @@ async def entrypoint(ctx: JobContext):
 
     async for event in stt_stream:
 
+        # ---------- START OF SPEECH ----------
         if event.type == SpeechEventType.START_OF_SPEECH:
             if agent_speaking:
                 logger.info("START_OF_SPEECH ignored (agent speaking)")
             else:
                 logger.info("START_OF_SPEECH (agent silent)")
 
+        # ---------- FINAL TRANSCRIPT ----------
         elif event.type == SpeechEventType.FINAL_TRANSCRIPT:
             user_text = event.alternatives[0].text.strip()
             logger.info(f"FINAL_TRANSCRIPT: '{user_text}'")
 
-            should_interrupt = InterruptionLogic.is_interruption_required(
-                transcript=user_text,
-                agent_speaking=agent_speaking
-            )
+            # CASE 1: agent is speaking → ONLY interrupt allowed
+            if agent_speaking:
+                if InterruptionLogic.is_interrupt(user_text):
+                    logger.info("🛑 INTERRUPT detected — stopping agent")
 
-            if should_interrupt and agent_speaking:
-                logger.info("REAL INTERRUPTION detected")
+                    if current_speak_task:
+                        current_speak_task.cancel()
 
-                if current_speak_task:
-                    current_speak_task.cancel()
+                    current_speak_task = asyncio.create_task(
+                        speak(ctx.room, "Okay, stopping.", 1.5)
+                    )
+                else:
+                    logger.info("Backchannel ignored (agent continues)")
 
-                current_speak_task = asyncio.create_task(
-                    speak(ctx.room, "Okay, stopping.", 1.5)
-                )
-
-            elif not agent_speaking:
+            # CASE 2: agent silent → normal response
+            else:
                 logger.info("Normal turn (agent silent)")
                 current_speak_task = asyncio.create_task(
                     speak(ctx.room, f"You said {user_text}", 2.5)
                 )
 
-            else:
-                logger.info("Backchannel ignored (agent continues)")
 
-
-
-
+# -------------------- MAIN --------------------
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
