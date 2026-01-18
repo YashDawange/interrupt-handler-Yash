@@ -1,7 +1,9 @@
 import logging
+import os
+import re
+from enum import Enum
 
 from dotenv import load_dotenv
-
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -10,6 +12,8 @@ from livekit.agents import (
     JobProcess,
     MetricsCollectedEvent,
     RunContext,
+    UserInputTranscribedEvent,
+    AgentStateChangedEvent,
     cli,
     metrics,
     room_io,
@@ -18,46 +22,98 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# uncomment to enable Krisp background voice/noise cancellation
-# from livekit.plugins import noise_cancellation
-
 logger = logging.getLogger("basic-agent")
-
 load_dotenv()
 
+class WordCategory(Enum):
+    BACKCHANNEL = "backchannel" 
+    INTERRUPT = "interrupt"      
+    MIXED = "mixed"              
+    UNKNOWN = "unknown"           
+
+
+_DEFAULT_BACKCHANNEL = {
+    "ah", "aha", "hm", "hmm", "mhm", "mhmm", "mm-hmm", "mmhmm","uh-huh", "um", "uh", "uhhuh", "oh","yes", "yeah", "yep", "yup", "ok", "okay", "alright","sure", "right", "correct", "exactly", "absolutely","definitely", "indeed", "true", "understood","cool", "nice", "fine", "good", "great","go on", "got it", "i see", "makes sense","keep going", "tell me more", "continue","wow", "really", "interesting", "seriously", "no way",
+}
+
+_DEFAULT_INTERRUPT = {
+    "stop", "wait", "no", "hold", "cancel", "pause",
+    "enough", "hold on", "hang on", "one second",
+    "actually", "but", "however", "listen",
+}
+
+
+def _parse_env_words(env_name: str, default: set[str]) -> set[str]:
+    raw = os.getenv(env_name)
+    if not raw:
+        return default
+    return {w.strip().lower() for w in raw.split(",") if w.strip()}
+
+
+BACKCHANNEL_WORDS = _parse_env_words("BACKCHANNEL_WORDS", _DEFAULT_BACKCHANNEL)
+INTERRUPT_WORDS = _parse_env_words("INTERRUPT_WORDS", _DEFAULT_INTERRUPT)
+
+logger.info(f"Loaded {len(BACKCHANNEL_WORDS)} backchannel words")
+logger.info(f"Loaded {len(INTERRUPT_WORDS)} interrupt words")
+
+
+def normalize_text(text: str) -> list[str]:
+    tokens = re.split(r"\W+", text.lower())
+    return [t for t in tokens if t]
+
+
+def categorize_utterance(text: str) -> WordCategory:
+    if not text or not text.strip():
+        return WordCategory.UNKNOWN
+    
+    tokens = normalize_text(text)
+    if not tokens:
+        return WordCategory.UNKNOWN
+    
+    if any(token in INTERRUPT_WORDS for token in tokens):
+        return WordCategory.INTERRUPT
+    
+    if all(token in BACKCHANNEL_WORDS for token in tokens):
+        return WordCategory.BACKCHANNEL
+    
+    if any(token in BACKCHANNEL_WORDS for token in tokens):
+        return WordCategory.MIXED
+    
+    return WordCategory.MIXED
 
 class MyAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="Your name is Kelly. You would interact with users via voice."
-            "with that in mind keep your responses concise and to the point."
-            "do not use emojis, asterisks, markdown, or other special characters in your responses."
-            "You are curious and friendly, and have a sense of humor."
-            "you will speak english to the user",
+            instructions=(
+                "Your name is Kelly. "
+                "You are a friendly, helpful conversational AI assistant. "
+                "You can discuss any topic naturally and explain concepts clearly. "
+                "Keep responses concise and conversational. "
+                "You are NOT limited to any single domain. "
+                "You should only use tools when they are clearly useful, "
+                "and you should never say that you are incapable of answering general questions. "
+                "If a question is abstract or conceptual, explain it in simple terms. "
+                "Do not use emojis, markdown formatting, or special characters. "
+                "Speak naturally in English."
+            ),
         )
 
     async def on_enter(self):
-        # when the agent is added to the session, it'll generate a reply
-        # according to its instructions
         self.session.generate_reply()
 
-    # all functions annotated with @function_tool will be passed to the LLM when this
-    # agent is active
     @function_tool
     async def lookup_weather(
         self, context: RunContext, location: str, latitude: str, longitude: str
     ):
-        """Called when the user asks for weather related information.
-        Ensure the user's location (city or region) is provided.
-        When given a location, please estimate the latitude and longitude of the location and
-        do not ask the user for them.
-
+        """
+        Get current weather information for a location.
+        ONLY use this when user explicitly asks about weather.
+        
         Args:
             location: The location they are asking for
             latitude: The latitude of the location, do not ask user for it
             longitude: The longitude of the location, do not ask user for it
         """
-
         logger.info(f"Looking up weather for {location}")
 
         return "sunny with a temperature of 70 degrees."
@@ -67,56 +123,99 @@ server = AgentServer()
 
 
 def prewarm(proc: JobProcess):
+    logger.info("Prewarming VAD model...")
     proc.userdata["vad"] = silero.VAD.load()
+    logger.info("VAD model loaded successfully")
 
 
 server.setup_fnc = prewarm
 
-
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
-    # each log entry will include these fields
-    ctx.log_context_fields = {
-        "room": ctx.room.name,
-    }
+    ctx.log_context_fields = {"room": ctx.room.name}
     session = AgentSession(
-        # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
-        # See all available models at https://docs.livekit.io/agents/models/stt/
-        stt="deepgram/nova-3",
-        # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
-        # See all available models at https://docs.livekit.io/agents/models/llm/
-        llm="openai/gpt-4.1-mini",
-        # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
-        # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
-        tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
-        # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
-        # See more at https://docs.livekit.io/agents/build/turns
+        stt="deepgram/nova-3",              # Speech-to-text
+        llm="google/gemini-2.5-flash",      # Language model
+        tts="cartesia/sonic-2:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",  # Text-to-speech
+        
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
-        # allow the LLM to generate a response while waiting for the end of turn
-        # See more at https://docs.livekit.io/agents/build/audio/#preemptive-generation
+        
         preemptive_generation=True,
-        # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
-        # when it's detected, you may resume the agent's speech
-        resume_false_interruption=True,
-        false_interruption_timeout=1.0,
+
+        allow_interruptions=False,
+        
+        discard_audio_if_uninterruptible=False,
+        
+        min_interruption_duration=0.5,
+        min_interruption_words=1,
     )
-
-    # log metrics as they are emitted, and total usage after session is over
+    
     usage_collector = metrics.UsageCollector()
-
+    
     @session.on("metrics_collected")
-    def _on_metrics_collected(ev: MetricsCollectedEvent):
+    def on_metrics(ev: MetricsCollectedEvent):
         metrics.log_metrics(ev.metrics)
         usage_collector.collect(ev.metrics)
-
+    
     async def log_usage():
         summary = usage_collector.get_summary()
-        logger.info(f"Usage: {summary}")
-
-    # shutdown callbacks are triggered when the session is over
+        logger.info(f"Session usage summary: {summary}")
+    
     ctx.add_shutdown_callback(log_usage)
 
+    class AgentState:
+        is_speaking: bool = False
+        is_thinking: bool = False
+    
+    state = AgentState()
+    
+    @session.on("agent_state_changed")
+    def on_state_change(ev: AgentStateChangedEvent):
+        state.is_speaking = (ev.new_state == "speaking")
+        state.is_thinking = (ev.new_state == "thinking")
+        
+        logger.debug(
+            f"Agent state: {ev.old_state} -> {ev.new_state} "
+            f"(speaking={state.is_speaking})"
+        )
+    
+    @session.on("user_input_transcribed")
+    def on_user_speech(ev: UserInputTranscribedEvent):
+        text = (ev.transcript or "").strip()
+        
+        if not text:
+            return
+
+        if not state.is_speaking:
+            logger.debug(f"User input while agent silent: '{text}' (final={ev.is_final})")
+            return
+
+        if not ev.is_final:
+            category = categorize_utterance(text)
+            if category == WordCategory.INTERRUPT:
+                logger.info(f"INTERRUPT detected (interim): '{text}'")
+                session.interrupt(force=True)
+            else:
+                logger.debug(f"Interim transcript (ignored): '{text}'")
+            return
+        
+        category = categorize_utterance(text)
+        
+        if category == WordCategory.BACKCHANNEL:
+            logger.info(f"Ignoring backchannel: '{text}'")
+            session.clear_user_turn()
+            
+        elif category == WordCategory.INTERRUPT:
+            logger.info(f"INTERRUPT command: '{text}'")
+            session.interrupt(force=True)
+            
+        else:  
+            logger.info(f"INTERRUPT (mixed/other): '{text}'")
+            session.interrupt(force=True)
+
+    logger.info("Starting agent session...")
+    
     await session.start(
         agent=MyAgent(),
         room=ctx.room,
