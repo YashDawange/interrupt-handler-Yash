@@ -1,0 +1,130 @@
+    23:16:59 DEBUG  asyncio          Using proactor: IocpProactor  
+             DEV    livekit.agents   Watching C:\Users\Main\agents-assignment  
+             DEV    livekit.agents   Watching C:\Users\Main\agents-assignment\livekit-agents  
+    23:17:03 DEBUG  asyncio          Using proactor: IocpProactor  
+             INFO   livekit.agents   starting worker {"version": "1.3.11", "rtc-version": "1.0.23"}
+    23:17:04 INFO   livekit.agents   registered worker {"agent_name": "", "id": "AW_NwHTY5yVGEiH", "url":
+                                                       "wss://test-z7jxb6dd.livekit.cloud", "region": "India West",   
+                                                       "protocol": 16}
+    23:17:14 INFO   livekit.agents   received job request {"job_id": "AJ_HbB4V3wNDjC7", "dispatch_id":
+                                                          "AD_eH9GhXGWdMkC", "room": "playground-3Tgc-cLEH",
+                                                          "room_id": "RM_nqKy7Efxf3uR", "agent_name": "", "resuming": 
+                                                          false, "enable_recording": false}
+             DEBUG  livekit.agents   received assignment {"agent_name": "", "room_id": "RM_nqKy7Efxf3uR", "room":     
+                                                         "playground-3Tgc-cLEH", "job_id": "AJ_HbB4V3wNDjC7",
+                                                         "dispatch_id": "AD_eH9GhXGWdMkC", "enable_recording": false} 
+             INFO   livekit.agents   initializing job runner {"tid": 8936}
+             INFO   livekit.agents   job runner initialized {"tid": 8936, "elapsed_time": 0.0}
+             DEBUG  asyncio          Using proactor: IocpProactor  
+    23:17:16 DEBUG  livekit.agents   input stream attached {"participant": null, "source": "SOURCE_UNKNOWN",
+                                                           "accepted_sources": ["SOURCE_MICROPHONE"]}
+             DEBUG  livekit.agents   http_session(): creating a new httpclient ctx  
+             DEBUG  livekit.agents   using audio io: `RoomIO` -> `AgentSession` -> `TranscriptSynchronizer` ->        
+                                     `RoomIO`                                                                         
+             DEBUG  livekit.agents   using transcript io: `AgentSession` -> `TranscriptSynchronizer` -> `RoomIO`  
+             DEBUG  livekit.agents   start reading stream {"participant": "identity-g59r", "source":
+                                                          "SOURCE_MICROPHONE"}
+    23:17:18 DEBUG  livekit.plugins… Established new Deepgram TTS WebSocket   {"headers": {"dg-project-id":
+                                     connection:                              "4570e3c0-5972-47fc-9460-1c0ad176cdd8", 
+                                                                              "dg-request-id":
+                                                                              "2af4d32c-abe6-4091-812e-8d822b548f27", 
+                                                                              "Date": "Sun, 18 Jan 2026 17:47:12      
+                                                                              GMT"}}
+             DEBUG  livekit.plugins… Established new Deepgram STT WebSocket   {"headers": {"dg-project-id":
+                                     connection:                              "4570e3c0-5972-47fc-9460-1c0ad176cdd8", 
+                                                                              "dg-request-id":
+                                                                              "eb589e89-ef6f-4b32-831c-538ed0bed605", 
+                                                                              "Date": "Sun, 18 Jan 2026 17:47:13      
+                                                                              GMT"}}
+    23:17:32 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:17:33 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:17:34 DEBUG  livekit.agents   received user transcript {"user_transcript": "Tell me a long story about Rome.", 
+                                                              "language": "en-US", "transcript_delay":
+                                                              0.7912795543670654}
+    23:17:43 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:17:47 DEBUG  livekit.agents   Intent Analysis: Suppressing UI backchannel 'Okay.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Okay.'  
+             INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Right.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:17:48 INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Uh-huh.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:17:51 INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Okay.'  
+    23:17:52 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:17:53 INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Yeah.'  
+             WARNI… livekit.agents   failed to synthesize speech, retrying in {"tts":
+                                     0.1s                                     "livekit.plugins.deepgram.tts.TTS",     
+                                     
+    23:17:55 DEBUG  livekit.agents   Intent Analysis: Suppressing UI backchannel 'Okay.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             DEBUG  livekit.plugins… Established new Deepgram TTS WebSocket   {"headers": {"dg-project-id":
+                                     connection:                              "4570e3c0-5972-47fc-9460-1c0ad176cdd8", 
+                                                                              "dg-request-id":
+                                                                              "fec2db73-ee21-449a-927c-2ea494c686ba", 
+                                                                              "Date": "Sun, 18 Jan 2026 17:47:49      
+                                                                              GMT"}}
+             INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Okay. Right.'  
+    23:17:58 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             DEBUG  livekit.agents   Intent Analysis: Suppressing UI backchannel 'Okay. Yeah.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Okay. Yeah.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:00 DEBUG  livekit.agents   Intent Analysis: Suppressing UI backchannel 'Uh-huh.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:01 INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Uh-huh. Okay.'  
+    23:18:03 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:04 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:05 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:06 DEBUG  livekit.agents   received user transcript {"user_transcript": "But wait. I think tell me a long   
+                                                              story about", "language": "en-US", "transcript_delay":  
+                                                              0.09537458419799805}
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:07 DEBUG  livekit.agents   received user transcript {"user_transcript": "Macedonia.", "language": "en-US"}
+    23:18:11 DEBUG  livekit.plugins… Established new Deepgram TTS WebSocket   {"headers": {"dg-project-id":
+                                     connection:                              "4570e3c0-5972-47fc-9460-1c0ad176cdd8", 
+                                                                              "dg-request-id":
+                                                                              "b423d280-9d0c-48d4-8cae-27dee5ad0d60", 
+                                                                              "Date": "Sun, 18 Jan 2026 17:48:05      
+                                                                              GMT"}}
+    23:18:18 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             DEBUG  livekit.agents   Intent Analysis: Suppressing UI backchannel 'Okay.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:20 DEBUG  livekit.agents   received user transcript {"user_transcript": "Wait. Keep it short.", "language": 
+                                                              "en-US", "transcript_delay": 1.0166394710540771}        
+             WARNI… livekit.agents   _SegmentSynchronizerImpl.resume called after close  
+    23:18:24 DEBUG  livekit.plugins… Established new Deepgram TTS WebSocket   {"headers": {"dg-project-id":
+                                     connection:                              "4570e3c0-5972-47fc-9460-1c0ad176cdd8", 
+                                                                              "dg-request-id":
+                                                                              "ef3d6590-55fb-4d6d-a8fb-b0fc7ef82e4a", 
+                                                                              "Date": "Sun, 18 Jan 2026 17:48:19      
+                                                                              GMT"}}
+    23:18:38 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:39 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:18:40 DEBUG  livekit.agents   received user transcript {"user_transcript": "Okay. Let's just say it in ten     
+                                                              words.", "language": "en-US", "transcript_delay":       
+                                                              0.7722444534301758}
+    23:18:43 DEBUG  livekit.plugins… Established new Deepgram TTS WebSocket   {"headers": {"dg-project-id":
+                                     connection:                              "4570e3c0-5972-47fc-9460-1c0ad176cdd8", 
+                                                                              "dg-request-id":
+                                                                              "081c296a-d716-4e1c-a822-39024c2a47e4", 
+                                                                              "Date": "Sun, 18 Jan 2026 17:48:38      
+                                                                              GMT"}}
+    23:18:54 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             DEBUG  livekit.agents   received user transcript {"user_transcript": "Yeah.", "language": "en-US",       
+                                                              "transcript_delay": 0.682279109954834}
+    23:18:57 DEBUG  livekit.agents   flush audio emitter due to slow audio generation  
+    23:19:04 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:19:05 INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Okay.'  
+    23:19:07 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:19:08 DEBUG  livekit.agents   Intent Analysis: Suppressing UI backchannel 'Right.'  
+             DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+             INFO   livekit.agents   Intent Analysis: Scrubbing filler from history: 'Right.'  
+    23:19:10 DEBUG  livekit.agents   Intent Scorer: Buffering first VAD signal for semantic clearance.  
+    23:19:11 DEBUG  livekit.agents   received user transcript {"user_transcript": "Okay. Stop.", "language": "en-US", 
+                                                              "transcript_delay": 0.5681908130645752}
+             WARNI… livekit.agents   _SegmentSynchronizerImpl.resume called after close  
+    23:19:24 INFO   livekit.agents   closing agent session due to            {"participant": "identity-g59r",
+                                     participant disconnect (disable via     "reason": "CLIENT_INITIATED"}
+                                     `RoomInputOptions.close_on_disconnect=F 
+                                     alse`)
+             DEBUG  livekit.agents   stream closed {"participant": "identity-g59r", "source": "SOURCE_MICROPHONE"}    
