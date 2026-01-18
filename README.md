@@ -37,6 +37,20 @@ Logic Flow-
       -stop
       -hold on
 -If any interruption keyword appears even within a longer sentence, then the Agent stops.
+## Proof / Demonstration
+
+Below is a log-based demonstration of the interrupt handling logic.
+![alt text](image.png)
+
+### Test File
+examples/test_interrupt_logic.py
+
+Note:
+Due to local environment limitations (LiveKit audio pipeline requiring realtime
+media devices and credentials), the demonstration is provided using a
+log-based simulation that directly validates the interrupt decision logic.
+
+
 
 
 <!--BEGIN_BANNER_IMAGE-->
