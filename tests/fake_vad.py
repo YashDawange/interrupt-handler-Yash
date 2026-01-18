@@ -5,7 +5,7 @@ import time
 
 from livekit.agents.vad import VAD, VADCapabilities, VADEvent, VADEventType, VADStream
 
-from .fake_stt import FakeUserSpeech
+from fake_stt import FakeUserSpeech
 
 
 class FakeVAD(VAD):

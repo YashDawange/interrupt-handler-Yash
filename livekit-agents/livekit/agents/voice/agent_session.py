@@ -89,6 +89,9 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    interruption_words: list[str]
+    backchannel_words: list[str]
+    min_interrupt_phrases: int
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -159,6 +162,9 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         tts_text_transforms: NotGivenOr[Sequence[TextTransforms] | None] = NOT_GIVEN,
         preemptive_generation: bool = False,
         ivr_detection: bool = False,
+        interruption_words: NotGivenOr[list[str]] = NOT_GIVEN,
+        backchannel_words: NotGivenOr[list[str]] = NOT_GIVEN,
+        min_interrupt_phrases: NotGivenOr[int] = NOT_GIVEN,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
         # deprecated
@@ -285,6 +291,21 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             ),
             preemptive_generation=preemptive_generation,
             ivr_detection=ivr_detection,
+            interruption_words=interruption_words if is_given(interruption_words) else [
+                "wait", "stop", "hold on", "pause", "cancel", "no", "nope", "nah",
+                "yeah wait", "ok stop", "hmm no", "yeah yeah stop", "ok but wait",
+                "stop talking", "wait a second", "let me speak", "don't say that",
+                "hold on a minute", "I want to say something",
+                "no that's wrong", "wait change that", "stop I meant something else"
+            ],
+            backchannel_words=backchannel_words if is_given(backchannel_words) else [
+                "yeah", "ok", "okay", "hmm", "uh-huh", "right", "mm",
+                "yeah yeah", "ok ok", "mm-hmm", "right right",
+                "got it", "makes sense", "I see", "understood",
+                "oh", "ah", "huh", "huh okay",
+                "yep", "yup", "haan", "acha", "theek hai"
+            ],
+            min_interrupt_phrases=min_interrupt_phrases if is_given(min_interrupt_phrases) else 1,
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
@@ -1022,7 +1043,13 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 ):
                     raise RuntimeError("cannot start agent: an activity is already running")
 
-                self._next_activity = AgentActivity(agent, self)
+                self._next_activity = AgentActivity(
+                    agent,
+                    self,
+                    interruption_words=self._opts.interruption_words,
+                    backchannel_words=self._opts.backchannel_words,
+                    min_interrupt_phrases=self._opts.min_interrupt_phrases,
+                )
             elif new_activity == "resume":
                 if agent._activity is None:
                     raise RuntimeError("cannot resume agent: no existing active activity to resume")

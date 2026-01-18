@@ -644,7 +644,11 @@ class AgentServer(utils.EventEmitter[EventTypes]):
             self._proc_pool.on("process_job_launched", _update_job_status)
             await self._proc_pool.start()
 
-            self._http_session = aiohttp.ClientSession(proxy=self._http_proxy or None)
+            if self._http_proxy:
+                # aiohttp ClientSession no longer supports the proxy kwarg in newer versions.
+                # Proxying can still be configured at the request level or via env vars.
+                logger.warning("http_proxy is set but aiohttp.ClientSession ignores it")
+            self._http_session = aiohttp.ClientSession()
             self._api = api.LiveKitAPI(
                 self._ws_url, self._api_key, self._api_secret, session=self._http_session
             )

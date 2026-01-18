@@ -6,11 +6,17 @@ import logging
 import types
 
 import pytest
+import sys
+from pathlib import Path
 
 from livekit.agents import DEFAULT_API_CONNECT_OPTIONS, utils
 from livekit.agents.cli import log
 
-from .toxic_proxy import Toxiproxy
+# Ensure local test helpers are importable even under pytest importlib mode.
+tests_dir = Path(__file__).resolve().parent
+sys.path.append(str(tests_dir))
+sys.path.append(str(tests_dir.parent))
+from toxic_proxy import Toxiproxy  # noqa: E402
 
 TEST_CONNECT_OPTIONS = dataclasses.replace(DEFAULT_API_CONNECT_OPTIONS, retry_interval=0.0)
 

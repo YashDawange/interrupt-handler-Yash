@@ -18,11 +18,11 @@ from livekit.agents.voice.transcription.synchronizer import (
     _SyncedAudioOutput,
 )
 
-from .fake_io import FakeAudioInput, FakeAudioOutput, FakeTextOutput
-from .fake_llm import FakeLLM, FakeLLMResponse
-from .fake_stt import FakeSTT, FakeUserSpeech
-from .fake_tts import FakeTTS, FakeTTSResponse
-from .fake_vad import FakeVAD
+from fake_io import FakeAudioInput, FakeAudioOutput, FakeTextOutput
+from fake_llm import FakeLLM, FakeLLMResponse
+from fake_stt import FakeSTT, FakeUserSpeech
+from fake_tts import FakeTTS, FakeTTSResponse
+from fake_vad import FakeVAD
 
 
 def create_session(

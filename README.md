@@ -42,6 +42,49 @@ agents that can see, hear, and understand.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
 
+## Intelligent Interruption Handling
+
+This agent includes state‑aware, intent‑aware interruption handling for real‑time voice.
+
+### Behavior Summary
+
+- **Speaking + interrupt intent** → stop immediately.  
+- **Speaking + backchannel only** → continue with no audio break.  
+- **Silent + any speech** → treat as valid input.
+
+### Intent Rules
+
+Interrupt intent overrides backchannel content if it appears anywhere in the transcript.
+
+### Configuration
+
+The word lists are configurable in `AgentActivity`:
+- `_DEFAULT_INTERRUPTION_WORDS` — phrases that always interrupt.
+- `_DEFAULT_BACKCHANNEL_WORDS` — acknowledgements that should never interrupt.
+
+### VAD/STT Race Handling
+
+VAD events never cancel audio on their own. Audio stops only after ASR text is available and classified as interrupt intent.
+
+### Example Scenarios
+
+1. **Long explanation**  
+   **User:** “Okay… yeah… uh‑huh” (while agent is talking)  
+   **Result:** Agent continues speaking with no break.
+
+2. **Passive affirmation**  
+   **Agent:** “Are you ready?” (goes silent)  
+   **User:** “Yeah.”  
+   **Result:** Agent treats it as valid input and proceeds.
+
+3. **Correction**  
+   **User:** “No stop.” (while agent is speaking)  
+   **Result:** Agent stops immediately.
+
+4. **Mixed input**  
+   **User:** “Yeah okay but wait.” (while agent is speaking)  
+   **Result:** Agent stops immediately.
+
 ## Installation
 
 To install the core Agents library, along with plugins for popular model providers:
