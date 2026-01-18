@@ -1185,7 +1185,6 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
-        # Intelligent interruption filtering: ignore backchanneling while agent is speaking
         if (
             opt.interrupt_filter is not None
             and self._audio_recognition is not None
@@ -1196,8 +1195,6 @@ class AgentActivity(RecognitionHooks):
             agent_is_speaking = self._session.agent_state == "speaking"
 
             if not opt.interrupt_filter.should_interrupt(transcript, agent_is_speaking):
-                # The transcript is just backchanneling (e.g., "yeah", "ok", "hmm")
-                # Don't interrupt the agent, but still allow user activity tracking
                 if self._rt_session is not None:
                     self._rt_session.start_user_activity()
                 return
@@ -1439,8 +1436,6 @@ class AgentActivity(RecognitionHooks):
                 )
                 return
 
-            # Intelligent interruption filtering: if agent is speaking and user input
-            # is only backchanneling, skip the response entirely
             opt = self._session.options
             if opt.interrupt_filter is not None:
                 agent_is_speaking = self._session.agent_state == "speaking"

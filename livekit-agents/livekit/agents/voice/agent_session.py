@@ -91,7 +91,6 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
-    # Intelligent interruption handling
     interrupt_filter: InterruptFilter | None
 
 
@@ -165,7 +164,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         ivr_detection: bool = False,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
-        # Intelligent interruption handling
         ignore_backchanneling: bool = True,
         backchanneling_words: list[str] | None = None,
         interrupt_words: list[str] | None = None,
