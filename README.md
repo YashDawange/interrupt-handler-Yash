@@ -49,51 +49,47 @@ agents that can see, hear, and understand.
 
 This feature implements a **context-aware logic layer** that distinguishes between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
 
-**The Problem**: When the AI agent is explaining something, the default VAD is too sensitive - if the user says "yeah", "ok", or "hmm" to indicate they are listening, the agent incorrectly interprets this as an interruption and stops speaking.
+**The Problem**: When the AI agent is explaining something, the default VAD is too sensitive - if the user acknowledges by saying "yeah", "ok", or "hmm", the agent incorrectly interprets this as an interruption and stops speaking. So we solved this here by using a filtering layer.
 
-**The Solution**: A filtering layer that:
-- **IGNORES** backchanneling words when the agent is speaking (no pause, no stutter)
+**The Solution**:
+- **IGNORES** all the backchanneling words when the agent is speaking (like yeah, ok, hmm etc.)
 - **INTERRUPTS** on command words ("stop", "wait", "no") when the agent is speaking
 - **RESPONDS** normally to any input when the agent is silent
 
-### Logic Matrix
 
-| User Input | Agent State | Behavior |
-|------------|-------------|----------|
-| "Yeah" / "Ok" / "Hmm" | Speaking | **IGNORE** - Agent continues without pausing |
-| "Wait" / "Stop" / "No" | Speaking | **INTERRUPT** - Agent stops immediately |
-| "Yeah" / "Ok" / "Hmm" | Silent | **RESPOND** - Agent treats as valid input |
-| Any other input | Silent | **RESPOND** - Normal conversation |
+### How to Use
 
-### How to Run the Example Agent
-
-```bash
-# Navigate to the examples directory
-cd examples/voice_agents
-
-# Run the intelligent interrupt agent
-python intelligent_interrupt_agent.py console
-```
-
-### Configuration Options
-
-The feature is **enabled by default** in `AgentSession`. You can customize it:
+The feature is **enabled by default**. Simply create an `AgentSession` and it will automatically ignore backchanneling:
 
 ```python
-from livekit.agents import AgentSession
+from livekit.agents import Agent, AgentSession, JobContext, cli, WorkerOptions
+from livekit.plugins import deepgram, google, silero, elevenlabs
+from dotenv import load_dotenv
 
-session = AgentSession(
-    # ... other options ...
-    
-    # Enable/disable the feature (default: True)
-    ignore_backchanneling=True,
-    
-    # Custom list of words to ignore while speaking
-    backchanneling_words=["yeah", "ok", "hmm", "uh-huh", "right"],
-    
-    # Custom list of words that always cause interruption
-    interrupt_words=["stop", "wait", "no", "hold on", "pause"],
-)
+load_dotenv()
+
+async def entrypoint(ctx: JobContext):
+    await ctx.connect()
+
+    agent = Agent(
+        instructions="You are a helpful assistant who gives detailed explanations.",
+    )
+
+    session = AgentSession(
+        vad=silero.VAD.load(),
+        stt=deepgram.STT(model="nova-3"),
+        llm=google.LLM(model="gemini-2.5-flash-lite"),
+        tts=elevenlabs.TTS(),
+        # Feature is enabled by default with ignore_backchanneling=True
+        # Optionally customize:
+        # backchanneling_words=["yeah", "ok", "hmm"],
+        # interrupt_words=["stop", "wait", "no"],
+    )
+
+    await session.start(agent=agent, room=ctx.room)
+
+if __name__ == "__main__":
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
 ```
 
 You can also configure via environment variables:
@@ -118,7 +114,6 @@ You can also configure via environment variables:
 | `livekit-agents/livekit/agents/voice/interrupt_filter.py` | Core filtering logic |
 | `livekit-agents/livekit/agents/voice/agent_activity.py` | Integration point (`_interrupt_by_audio_activity`) |
 | `livekit-agents/livekit/agents/voice/agent_session.py` | Configuration options |
-| `examples/voice_agents/intelligent_interrupt_agent.py` | Demo agent |
 | `tests/test_interrupt_filter.py` | Unit tests |
 
 ## Installation
