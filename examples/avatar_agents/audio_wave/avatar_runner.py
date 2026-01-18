@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
+from livekit_agents.interrupt_handler import classify_input
 
 from livekit import rtc
 from livekit.agents import utils
@@ -31,6 +32,8 @@ class AudioWaveGenerator(VideoGenerator):
         self._options = options
         self._audio_queue = asyncio.Queue[Union[rtc.AudioFrame, AudioSegmentEnd]]()
         self._audio_resampler: Optional[rtc.AudioResampler] = None
+        self.agent_speaking = False
+
 
         self._canvas = np.zeros((options.video_height, options.video_width, 4), dtype=np.uint8)
         self._canvas.fill(255)
@@ -46,18 +49,23 @@ class AudioWaveGenerator(VideoGenerator):
 
     # -- VideoGenerator abstract methods --
 
-    async def push_audio(self, frame: rtc.AudioFrame | AudioSegmentEnd) -> None:
-        """Called by the runner to push audio frames to the generator."""
-        await self._audio_queue.put(frame)
+    async def push_audio(self, frame: rtc.AudioFrame):
+    if not self.agent_speaking:
+        self.agent_speaking = True
+    await self._audio_queue.put(frame)
 
-    def clear_buffer(self) -> None:
-        """Called by the runner to clear the audio buffer"""
-        while not self._audio_queue.empty():
-            try:
-                self._audio_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-        self._audio_bstream.flush()
+
+    def clean_buffer(self) -> None:
+    self.agent_speaking = False
+
+    while not self._audio_queue.empty():
+        try:
+            self._audio_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
+
+    self._audio_bstream.flush()
+
 
     def __aiter__(
         self,
@@ -161,7 +169,21 @@ async def main(api_url: str, api_token: str):
 
     def on_transcription_received(reader: rtc.TextStreamReader, participant_identity: str):
         # ignore transcription from the room
-        pass
+        def on_transcription_received(self, event):
+    text = event.text.strip()
+
+    decision = classify_input(
+        text,
+        self.audio_wave_generator.agent_speaking
+    )
+
+    if decision == "IGNORE":
+        return
+
+    if decision == "INTERRUPT":
+        self.audio_wave_generator.clean_buffer()
+        return
+
 
     room.register_text_stream_handler(TOPIC_TRANSCRIPTION, on_transcription_received)
 
