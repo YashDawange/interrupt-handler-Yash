@@ -1,19 +1,3 @@
-"""
-Intelligent Interruption Handling Agent Demo
-
-This example demonstrates the intelligent interruption filter that allows
-the agent to continue speaking when the user says backchanneling words
-like "yeah", "ok", "hmm", while still responding to actual interruptions.
-
-The key behaviors demonstrated:
-1. Backchanneling words are IGNORED when the agent is speaking
-2. Command words like "stop", "wait" immediately INTERRUPT the agent
-3. Mixed inputs like "yeah wait a second" are detected as INTERRUPTS
-4. When the agent is silent, all inputs are processed normally
-
-Run with: python intelligent_interrupt_agent.py console
-"""
-
 import logging
 
 from dotenv import load_dotenv
@@ -39,13 +23,6 @@ load_dotenv()
 
 
 class IntelligentInterruptAgent(Agent):
-    """An agent that demonstrates intelligent interruption handling.
-
-    This agent will give long responses to showcase that backchanneling
-    words like "yeah" and "ok" don't interrupt it, while actual
-    commands like "stop" and "wait" do.
-    """
-
     def __init__(self) -> None:
         super().__init__(
             instructions="""You are a helpful history teacher named Professor Smith.
@@ -64,7 +41,6 @@ class IntelligentInterruptAgent(Agent):
         )
 
     async def on_enter(self):
-        """Called when the agent becomes active."""
         self.session.generate_reply()
 
     @function_tool
@@ -73,11 +49,6 @@ class IntelligentInterruptAgent(Agent):
         context: RunContext,
         topic: str,
     ):
-        """Called when the user wants to hear a long story about a topic.
-
-        Args:
-            topic: The topic to tell a story about
-        """
         logger.info(f"Telling a long story about: {topic}")
         return f"""Here's an extensive story about {topic}:
 
@@ -90,12 +61,10 @@ class IntelligentInterruptAgent(Agent):
 
 
 def prewarm(proc: JobProcess):
-    """Prewarm the VAD model to reduce latency on first use."""
     proc.userdata["vad"] = silero.VAD.load()
 
 
 async def entrypoint(ctx: JobContext):
-    """Main entry point for the agent session."""
     ctx.log_context_fields = {
         "room": ctx.room.name,
     }

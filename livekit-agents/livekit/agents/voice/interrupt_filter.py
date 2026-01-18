@@ -87,7 +87,6 @@ DEFAULT_INTERRUPT_WORDS = [
 
 
 def _load_words_from_env(env_var: str, default: list[str]) -> list[str]:
-    """Load words from environment variable (comma-separated) or use default."""
     env_value = os.environ.get(env_var)
     if env_value:
         return [word.strip().lower() for word in env_value.split(",") if word.strip()]
@@ -95,7 +94,6 @@ def _load_words_from_env(env_var: str, default: list[str]) -> list[str]:
 
 
 def _normalize_text(text: str) -> str:
-    """Normalize text for comparison (lowercase, strip, collapse whitespace)."""
     text = text.lower().strip()
     text = re.sub(r"\s+", " ", text)
     # Remove common punctuation
@@ -104,33 +102,26 @@ def _normalize_text(text: str) -> str:
 
 
 def _split_into_words(text: str) -> list[str]:
-    """Split text into individual words."""
     return _normalize_text(text).split()
 
 
 @dataclass
 class InterruptFilterConfig:
-    """Configuration for the interrupt filter."""
-
     enabled: bool = True
-    """Whether to enable intelligent interruption filtering."""
 
     backchanneling_words: list[str] = field(
         default_factory=lambda: _load_words_from_env(
             "LIVEKIT_BACKCHANNELING_WORDS", DEFAULT_BACKCHANNELING_WORDS
         )
     )
-    """Words to ignore while agent is speaking (backchanneling/acknowledgements)."""
 
     interrupt_words: list[str] = field(
         default_factory=lambda: _load_words_from_env(
             "LIVEKIT_INTERRUPT_WORDS", DEFAULT_INTERRUPT_WORDS
         )
     )
-    """Words that should always trigger an interruption, even if mixed with backchanneling."""
 
     case_sensitive: bool = False
-    """Whether word matching should be case-sensitive."""
 
 
 class InterruptFilter:
@@ -293,6 +284,5 @@ def get_default_filter() -> InterruptFilter:
 
 
 def set_default_filter(filter: InterruptFilter) -> None:
-    """Set the default global interrupt filter."""
     global _default_filter
     _default_filter = filter
