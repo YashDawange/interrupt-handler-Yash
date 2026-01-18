@@ -77,3 +77,8 @@ This state-aware logic ensures that the **same word** (e.g., _“Yeah”_) is:
 
 - **Ignored** while the agent is actively speaking
 - **Accepted as valid input** when the agent is silent and waiting for a response
+
+## Demonstration
+
+demonstration video at: demo.mp4 or click [here](https://drive.google.com/file/d/1C3auDVGDDe_b72EEA43y6uEi38Xkqww6/view?usp=sharing)
+demonstartion logs at: demo.log
