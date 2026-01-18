@@ -329,6 +329,16 @@ class AudioRecognition:
             return self._audio_transcript + " " + self._audio_interim_transcript
         return self._audio_transcript
 
+    @property
+    def latest_transcript_fragment(self) -> str:
+        """
+        Most recent transcript fragment for the current speech activity.
+        Prefer interim text to avoid mixing previous turns.
+        """
+        if self._audio_interim_transcript:
+            return self._audio_interim_transcript
+        return self._audio_transcript
+
     async def _on_stt_event(self, ev: stt.SpeechEvent) -> None:
         if (
             self._turn_detection_mode == "manual"

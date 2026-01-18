@@ -4,6 +4,7 @@ import asyncio
 import contextvars
 import heapq
 import json
+import re
 import time
 from collections.abc import AsyncIterable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -106,8 +107,42 @@ class _PreemptiveGeneration:
 
 # NOTE: AgentActivity isn't exposed to the public API
 class AgentActivity(RecognitionHooks):
-    def __init__(self, agent: Agent, sess: AgentSession) -> None:
+    _DEFAULT_INTERRUPTION_WORDS = [
+        "wait", "stop", "hold on", "pause", "cancel", "no", "nope", "nah",
+        "yeah wait", "ok stop", "hmm no", "yeah yeah stop", "ok but wait",
+        "stop talking", "wait a second", "let me speak", "don't say that",
+        "hold on a minute", "I want to say something",
+        "no that's wrong", "wait change that", "stop I meant something else",
+    ]
+    _DEFAULT_BACKCHANNEL_WORDS = [
+        "yeah", "ok", "okay", "hmm", "uh-huh", "right", "mm",
+        "yeah yeah", "ok ok", "mm-hmm", "right right",
+        "got it", "makes sense", "I see", "understood",
+        "oh", "ah", "huh", "huh okay",
+        "yep", "yup", "haan", "acha", "theek hai",
+    ]
+
+    def __init__(
+        self,
+        agent: Agent,
+        sess: AgentSession,
+        interruption_words: list[str] | None = None,
+        backchannel_words: list[str] | None = None,
+        min_interrupt_phrases: int = 0,
+    ) -> None:
         self._agent, self._session = agent, sess
+        self._interruption_words = interruption_words or self._DEFAULT_INTERRUPTION_WORDS
+        self._backchannel_words = backchannel_words or self._DEFAULT_BACKCHANNEL_WORDS
+        self._min_interrupt_phrases = min_interrupt_phrases
+        self._interrupt_phrases = [
+            self._normalize_text(phrase) for phrase in self._interruption_words
+        ]
+        self._backchannel_phrase_tokens = [
+            self._normalize_text(phrase).split()
+            for phrase in self._backchannel_words
+            if self._normalize_text(phrase)
+        ]
+        self._last_user_transcript = ""
         self._rt_session: llm.RealtimeSession | None = None
         self._realtime_spans: utils.BoundedDict[str, trace.Span] | None = None
         self._audio_recognition: AudioRecognition | None = None
@@ -1166,7 +1201,87 @@ class AgentActivity(RecognitionHooks):
         )
         self._schedule_speech(handle, SpeechHandle.SPEECH_PRIORITY_NORMAL)
 
+    def _check_interruption_intent(self, text: str) -> bool:
+        """
+        Determines if the user's speech indicates an interruption or is merely backchanneling.
+        Returns True for interruption, False for backchannel.
+        """
+        normalized = self._normalize_text(text)
+        if not normalized:
+            return False
+
+        padded = f" {normalized} "
+        for phrase in self._interrupt_phrases:
+            if phrase and f" {phrase} " in padded:
+                return True
+
+        tokens = normalized.split()
+        if self._is_backchannel_only(tokens) or self._is_backchannel_prefix(tokens):
+            return False
+
+        return True
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        text = text.lower().replace("-", " ")
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
+        return " ".join(text.split())
+
+    def _is_backchannel_only(self, tokens: list[str]) -> bool:
+        if not tokens:
+            return False
+
+        phrase_tokens = self._backchannel_phrase_tokens
+        max_len = max((len(phrase) for phrase in phrase_tokens), default=1)
+        dp = [False] * (len(tokens) + 1)
+        dp[0] = True
+
+        for i in range(len(tokens)):
+            if not dp[i]:
+                continue
+            for length in range(1, max_len + 1):
+                if i + length > len(tokens):
+                    break
+                segment = tokens[i : i + length]
+                if segment in phrase_tokens:
+                    dp[i + length] = True
+
+        return dp[len(tokens)]
+
+    def _is_backchannel_prefix(self, tokens: list[str]) -> bool:
+        if not tokens:
+            return False
+
+        phrase_tokens = self._backchannel_phrase_tokens
+        max_len = max((len(phrase) for phrase in phrase_tokens), default=1)
+        dp = [False] * (len(tokens) + 1)
+        dp[0] = True
+
+        for i in range(len(tokens)):
+            if not dp[i]:
+                continue
+            for length in range(1, max_len + 1):
+                if i + length > len(tokens):
+                    break
+                segment = tokens[i : i + length]
+                if segment in phrase_tokens:
+                    dp[i + length] = True
+
+        for i in range(len(tokens)):
+            if not dp[i]:
+                continue
+            remaining = tokens[i:]
+            for phrase in phrase_tokens:
+                if remaining == phrase[: len(remaining)]:
+                    return True
+
+        return False
+
     def _interrupt_by_audio_activity(self) -> None:
+        """
+        This method is called when user audio activity is detected.
+        It now includes intelligent interruption handling.
+        """
         opt = self._session.options
         use_pause = opt.resume_false_interruption and opt.false_interruption_timeout is not None
 
@@ -1174,16 +1289,20 @@ class AgentActivity(RecognitionHooks):
             # ignore if realtime model has turn detection enabled
             return
 
-        if (
-            self.stt is not None
-            and opt.min_interruption_words > 0
-            and self._audio_recognition is not None
-        ):
-            text = self._audio_recognition.current_transcript
+        if self.stt is None or self._audio_recognition is None:
+            return
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+        text = self._last_user_transcript
+        if not text.strip():
+        # Ignore VAD-only triggers without ASR text.
+            return
+
+        if self._session.agent_state != "speaking":
+            # When silent, user speech is handled elsewhere.
+            return
+
+        if not self._check_interruption_intent(text):
+            return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
@@ -1213,6 +1332,7 @@ class AgentActivity(RecognitionHooks):
 
     def on_start_of_speech(self, ev: vad.VADEvent | None) -> None:
         self._session._update_user_state("speaking")
+        self._last_user_transcript = ""
 
         if self._false_interruption_timer:
             # cancel the timer when user starts speaking but leave the paused state unchanged
@@ -1248,6 +1368,8 @@ class AgentActivity(RecognitionHooks):
             # skip stt transcription if user_transcription is enabled on the realtime model
             return
 
+        self._last_user_transcript = ev.alternatives[0].text
+        self._last_user_transcript = ev.alternatives[0].text
         self._session._user_input_transcribed(
             UserInputTranscribedEvent(
                 language=ev.alternatives[0].language,
@@ -1364,6 +1486,12 @@ class AgentActivity(RecognitionHooks):
 
             # TODO(theomonnom): should we "forward" this new turn to the next agent/activity?
             return True
+
+        if self._session.agent_state == "speaking":
+            normalized = self._normalize_text(info.new_transcript)
+            if normalized and self._is_backchannel_only(normalized.split()):
+                self._cancel_preemptive_generation()
+                return False
 
         if (
             self.stt is not None
