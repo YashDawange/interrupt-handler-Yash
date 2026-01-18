@@ -56,6 +56,7 @@ from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
+
 from .interrupt_filter import InterruptFilter, InterruptFilterConfig
 
 if TYPE_CHECKING:
@@ -171,101 +172,6 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         # deprecated
         agent_false_interruption_timeout: NotGivenOr[float | None] = NOT_GIVEN,
     ) -> None:
-        """`AgentSession` is the LiveKit Agents runtime that glues together
-        media streams, speech/LLM components, and tool orchestration into a
-        single real-time voice agent.
-
-        It links audio, video, and text I/O with STT, VAD, TTS, and the LLM;
-        handles turn detection, endpointing, interruptions, and multi-step
-        tool calls; and exposes everything through event callbacks so you can
-        focus on writing function tools and simple hand-offs rather than
-        low-level streaming logic.
-
-        Args:
-            turn_detection (TurnDetectionMode, optional): Strategy for deciding
-                when the user has finifshed speaking.
-
-                * ``"stt"`` – rely on speech-to-text end-of-utterance cues
-                * ``"vad"`` – rely on Voice Activity Detection start/stop cues
-                * ``"realtime_llm"`` – use server-side detection from a
-                  realtime LLM
-                * ``"manual"`` – caller controls turn boundaries explicitly
-                * ``_TurnDetector`` instance – plug-in custom detector
-
-                If *NOT_GIVEN*, the session chooses the best available mode in
-                priority order ``realtime_llm → vad → stt → manual``; it
-                automatically falls back if the necessary model is missing.
-            stt (stt.STT | str, optional): Speech-to-text backend.
-            vad (vad.VAD, optional): Voice-activity detector
-            llm (llm.LLM | llm.RealtimeModel | str, optional): LLM or RealtimeModel
-            tts (tts.TTS | str, optional): Text-to-speech engine.
-            tools (list[llm.FunctionTool | llm.RawFunctionTool], optional): List of
-                tools shared by every agent in the agent session.
-            mcp_servers (list[mcp.MCPServer], optional): List of MCP servers
-                providing external tools for the agent to use.
-            userdata (Userdata_T, optional): Arbitrary per-session user data.
-            allow_interruptions (bool): Whether the user can interrupt the
-                agent mid-utterance. Default ``True``.
-            discard_audio_if_uninterruptible (bool): When ``True``, buffered
-                audio is dropped while the agent is speaking and cannot be
-                interrupted. Default ``True``.
-            min_interruption_duration (float): Minimum speech length (s) to
-                register as an interruption. Default ``0.5`` s.
-            min_interruption_words (int): Minimum number of words to consider
-                an interruption, only used if stt enabled. Default ``0``.
-            min_endpointing_delay (float): Minimum time-in-seconds the agent
-                must wait after a potential end-of-utterance signal (from VAD
-                or an EOU model) before it declares the user’s turn complete.
-                Default ``0.5`` s.
-            max_endpointing_delay (float): Maximum time-in-seconds the agent
-                will wait before terminating the turn. Default ``3.0`` s.
-            max_tool_steps (int): Maximum consecutive tool calls per LLM turn.
-                Default ``3``.
-            video_sampler (_VideoSampler, optional): Uses
-                :class:`VoiceActivityVideoSampler` when *NOT_GIVEN*; that sampler
-                captures video at ~1 fps while the user is speaking and ~0.3 fps
-                when silent by default.
-            user_away_timeout (float, optional): If set, set the user state as
-                "away" after this amount of time after user and agent are silent.
-                Default ``15.0`` s, set to ``None`` to disable.
-            false_interruption_timeout (float, optional): If set, emit an
-                `agent_false_interruption` event after this amount of time if
-                the user is silent and no user transcript is detected after
-                the interruption. Set to ``None`` to disable. Default ``2.0`` s.
-            resume_false_interruption (bool): Whether to resume the false interruption
-                after the false_interruption_timeout. Default ``True``.
-            min_consecutive_speech_delay (float, optional): The minimum delay between
-                consecutive speech. Default ``0.0`` s.
-            use_tts_aligned_transcript (bool, optional): Whether to use TTS-aligned
-                transcript as the input of the ``transcription_node``. Only applies
-                if ``TTS.capabilities.aligned_transcript`` is ``True`` or ``streaming``
-                is ``False``. When NOT_GIVEN, it's disabled.
-            tts_text_transforms (Sequence[TextTransforms], optional): The transforms to apply
-                to the tts input text, available built-in transforms: ``"filter_markdown"``, ``"filter_emoji"``.
-                Set to ``None`` to disable. When NOT_GIVEN, all filters will be applied.
-            preemptive_generation (bool):
-                Whether to speculatively begin LLM and TTS requests before an end-of-turn is
-                detected. When True, the agent sends inference calls as soon as a user
-                transcript is received rather than waiting for a definitive turn boundary. This
-                can reduce response latency by overlapping model inference with user audio,
-                but may incur extra compute if the user interrupts or revises mid-utterance.
-                Defaults to ``False``.
-            ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
-                Default ``False``.
-            ignore_backchanneling (bool): Whether to ignore backchanneling words (e.g., "yeah", "ok",
-                "hmm") while the agent is speaking. When enabled, these words won't interrupt
-                the agent mid-sentence but will still be processed when the agent is silent.
-                Default ``True``.
-            backchanneling_words (list[str], optional): Custom list of words to ignore while
-                the agent is speaking. If not provided, uses a sensible default list.
-            interrupt_words (list[str], optional): Custom list of words that should always
-                cause an interruption, even when mixed with backchanneling words (e.g., "wait",
-                "stop", "no"). If not provided, uses a sensible default list.
-            conn_options (SessionConnectOptions, optional): Connection options for
-                stt, llm, and tts.
-            loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
-                session to. Falls back to :pyfunc:`asyncio.get_event_loop()`.
-        """
         super().__init__()
         self._loop = loop or asyncio.get_event_loop()
 
