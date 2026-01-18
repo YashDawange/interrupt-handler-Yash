@@ -38,6 +38,7 @@ from ..metrics import (
 from ..telemetry import trace_types, tracer, utils as trace_utils
 from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
+import re
 from ..utils.misc import is_given
 from ._utils import _set_participant_attributes
 from .agent import (
@@ -1176,14 +1177,28 @@ class AgentActivity(RecognitionHooks):
 
         if (
             self.stt is not None
-            and opt.min_interruption_words > 0
             and self._audio_recognition is not None
         ):
             text = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+            # Check for interruption speech filter
+            if opt.interruption_speech_filter:
+                # If transcript is empty, return (ignore VAD-only interruption)
+                if not text.strip():
+                    return
+
+                # Normalize transcript: lowercase and remove punctuation (keep hyphens)
+                normalized_text = re.sub(r'[^\w\s-]', '', text.lower())
+                words = normalized_text.split()
+
+                # Check if all words are in the ignore list
+                if all(word in opt.interruption_speech_filter for word in words):
+                    return
+
+            if opt.min_interruption_words > 0:
+                # TODO(long): better word splitting for multi-language
+                if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                    return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
