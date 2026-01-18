@@ -1,3 +1,43 @@
+# 🚀 Feature: Smart Interruption Handler (Assignment Submission)
+
+**Submitted by:** Tanmay Rath  
+**Branch:** `feature/interrupt-handler-tanmayrath`
+
+## 📝 Problem Statement
+The default agent was too sensitive, cutting off speech when the user said passive backchannel words like "Yeah", "Uh-huh", or "Okay". The goal was to make the agent **ignore** these soft inputs while still **stopping** for hard commands like "Stop".
+
+## 🛠️ The Solution Logic
+I implemented a **"Deaf Mode" strategy** in `examples/voice_agents/basic_agent.py`.
+
+1.  **Disable Auto-Interruption:**
+    * Set `allow_interruptions=False` in the agent configuration. This prevents the VAD from automatically halting audio on any noise.
+2.  **Logic Layer (The "Brain"):**
+    * I intercepted the `user_speech_committed` event.
+    * **Soft Input Check:** If the user text is *only* in the `IGNORE_WORDS` list (e.g., "yeah", "ok"), the event is discarded. The agent continues speaking seamlessly.
+    * **Hard Input Check:** If the text contains other words (e.g., "Stop", "Wait", "Yeah but..."), I manually trigger `agent.interrupt()`.
+
+### Logic Matrix Implemented
+| User Input | Agent State | Action |
+| :--- | :--- | :--- |
+| "Yeah" / "Ok" | Speaking | **IGNORE** (Continues speaking) |
+| "Stop" / "Wait" | Speaking | **INTERRUPT** (Stops immediately) |
+| "Yeah" | Silent | **RESPOND** (Standard conversation) |
+
+## 🏃‍♂️ How to Run
+1.  **Install Dependencies:**
+    ```bash
+    uv sync
+    ```
+2.  **Run the Agent:**
+    ```bash
+    python examples/voice_agents/basic_agent.py dev
+    ```
+3.  **Test:** Connect via the [LiveKit Agents Playground](https://agents-playground.livekit.io/).
+
+---
+*(Original Repository Documentation Below)*
+<br />
+
 <!--BEGIN_BANNER_IMAGE-->
 
 <picture>
