@@ -3,6 +3,7 @@ import logging
 from intelligent_interrupt_handler import IntelligentInterruptHandler
 
 from dotenv import load_dotenv
+
 from google.genai import types  # noqa: F401
 
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, JobProcess, cli
