@@ -1,3 +1,58 @@
+#LiveKit AI Agent- Context Aware Interruption Handling
+
+This project contains my submission for 'LiveKit Intelligent Interruption Challenge'. The objective of this task is to improve the conversational flow of the real time AI Agent by preventing unintended interruptions caused by passive user acknowledgments like 'yeah', 'ok', 'hmm' etc but allowing genuine interruptions like 'stop', 'wait' etc.
+
+#Problem Statement
+LiveKit’s default Voice Activity Detection (VAD) is highly sensitive to user input.
+When a user provides backchannel feedback (e.g., “yeah”, “okay”, “uh-huh”) while the agent
+is speaking, the agent incorrectly interprets this as an interruption and stops mid-sentence.
+
+This results in unnatural and broken conversations.
+
+#Goal:  Implement a context aware logic layer that ignores filter acknowledgements while the agent is speaking, processes acknowledgements normally while the agent is silent, interrupts the AI Agent on commands like 'ok', 'wait' and 'stop' and correctly handles mixed inputs like 'yeah okay but wait'
+
+#Implementation Overview
+Key concepts: -A real time 'agent_is_speaking' flag is maintained.
+-All user speech is first processed through the STT Transcript.
+-Decision making occurs before audio interruption.
+
+Logic Flow-
+-It is checked whether the agent is speaking or not.
+-Receive user transcript from STT.
+-Normalise and analyse the text.
+-If the agent is currently speaking then
+   -ignore the filler acknowledgments
+   -interrupt when useful acknowledgments
+-If the agent is silent
+   -trust all input as valid conversational input 
+
+#Semantic Interruption Detection
+-The system differentiates between
+   ### Passive acknowledgments 
+      -oh
+      -okay
+      -hmm
+   ### Acitve acknowledgments 
+      -wait
+      -stop
+      -hold on
+-If any interruption keyword appears even within a longer sentence, then the Agent stops.
+## Proof / Demonstration
+
+Below is a log-based demonstration of the interrupt handling logic.
+![alt text](image.png)
+
+### Test File
+examples/test_interrupt_logic.py
+
+Note:
+Due to local environment limitations (LiveKit audio pipeline requiring realtime
+media devices and credentials), the demonstration is provided using a
+log-based simulation that directly validates the interrupt decision logic.
+
+
+
+
 <!--BEGIN_BANNER_IMAGE-->
 
 <picture>
