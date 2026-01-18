@@ -25,6 +25,11 @@ logger = logging.getLogger("basic-agent")
 
 load_dotenv()
 
+agent_is_speaking = False
+
+IGNORE_WORDS = {"yeah", "ok", "hmm", "uh-huh"}
+INTERRUPT_WORDS = {"stop", "wait", "no"}
+
 
 class MyAgent(Agent):
     def __init__(self) -> None:
@@ -116,6 +121,41 @@ async def entrypoint(ctx: JobContext):
 
     # shutdown callbacks are triggered when the session is over
     ctx.add_shutdown_callback(log_usage)
+
+    @session.on("user_transcript")
+    async def _on_user_transcript(text: str):
+     global agent_is_speaking
+     text = text.lower().strip()
+
+     # Case 1: Agent speaking + filler word → IGNORE
+     if agent_is_speaking and text in IGNORE_WORDS:
+        print("[IGNORED while speaking]:", text)
+        return
+
+    # Case 2: Agent speaking + interrupt command → STOP
+     if agent_is_speaking and any(w in text for w in INTERRUPT_WORDS):
+        print("[INTERRUPT]:", text)
+        await session.stop_agent_speech()
+        return
+
+    # Case 3: Agent silent + filler → RESPOND
+     if not agent_is_speaking and text in IGNORE_WORDS:
+        print("[RESPOND while silent]:", text)
+
+
+    @session.on("agent_speech_started")
+    def _on_agent_speech_started():
+     global agent_is_speaking
+     agent_is_speaking = True
+     print("[AGENT SPEAKING]")
+
+    @session.on("agent_speech_finished")
+    def _on_agent_speech_finished():
+     global agent_is_speaking
+     agent_is_speaking = False
+     print("[AGENT SILENT]")
+
+
 
     await session.start(
         agent=MyAgent(),
