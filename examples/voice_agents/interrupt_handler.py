@@ -8,10 +8,6 @@ passive acknowledgements (backchannel) and active interruptions based on agent s
 import logging
 import re
 from typing import Set
-from config import (
-    DEFAULT_BACKCHANNEL_WORDS,
-    DEFAULT_COMMAND_WORDS,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +20,24 @@ class InterruptionFilter:
     feedback (backchannel words like "yeah", "ok", "hmm"), while still allowing
     legitimate interruptions.
     """
+    
+    # Backchannel words that should be ignored when agent is speaking
+    DEFAULT_BACKCHANNEL_WORDS: Set[str] = {
+        "yeah", "yea", "yes", "yep", "yup",
+        "ok", "okay", "alright", "aight",
+        "hmm", "hm", "mhm", "mmhmm", "uh-huh", "uhuh",
+        "right", "sure", "gotcha", "got it",
+        "aha", "ah", "oh", "ooh",
+        "mm", "mhmm", "huh"
+    }
+    
+    # Command words that should always trigger interruption
+    DEFAULT_COMMAND_WORDS: Set[str] = {
+        "stop", "wait", "hold", "pause",
+        "no", "nope", "don't",
+        "hold on", "wait a second", "wait a minute",
+        "hang on", "one second", "one minute"
+    }
     
     def __init__(
         self,
@@ -38,17 +52,16 @@ class InterruptionFilter:
             backchannel_words: Custom set of backchannel words (overrides defaults)
             command_words: Custom set of command words (overrides defaults)
             min_word_threshold: If transcript has more than this many words and
-                            isn't purely backchannel, allow interruption
+                              isn't purely backchannel, allow interruption
         """
-        self.backchannel_words = backchannel_words or DEFAULT_BACKCHANNEL_WORDS
-        self.command_words = command_words or DEFAULT_COMMAND_WORDS
+        self.backchannel_words = backchannel_words or self.DEFAULT_BACKCHANNEL_WORDS
+        self.command_words = command_words or self.DEFAULT_COMMAND_WORDS
         self.min_word_threshold = min_word_threshold
-
+        
         logger.info(
             f"InterruptionFilter initialized with {len(self.backchannel_words)} "
             f"backchannel words and {len(self.command_words)} command words"
         )
-
     
     def should_interrupt(self, transcript: str, agent_is_speaking: bool) -> bool:
         """

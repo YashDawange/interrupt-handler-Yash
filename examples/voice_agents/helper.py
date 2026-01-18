@@ -1,16 +1,39 @@
 import logging
 import re
+import json
+import os
 from livekit.agents.tokenize.basic import split_words
 from livekit.agents.voice.agent_activity import AgentActivity
 from livekit.agents.voice.audio_recognition import _EndOfTurnInfo
 
 logger = logging.getLogger("backchannel-patch")
 
-from config import (
-    BACKCHANNEL_WORDS,
-    COMMAND_WORDS,
-)
+# =============================================================================
+# BACKCHANNEL WORD CONFIG
+# =============================================================================
+CONFIG_FILE = "config.json"
+BACKCHANNEL_WORDS = set()
+COMMAND_WORDS = set()
 
+def load_config():
+    global BACKCHANNEL_WORDS, COMMAND_WORDS
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                data = json.load(f)
+                BACKCHANNEL_WORDS = set(data.get("backchannel_words", []))
+                COMMAND_WORDS = set(data.get("command_words", []))
+            logger.info(f"Loaded {len(BACKCHANNEL_WORDS)} ignored words from {CONFIG_FILE}")
+        else:
+            logger.warning(f"{CONFIG_FILE} not found! Using empty defaults.")
+            # Fallback defaults if verification fails
+            BACKCHANNEL_WORDS = {"yeah", "ok", "mhmm", "okay"}
+            COMMAND_WORDS = {"stop", "wait", "no"}
+    except Exception as e:
+        logger.error(f"Failed to load {CONFIG_FILE}: {e}")
+
+# Load immediately on import
+load_config()
 
 # Global tracking for delta calculation
 _last_processed_transcript = ""
