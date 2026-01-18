@@ -56,6 +56,7 @@ from .ivr import IVRActivity
 from .recorder_io import RecorderIO
 from .run_result import RunResult
 from .speech_handle import SpeechHandle
+from .interrupt_filter import InterruptFilter, InterruptFilterConfig
 
 if TYPE_CHECKING:
     from ..inference import LLMModels, STTModels, TTSModels
@@ -89,6 +90,8 @@ class AgentSessionOptions:
     preemptive_generation: bool
     tts_text_transforms: Sequence[TextTransforms] | None
     ivr_detection: bool
+    # Intelligent interruption handling
+    interrupt_filter: InterruptFilter | None
 
 
 Userdata_T = TypeVar("Userdata_T")
@@ -161,6 +164,10 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
         ivr_detection: bool = False,
         conn_options: NotGivenOr[SessionConnectOptions] = NOT_GIVEN,
         loop: asyncio.AbstractEventLoop | None = None,
+        # Intelligent interruption handling
+        ignore_backchanneling: bool = True,
+        backchanneling_words: list[str] | None = None,
+        interrupt_words: list[str] | None = None,
         # deprecated
         agent_false_interruption_timeout: NotGivenOr[float | None] = NOT_GIVEN,
     ) -> None:
@@ -245,6 +252,15 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
                 Defaults to ``False``.
             ivr_detection (bool): Whether to detect if the agent is interacting with an IVR system.
                 Default ``False``.
+            ignore_backchanneling (bool): Whether to ignore backchanneling words (e.g., "yeah", "ok",
+                "hmm") while the agent is speaking. When enabled, these words won't interrupt
+                the agent mid-sentence but will still be processed when the agent is silent.
+                Default ``True``.
+            backchanneling_words (list[str], optional): Custom list of words to ignore while
+                the agent is speaking. If not provided, uses a sensible default list.
+            interrupt_words (list[str], optional): Custom list of words that should always
+                cause an interruption, even when mixed with backchanneling words (e.g., "wait",
+                "stop", "no"). If not provided, uses a sensible default list.
             conn_options (SessionConnectOptions, optional): Connection options for
                 stt, llm, and tts.
             loop (asyncio.AbstractEventLoop, optional): Event loop to bind the
@@ -288,6 +304,11 @@ class AgentSession(rtc.EventEmitter[EventTypes], Generic[Userdata_T]):
             use_tts_aligned_transcript=use_tts_aligned_transcript
             if is_given(use_tts_aligned_transcript)
             else None,
+            interrupt_filter=InterruptFilter(
+                enabled=ignore_backchanneling,
+                backchanneling_words=backchanneling_words,
+                interrupt_words=interrupt_words,
+            ) if ignore_backchanneling else None,
         )
         self._conn_options = conn_options or SessionConnectOptions()
         self._started = False

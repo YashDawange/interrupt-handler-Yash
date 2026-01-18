@@ -38,9 +38,88 @@ agents that can see, hear, and understand.
 - **Telephony integration**: Works seamlessly with LiveKit's [telephony stack](https://docs.livekit.io/sip/), allowing your agent to make calls to or receive calls from phones.
 - **Exchange data with clients**: Use [RPCs](https://docs.livekit.io/home/client/data/rpc/) and other [Data APIs](https://docs.livekit.io/home/client/data/) to seamlessly exchange data with clients.
 - **Semantic turn detection**: Uses a transformer model to detect when a user is done with their turn, helps to reduce interruptions.
+- **Intelligent Interruption Handling**: Context-aware filtering that ignores backchanneling words ("yeah", "ok", "hmm") while the agent is speaking, preventing unnecessary interruptions.
 - **MCP support**: Native support for MCP. Integrate tools provided by MCP servers with one loc.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
+
+## Intelligent Interruption Handling
+
+### Overview
+
+This feature implements a **context-aware logic layer** that distinguishes between passive acknowledgements (backchanneling) and active interruptions based on whether the agent is currently speaking or silent.
+
+**The Problem**: When the AI agent is explaining something, the default VAD is too sensitive - if the user says "yeah", "ok", or "hmm" to indicate they are listening, the agent incorrectly interprets this as an interruption and stops speaking.
+
+**The Solution**: A filtering layer that:
+- **IGNORES** backchanneling words when the agent is speaking (no pause, no stutter)
+- **INTERRUPTS** on command words ("stop", "wait", "no") when the agent is speaking
+- **RESPONDS** normally to any input when the agent is silent
+
+### Logic Matrix
+
+| User Input | Agent State | Behavior |
+|------------|-------------|----------|
+| "Yeah" / "Ok" / "Hmm" | Speaking | **IGNORE** - Agent continues without pausing |
+| "Wait" / "Stop" / "No" | Speaking | **INTERRUPT** - Agent stops immediately |
+| "Yeah" / "Ok" / "Hmm" | Silent | **RESPOND** - Agent treats as valid input |
+| Any other input | Silent | **RESPOND** - Normal conversation |
+
+### How to Run the Example Agent
+
+```bash
+# Navigate to the examples directory
+cd examples/voice_agents
+
+# Run the intelligent interrupt agent
+python intelligent_interrupt_agent.py console
+```
+
+### Configuration Options
+
+The feature is **enabled by default** in `AgentSession`. You can customize it:
+
+```python
+from livekit.agents import AgentSession
+
+session = AgentSession(
+    # ... other options ...
+    
+    # Enable/disable the feature (default: True)
+    ignore_backchanneling=True,
+    
+    # Custom list of words to ignore while speaking
+    backchanneling_words=["yeah", "ok", "hmm", "uh-huh", "right"],
+    
+    # Custom list of words that always cause interruption
+    interrupt_words=["stop", "wait", "no", "hold on", "pause"],
+)
+```
+
+You can also configure via environment variables:
+- `LIVEKIT_BACKCHANNELING_WORDS`: Comma-separated list of words to ignore
+- `LIVEKIT_INTERRUPT_WORDS`: Comma-separated list of interrupt commands
+
+### How the Logic Works
+
+1. When VAD/STT detects user speech, the `_interrupt_by_audio_activity()` method is called
+2. Before triggering an interrupt, the `InterruptFilter` checks:
+   - Is the agent currently speaking? (via `agent_state`)
+   - Does the transcript contain only backchanneling words?
+   - Does the transcript contain any command words?
+3. If agent is speaking AND transcript is only backchanneling → **Skip interrupt**
+4. If agent is speaking AND transcript contains command words → **Allow interrupt**
+5. If agent is silent → **Allow all inputs** (normal conversation)
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `livekit-agents/livekit/agents/voice/interrupt_filter.py` | Core filtering logic |
+| `livekit-agents/livekit/agents/voice/agent_activity.py` | Integration point (`_interrupt_by_audio_activity`) |
+| `livekit-agents/livekit/agents/voice/agent_session.py` | Configuration options |
+| `examples/voice_agents/intelligent_interrupt_agent.py` | Demo agent |
+| `tests/test_interrupt_filter.py` | Unit tests |
 
 ## Installation
 
