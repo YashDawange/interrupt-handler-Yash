@@ -38,6 +38,7 @@ agents that can see, hear, and understand.
 - **Telephony integration**: Works seamlessly with LiveKit's [telephony stack](https://docs.livekit.io/sip/), allowing your agent to make calls to or receive calls from phones.
 - **Exchange data with clients**: Use [RPCs](https://docs.livekit.io/home/client/data/rpc/) and other [Data APIs](https://docs.livekit.io/home/client/data/) to seamlessly exchange data with clients.
 - **Semantic turn detection**: Uses a transformer model to detect when a user is done with their turn, helps to reduce interruptions.
+- **Smart interruption filtering**: Built-in support for filtering conversational backchanneling to prevent false interruptions while maintaining responsiveness.
 - **MCP support**: Native support for MCP. Integrate tools provided by MCP servers with one loc.
 - **Builtin test framework**: Write tests and use judges to ensure your agent is performing as expected.
 - **Open-source**: Fully open-source, allowing you to run the entire stack on your own servers, including [LiveKit server](https://github.com/livekit/livekit), one of the most widely used WebRTC media servers.
@@ -118,6 +119,71 @@ You'll need the following environment variables for this example:
 - OPENAI_API_KEY
 - ELEVEN_API_KEY
 
+### Voice agent with smart interruption filtering
+
+---
+
+```python
+from livekit.agents import (
+    Agent,
+    AgentSession,
+    JobContext,
+    WorkerOptions,
+    cli,
+)
+from livekit.plugins import deepgram, openai, silero
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+async def entrypoint(ctx: JobContext):
+    await ctx.connect()
+
+    agent = Agent(
+        instructions="You are a friendly voice assistant built by LiveKit.",
+    )
+    
+    session = AgentSession(
+        vad=silero.VAD.load(),
+        stt=deepgram.STT(model="nova-3"),
+        llm=openai.LLM(model="gpt-4o-mini"),
+        tts=deepgram.TTS(),
+        turn_detection=MultilingualModel(),
+        preemptive_generation=True,
+    )
+    
+    # Configure interruption filter to ignore conversational backchanneling
+    session.options.interruption_speech_filter = {
+        "yeah", "yes", "yep", "yup", "ya",
+        "ok", "okay", "k",
+        "hmm", "hmmm", "mhmm", "mm-hmm", "mmhmm",
+        "uh-huh", "uh", "um", "uhm",
+        "right", "sure", "aha", "ah", "oh",
+    }
+    
+    # Disable pause/resume for consistent behavior
+    session.options.resume_false_interruption = False
+    
+    # Optional: minimum VAD duration before checking transcript
+    session.options.min_interruption_duration = 0.3
+
+    await session.start(agent=agent, room=ctx.room)
+    await session.generate_reply(instructions="greet the user")
+
+
+if __name__ == "__main__":
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+**Interruption Filter Logic:**
+
+| User Input          | Agent State | Behavior                                    |
+|---------------------|-------------|---------------------------------------------|
+| "Yeah / Ok / Hmm"   | Speaking    | IGNORE - Agent continues without pausing    |
+| "Wait / Stop / No"  | Speaking    | INTERRUPT - Agent stops immediately         |
+| "Yeah wait"         | Speaking    | INTERRUPT - Contains interrupt word         |
+| "Yeah / Ok"         | Silent      | RESPOND - Treated as valid input            |
+
+The filter only applies when the agent is actively speaking. When all words in the user's input match the filter set, the input is ignored to prevent false interruptions from conversational acknowledgments.
+
 ### Multi-agent handoff
 
 ---
@@ -160,11 +226,10 @@ class IntroAgent(Agent):
 class StoryAgent(Agent):
     def __init__(self, name: str, location: str) -> None:
         super().__init__(
-            instructions=f"You are a storyteller. Use the user's information in order to make the story personalized."
-            f"The user's name is {name}, from {location}"
+            instructions=f"You are a storyteller. Use the user's information in order to make the story personalized. "
+            f"The user's name is {name}, from {location}",
             # override the default model, switching to Realtime API from standard LLMs
             llm=openai.realtime.RealtimeModel(voice="echo"),
-            chat_ctx=chat_ctx,
         )
 
     async def on_enter(self):
@@ -198,7 +263,7 @@ Automated tests are essential for building reliable agents, especially with the 
 @pytest.mark.asyncio
 async def test_no_availability() -> None:
     llm = google.LLM()
-    async AgentSession(llm=llm) as sess:
+    async with AgentSession(llm=llm) as sess:
         await sess.start(MyAgent())
         result = await sess.run(
             user_input="Hello, I need to place an order."

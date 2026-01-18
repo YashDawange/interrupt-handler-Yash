@@ -38,6 +38,7 @@ from ..metrics import (
 from ..telemetry import trace_types, tracer, utils as trace_utils
 from ..tokenize.basic import split_words
 from ..types import NOT_GIVEN, FlushSentinel, NotGivenOr
+import re
 from ..utils.misc import is_given
 from ._utils import _set_participant_attributes
 from .agent import (
@@ -1176,14 +1177,33 @@ class AgentActivity(RecognitionHooks):
 
         if (
             self.stt is not None
-            and opt.min_interruption_words > 0
             and self._audio_recognition is not None
         ):
             text = self._audio_recognition.current_transcript
 
-            # TODO(long): better word splitting for multi-language
-            if len(split_words(text, split_character=True)) < opt.min_interruption_words:
-                return
+            # Check for interruption speech filter
+            # Only apply filter if the agent is currently speaking
+            if (
+                opt.interruption_speech_filter
+                and self._current_speech is not None
+                and not self._current_speech.done()
+            ):
+                # If transcript is empty, return (ignore VAD-only interruption)
+                if not text.strip():
+                    return
+
+                # Normalize transcript: lowercase and remove punctuation (keep hyphens and apostrophes)
+                normalized_text = re.sub(r"[^\w\s'-]", "", text.lower())
+                words = normalized_text.split()
+
+                # Check if all words are in the ignore list
+                if all(word in opt.interruption_speech_filter for word in words):
+                    return
+
+            if opt.min_interruption_words > 0:
+                # TODO(long): better word splitting for multi-language
+                if len(split_words(text, split_character=True)) < opt.min_interruption_words:
+                    return
 
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
@@ -1241,6 +1261,19 @@ class AgentActivity(RecognitionHooks):
             return
 
         if ev.speech_duration >= self._session.options.min_interruption_duration:
+            # If interruption_speech_filter is enabled, don't interrupt on VAD alone
+            # Wait for the transcript to arrive so we can filter it
+            opt = self._session.options
+            if (
+                opt.interruption_speech_filter
+                and self._current_speech is not None
+                and not self._current_speech.done()
+            ):
+                # Filter is enabled - let interim/final transcript handle interruption
+                logger.debug("VAD detected speech, waiting for transcript to check filter...")
+                return
+            
+            # No filter or agent not speaking - interrupt normally
             self._interrupt_by_audio_activity()
 
     def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None:
@@ -1261,15 +1294,41 @@ class AgentActivity(RecognitionHooks):
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
-
+            # ADDED: Check if we should filter this interim transcript
+            opt = self._session.options
+            should_filter = False
+            
             if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
+                opt.interruption_speech_filter
+                and self._current_speech is not None
+                and not self._current_speech.done()
             ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                text = ev.alternatives[0].text
+                if text.strip():
+                    # Normalize transcript: lowercase and remove punctuation (keep hyphens and apostrophes)
+                    normalized_text = re.sub(r"[^\w\s'-]", "", text.lower())
+                    words = normalized_text.split()
+                    
+                    # Check if all words are in the ignore list
+                    if all(word in opt.interruption_speech_filter for word in words):
+                        should_filter = True
+                        logger.debug(f"🟢 FILTERED interim transcript: '{text}'")
+            
+            # Only interrupt if NOT filtered
+            if not should_filter:
+                self._interrupt_by_audio_activity()
+
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
+            else:
+                # Clear the audio recognition transcript buffer so this doesn't get combined with next turn
+                if self._audio_recognition:
+                    self._audio_recognition.clear_user_turn()
 
     def on_final_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None = None) -> None:
         if isinstance(self.llm, llm.RealtimeModel) and self.llm.capabilities.user_transcription:
@@ -1284,27 +1343,50 @@ class AgentActivity(RecognitionHooks):
                 speaker_id=ev.alternatives[0].speaker_id,
             ),
         )
-        # agent speech might not be interrupted if VAD failed and a final transcript is received
-        # we call _interrupt_by_audio_activity (idempotent) to pause the speech, if possible
-        # which will also be immediately interrupted
-
+        
+        # ADDED: Check if we should filter this final transcript
         if self._audio_recognition and self._turn_detection not in (
             "manual",
             "realtime_llm",
         ):
-            self._interrupt_by_audio_activity()
-
+            opt = self._session.options
+            should_filter = False
+            
             if (
-                speaking is False
-                and self._paused_speech
-                and (timeout := self._session.options.false_interruption_timeout) is not None
+                opt.interruption_speech_filter
+                and self._current_speech is not None
+                and not self._current_speech.done()
             ):
-                # schedule a resume timer if interrupted after end_of_speech
-                self._start_false_interruption_timer(timeout)
+                text = ev.alternatives[0].text
+                if text.strip():
+                    # Normalize transcript
+                    normalized_text = re.sub(r"[^\w\s'-]", "", text.lower())
+                    words = normalized_text.split()
+                    
+                    # Check if all words are in the ignore list
+                    if all(word in opt.interruption_speech_filter for word in words):
+                        should_filter = True
+                        logger.debug(f"🟢 FILTERED final transcript: '{text}'")
+            
+            # Only interrupt if NOT filtered
+            if not should_filter:
+                self._interrupt_by_audio_activity()
 
-        self._interrupt_paused_speech_task = asyncio.create_task(
-            self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
-        )
+                if (
+                    speaking is False
+                    and self._paused_speech
+                    and (timeout := self._session.options.false_interruption_timeout) is not None
+                ):
+                    # schedule a resume timer if interrupted after end_of_speech
+                    self._start_false_interruption_timer(timeout)
+            else:
+                # Clear the audio recognition transcript buffer so this doesn't get combined with next turn
+                if self._audio_recognition:
+                    self._audio_recognition.clear_user_turn()
+
+            self._interrupt_paused_speech_task = asyncio.create_task(
+                self._interrupt_paused_speech(old_task=self._interrupt_paused_speech_task)
+            )
 
     def on_preemptive_generation(self, info: _PreemptiveGenerationInfo) -> None:
         if (

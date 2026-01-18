@@ -25,6 +25,26 @@ from . import channel, proto
 from .log_queue import LogQueueListener
 
 
+# @contextlib.contextmanager
+# def _mask_ctrl_c() -> Generator[None, None, None]:
+#     """
+#     POSIX: block SIGINT on this thread (defer delivery).
+#     Windows/others: temporarily ignore SIGINT (best available), then restore.
+#     Keep the critical section *tiny* (just around Process.start()).
+#     """
+#     if hasattr(signal, "pthread_sigmask"):  # POSIX
+#         signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGINT])
+#         try:
+#             yield
+#         finally:
+#             signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGINT])
+#     else:
+#         old = signal.signal(signal.SIGINT, signal.SIG_IGN)
+#         try:
+#             yield
+#         finally:
+#             signal.signal(signal.SIGINT, old)
+
 @contextlib.contextmanager
 def _mask_ctrl_c() -> Generator[None, None, None]:
     """
@@ -39,11 +59,17 @@ def _mask_ctrl_c() -> Generator[None, None, None]:
         finally:
             signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGINT])
     else:
-        old = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        try:
+        # Windows: signal.signal() only works in main thread
+        import threading
+        if threading.current_thread() is threading.main_thread():
+            old = signal.signal(signal.SIGINT, signal.SIG_IGN)
+            try:
+                yield
+            finally:
+                signal.signal(signal.SIGINT, old)
+        else:
+            # Not in main thread on Windows, skip signal handling
             yield
-        finally:
-            signal.signal(signal.SIGINT, old)
 
 
 @dataclass
