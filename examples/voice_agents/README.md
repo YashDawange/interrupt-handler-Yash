@@ -1,78 +1,79 @@
-# Voice Agents Examples
+# LiveKit Agents Examples
 
-This directory contains a comprehensive collection of voice-based agent examples demonstrating various capabilities and integrations with the LiveKit Agents framework.
+This directory contains various examples demonstrating different capabilities and use cases for LiveKit agents. Each example showcases specific features, integrations, or workflows that can be built with the LiveKit Agents framework.
 
-## 📋 Table of Contents
+## 📁 Example Categories
 
-### 🚀 Getting Started
+### 🎙️ [Voice Agents](./voice_agents/)
 
-- [`basic_agent.py`](./basic_agent.py) - A fundamental voice agent with metrics collection
+A comprehensive collection of voice-based agent examples, including basic voice interactions, tool integrations, RAG implementations, and advanced features like multi-agent workflows and push-to-talk agents.
 
-### 🛠️ Tool Integration & Function Calling
+### 🖼️ [Avatar Agents](./avatar_agents/)
 
-- [`annotated_tool_args.py`](./annotated_tool_args.py) - Using Python type annotations for tool arguments
-- [`dynamic_tool_creation.py`](./dynamic_tool_creation.py) - Creating and registering tools dynamically at runtime
-- [`raw_function_description.py`](./raw_function_description.py) - Using raw JSON schema definitions for tool descriptions
-- [`silent_function_call.py`](./silent_function_call.py) - Executing function calls without verbal responses to user
-- [`long_running_function.py`](./long_running_function.py) - Handling long running function calls with interruption support
+Examples showing how to integrate visual avatars with voice agents, including integrations with various avatar providers like Anam, Bey, BitHuman, Hedra, Simli, and Tavus.
 
-### ⚡ Real-time Models
+### 🔄 [Warm Transfer](./warm-transfer/)
 
-- [`weather_agent.py`](./weather_agent.py) - OpenAI Realtime API with function calls for weather information
-- [`realtime_video_agent.py`](./realtime_video_agent.py) - Google Gemini with multimodal video and voice capabilities
-- [`realtime_joke_teller.py`](./realtime_joke_teller.py) - Amazon Nova Sonic real-time model with function calls
-- [`realtime_load_chat_history.py`](./realtime_load_chat_history.py) - Loading previous chat history into real-time models
-- [`realtime_turn_detector.py`](./realtime_turn_detector.py) - Using LiveKit's turn detection with real-time models
-- [`realtime_with_tts.py`](./realtime_with_tts.py) - Combining external TTS providers with real-time models
+Demonstrates supervisor escalation workflows for call centers, showing how to implement warm transfers where agents can brief supervisors before connecting them to customers.
 
-### 🎯 Pipeline Nodes & Hooks
+### 🚗 [Drive-Thru](./drive-thru/)
 
-- [`fast-preresponse.py`](./fast-preresponse.py) - Generating quick responses using the `on_user_turn_completed` node
-- [`flush_llm_node.py`](./flush_llm_node.py) - Flushing partial LLM output to TTS in `llm_node`
-- [`structured_output.py`](./structured_output.py) - Structured data and JSON outputs from agent responses
-- [`speedup_output_audio.py`](./speedup_output_audio.py) - Dynamically adjusting agent audio playback speed
-- [`timed_agent_transcript.py`](./timed_agent_transcript.py) - Reading timestamped transcripts from `transcription_node`
-- [`inactive_user.py`](./inactive_user.py) - Handling inactive users with the `user_state_changed` event hook
-- [`resume_interrupted_agent.py`](./resume_interrupted_agent.py) - Resuming agent speech after false interruption detection
-- [`toggle_io.py`](./toggle_io.py) - Dynamically toggling audio input/output during conversations
+A complete drive-thru ordering system example that showcases interactive voice agents for food ordering with database integration and order management.
 
-### 🤖 Multi-agent & AgentTask Use Cases
+### 🏢 [Front Desk](./frontdesk/)
 
-- [`restaurant_agent.py`](./restaurant_agent.py) - Multi-agent system for restaurant ordering and reservation management
-- [`multi_agent.py`](./multi_agent.py) - Collaborative storytelling with multiple specialized agents
-- [`email_example.py`](./email_example.py) - Using AgentTask to collect and validate email addresses
+A front desk agent example demonstrating how to build customer service agents with calendar integration and appointment management capabilities.
 
-### 🔗 MCP & External Integrations
+### 🔧 [Primitives](./primitives/)
 
-- [`web_search.py`](./web_search.py) - Integrating web search capabilities into voice agents
-- [`langgraph_agent.py`](./langgraph_agent.py) - LangGraph integration
-- [`mcp/`](./mcp/) - Model Context Protocol (MCP) integration examples
-  - [`mcp-agent.py`](./mcp/mcp-agent.py) - MCP agent integration
-  - [`server.py`](./mcp/server.py) - MCP server example
-- [`zapier_mcp_integration.py`](./zapier_mcp_integration.py) - Automating workflows with Zapier through MCP
+Basic building blocks and fundamental examples showing core LiveKit concepts like room connections, participant management, and basic audio/video handling.
 
-### 💾 RAG & Knowledge Management
+### 🛠️ [Other](./other/)
 
-- [`llamaindex-rag/`](./llamaindex-rag/) - Complete RAG implementation with LlamaIndex
-  - [`chat_engine.py`](./llamaindex-rag/chat_engine.py) - Chat engine integration
-  - [`query_engine.py`](./llamaindex-rag/query_engine.py) - Query engine used in a function tool
-  - [`retrieval.py`](./llamaindex-rag/retrieval.py) - Document retrieval
+Additional examples including text-only agents, various TTS providers, transcription services, and translation utilities.
 
-### 🎵 Specialized Use Cases
+## Running Examples
 
-- [`background_audio.py`](./background_audio.py) - Playing background audio or ambient sounds during conversations
-- [`push_to_talk.py`](./push_to_talk.py) - Push-to-talk interaction
-- [`tts_text_pacing.py`](./tts_text_pacing.py) - Pacing control for TTS requests
-- [`speaker_id_multi_speaker.py`](./speaker_id_multi_speaker.py) - Multi-speaker identification
+To run the examples, you'll need:
 
-### 📊 Tracing & Error Handling
+- A [LiveKit Cloud](https://cloud.livekit.io) account or a local [LiveKit server](https://github.com/livekit/livekit)
+- API keys for the model providers you want to use in a `.env` file
+- Python 3.9 or higher
+- [uv](https://docs.astral.sh/uv/)
 
-- [`langfuse_trace.py`](./langfuse_trace.py) - LangFuse integration for conversation tracing
-- [`error_callback.py`](./error_callback.py) - Error handling callback
-- [`session_close_callback.py`](./session_close_callback.py) - Session lifecycle management
+### Environment file
+
+Create a `.env` file in the `examples` directory and add your API keys (see `examples/.env.example`):
+
+```bash
+LIVEKIT_URL="wss://your-project.livekit.cloud"
+LIVEKIT_API_KEY="your_api_key"
+LIVEKIT_API_SECRET="your_api_secret"
+OPENAI_API_KEY="sk-xxx" # or any other model provider API key
+# ... other model provider API keys as needed
+```
+
+### Install dependencies
+
+From the repository root, run the following command:
+
+```bash
+uv sync --all-extras --dev
+```
+
+### Running an individual example
+
+Run an example agent:
+
+```bash
+uv run examples/voice_agents/basic_agent.py console
+```
+
+Your agent is now running in the console.
+
+For frontend support, use the [Agents playground](https://agents-playground.livekit.io) or the [starter apps](https://docs.livekit.io/agents/start/frontend/#starter-apps).
 
 ## 📖 Additional Resources
 
+- [LiveKit Documentation](https://docs.livekit.io/)
 - [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
-- [Agents Starter Example](https://github.com/livekit-examples/agent-starter-python)
-- [More Agents Examples](https://github.com/livekit-examples/python-agents-examples)
