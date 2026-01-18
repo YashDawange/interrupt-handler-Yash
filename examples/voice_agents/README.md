@@ -76,3 +76,73 @@ This directory contains a comprehensive collection of voice-based agent examples
 - [LiveKit Agents Documentation](https://docs.livekit.io/agents/)
 - [Agents Starter Example](https://github.com/livekit-examples/agent-starter-python)
 - [More Agents Examples](https://github.com/livekit-examples/python-agents-examples)
+
+
+**Updated Part:**
+## Semantic Interruption Handling (Assignment Submission)
+
+### Problem
+
+In real-time voice agents, short words like **“yeah”, “okay”, “uh-huh”** often interrupt the agent
+while it is speaking. This happens because **Voice Activity Detection (VAD) is acoustic-only**
+and cannot understand user intent.
+
+As a result, passive acknowledgements are treated as real interruptions.
+
+---
+
+### Solution
+
+This solution makes interruption handling **semantic and state-aware**.
+
+Key ideas:
+- **VAD is treated as speculative**
+- **Final Speech-to-Text (STT) transcripts are authoritative**
+- The agent tracks whether it is currently speaking
+
+Each final transcript is classified into:
+- **Ignore words** (e.g., `yeah`, `okay`)
+- **Interrupt words** (e.g., `stop`, `wait`)
+- **Actual user intent**
+
+---
+
+### Behavior
+
+- Agent speaking + only ignore words → **ignored completely**
+- Agent speaking + interrupt word → **immediate stop**
+- Agent silent + “yeah” → **treated as valid input**
+- Mixed input (e.g., “yeah okay but wait”) → **interrupt**
+
+This keeps audio smooth and avoids false interruptions.
+
+---
+
+### Files
+
+- **`resume_interrupted_agent.py`**  
+  Main implementation using LiveKit APIs.  
+  Handles real-time audio and semantic interruption logic.
+
+- **`semantic_interrupt_handler.py`**  
+  Logic-only file to demonstrate and test interruption decisions without audio.
+
+- **`audio_timeline_demo.py`**  
+  Log-based proof showing ignored fillers and real interrupts.
+
+---
+
+### Proof
+
+- Live demo video link will be provided in the submission form / github comments.
+- Log transcript output is included as uploaded proof.
+
+---
+
+### Configuration
+
+Ignore and interrupt keywords are defined as Python sets and can be changed easily:
+
+```python
+IGNORE_WORDS = {...}
+STOP_WORDS = {...}
