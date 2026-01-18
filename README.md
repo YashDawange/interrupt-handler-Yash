@@ -373,3 +373,24 @@ The Agents framework is under active development in a rapidly evolving field. We
 </tbody>
 </table>
 <!--END_REPO_NAV-->
+
+---
+
+## Assignment: Intelligent Interruption Handling
+
+### What was implemented
+- Added a context-aware interruption handling layer
+- Passive acknowledgements (yeah, ok, hmm) are ignored while the agent is speaking
+- The same acknowledgements are treated as valid input when the agent is silent
+- Explicit commands like "stop" or "wait" immediately interrupt the agent
+
+### Proof of Correctness
+A log transcript is included in `proof_logs.txt` demonstrating:
+- The agent ignoring "yeah" while talking
+- The agent responding to "yeah" when silent
+- The agent stopping immediately when "stop" is spoken
+
+### Notes
+- This solution does not modify LiveKit's VAD
+- Logic is implemented as a state-aware layer in the agent event loop
+- Python version required: **3.10+**
