@@ -1185,6 +1185,20 @@ class AgentActivity(RecognitionHooks):
             if len(split_words(text, split_character=True)) < opt.min_interruption_words:
                 return
 
+        if (
+            opt.interrupt_filter is not None
+            and self._audio_recognition is not None
+            and self._current_speech is not None
+            and not self._current_speech.interrupted
+        ):
+            transcript = self._audio_recognition.current_transcript
+            agent_is_speaking = self._session.agent_state == "speaking"
+
+            if not opt.interrupt_filter.should_interrupt(transcript, agent_is_speaking):
+                if self._rt_session is not None:
+                    self._rt_session.start_user_activity()
+                return
+
         if self._rt_session is not None:
             self._rt_session.start_user_activity()
 
@@ -1421,6 +1435,17 @@ class AgentActivity(RecognitionHooks):
                     extra={"user_input": info.new_transcript},
                 )
                 return
+
+            opt = self._session.options
+            if opt.interrupt_filter is not None:
+                agent_is_speaking = self._session.agent_state == "speaking"
+                if not opt.interrupt_filter.should_interrupt(info.new_transcript, agent_is_speaking):
+                    logger.debug(
+                        "Interrupt filter: skipping response to backchanneling during speech",
+                        extra={"transcript": info.new_transcript},
+                    )
+                    return
+
             await self._interrupt_paused_speech(self._interrupt_paused_speech_task)
 
             if self._current_speech:
