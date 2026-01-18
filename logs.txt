@@ -1,0 +1,6 @@
+text='yeah', speaking=True -> interrupt=False
+text='ok hmm', speaking=True -> interrupt=False
+text='stop', speaking=True -> interrupt=True
+text='yeah wait', speaking=True -> interrupt=True
+text='yeah', speaking=False -> interrupt=True
+text='hello', speaking=False -> interrupt=True
